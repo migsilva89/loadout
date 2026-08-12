@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import LoadoutCore
 
 struct ContentView: View {
@@ -16,8 +17,16 @@ struct ContentView: View {
             DetailView(model: model)
         }
         .toolbar {
+            // The window's own icon, in place of printing "Loadout" next to the picker — the
+            // title bar already says what app this is.
+            ToolbarItem(placement: .navigation) {
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .frame(width: 18, height: 18)
+            }
             ToolbarItem(placement: .navigation) {
                 ContextPicker(model: model)
+                    .controlSize(.regular)
             }
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -25,6 +34,7 @@ struct ContentView: View {
                 } label: {
                     Label("New skill", systemImage: "plus")
                 }
+                .controlSize(.regular)
                 .help("New skill (⌘N)")
             }
         }

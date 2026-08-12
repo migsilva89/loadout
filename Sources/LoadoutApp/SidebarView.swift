@@ -1,8 +1,13 @@
 import SwiftUI
 import LoadoutCore
 
+/// One axis: what kind of thing this is. Origin and state used to be stacked in here too —
+/// "Sources", "Plugins", "More" — which read as three different sidebars in one column.
+/// They live above the list now, as chips that combine with whichever row is picked here.
 struct SidebarView: View {
     @Bindable var model: AppModel
+
+    private let rows: [Selection] = [.skills, .commands, .agents, .mcp]
 
     var body: some View {
         List(selection: Binding(
@@ -10,39 +15,29 @@ struct SidebarView: View {
             set: { newValue in
                 if let newValue {
                     model.selection = newValue
-                    model.select(model.visibleItems.first?.id)
-                }
-            }
-        )) {
-            Section("Sources") {
-                row(.personal)
-                if model.context != nil { row(.projectItems) }
-                row(.disabled)
-            }
-
-            if !model.pluginsWithItems.isEmpty {
-                Section("Plugins") {
-                    ForEach(model.pluginsWithItems) { plugin in
-                        PluginRow(model: model, plugin: plugin)
-                            .tag(Selection.plugin(plugin.name))
+                    model.filter = .all
+                    if newValue != .plugins {
+                        model.select(model.visibleItems.first?.id)
                     }
                 }
             }
-
-            Section("More") {
-                row(.kind(.command))
-                row(.kind(.agent))
-                row(.kind(.mcp))
-            }
+        )) {
+            ForEach(rows) { row($0) }
+            Divider()
+            row(.plugins)
         }
         .listStyle(.sidebar)
     }
 
     private func row(_ selection: Selection) -> some View {
-        HStack {
+        HStack(spacing: 8) {
+            Image(systemName: selection.symbol)
+                .foregroundStyle(selection.tint)
+                .frame(width: 18)
             Text(selection.title)
             Spacer()
             Text("\(model.count(for: selection))")
+                .font(.callout)
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
         }
@@ -50,28 +45,34 @@ struct SidebarView: View {
     }
 }
 
-/// A plugin row carries its own switch, because a plugin is the only thing here with a
-/// real on/off in Claude Code.
-struct PluginRow: View {
-    @Bindable var model: AppModel
-    let plugin: PluginInfo
+extension Selection: Identifiable {
+    public var id: Self { self }
 
-    var body: some View {
-        HStack(spacing: 6) {
-            Text(plugin.name)
-                .foregroundStyle(plugin.enabled ? .primary : .secondary)
-            Spacer()
-            Text("\(model.count(for: .plugin(plugin.name)))")
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-            Toggle("", isOn: Binding(
-                get: { plugin.enabled },
-                set: { _ in model.togglePlugin(plugin) }
-            ))
-            .toggleStyle(.switch)
-            .controlSize(.mini)
-            .labelsHidden()
-            .help(plugin.enabled ? "Disable the \(plugin.name) plugin" : "Enable the \(plugin.name) plugin")
+    /// The suggested set from the redesign: one recognisable symbol per kind.
+    var symbol: String {
+        switch self {
+        case .skills: return "sparkles"
+        case .commands: return "terminal"
+        case .agents: return "person.2"
+        case .mcp: return "network"
+        case .plugins: return "puzzlepiece.extension"
         }
     }
+
+    var tint: Color {
+        switch self {
+        case .skills: return .blue
+        case .commands: return .green
+        case .agents: return .purple
+        case .mcp: return .orange
+        case .plugins: return .loadoutAmber
+        }
+    }
+}
+
+extension Color {
+    /// A mid-brightness gold, picked because it stays readable on both a white and a black
+    /// background — unlike a bright yellow, which washes out in light mode, or a dark brown,
+    /// which disappears in dark mode.
+    static let loadoutAmber = Color(red: 0.72, green: 0.48, blue: 0.06)
 }

@@ -14,7 +14,10 @@ final class AppModel {
 
     // Selection and filters
     var context: Project?
-    var selection: Selection = .personal
+    var selection: Selection = .skills
+    /// The origin/state chip above the list. Resets to `.all` whenever the sidebar row
+    /// changes, so a stale "Disabled" chip never silently hides everything in a new kind.
+    var filter: ItemFilter = .all
     var selectedID: String?
     var query: String = ""
     var order: ItemSort = .usage
@@ -69,7 +72,7 @@ final class AppModel {
     }
 
     var visibleItems: [Item] {
-        Filtering.apply(items, selection: selection, query: query, order: order)
+        Filtering.apply(items, selection: selection, filter: filter, query: query, order: order)
     }
 
     var selected: Item? {
@@ -77,11 +80,19 @@ final class AppModel {
         return items.first { $0.id == selectedID }
     }
 
+    /// The sidebar-row count: everything of that kind, ignoring the chip. `.plugins` counts
+    /// installed plugins rather than items, since it has none of its own.
     func count(for selection: Selection) -> Int {
-        Filtering.slice(items, for: selection).count
+        selection == .plugins ? plugins.count : Filtering.slice(items, for: selection).count
     }
 
-    /// Plugins that actually ship something, so the sidebar does not list empty rows.
+    /// The chip's count within the current sidebar row, so the numbers on the chips always
+    /// match what picking them would show.
+    func count(for chip: ItemFilter) -> Int {
+        Filtering.filter(Filtering.slice(items, for: selection), by: chip).count
+    }
+
+    /// Plugins that actually ship something, so the plugin manager does not list empty rows.
     var pluginsWithItems: [PluginInfo] {
         plugins.filter { plugin in items.contains { $0.origin == .plugin(plugin.name) } }
     }

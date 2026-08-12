@@ -6,9 +6,16 @@ struct ItemListView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            listHeader
-            Divider()
-            list
+            if model.selection == .plugins {
+                pluginHeader
+                Divider()
+                PluginManagerView(model: model)
+            } else {
+                listHeader
+                FilterChipsView(model: model)
+                Divider()
+                list
+            }
         }
     }
 
@@ -28,6 +35,19 @@ struct ItemListView: View {
             .labelsHidden()
             .controlSize(.small)
             .fixedSize()
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 7)
+        .padding(.bottom, 4)
+    }
+
+    private var pluginHeader: some View {
+        HStack {
+            Text("\(model.plugins.count) \(model.plugins.count == 1 ? "plugin" : "plugins")")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+            Spacer()
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
@@ -79,69 +99,196 @@ struct ItemListView: View {
     }
 }
 
+// MARK: - Filter chips
+
+/// Origin and state, as a single-selection row of chips above the list. They combine with
+/// whichever sidebar row is picked — "Skills" + "Never used" reads as one sentence.
+struct FilterChipsView: View {
+    @Bindable var model: AppModel
+
+    private var chips: [ItemFilter] {
+        var base: [ItemFilter] = [.all, .mine]
+        if model.context != nil { base.append(.thisProject) }
+        base.append(contentsOf: [.shared, .neverUsed, .disabled])
+        return base
+    }
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(chips, id: \.self) { chip in
+                    FilterChip(
+                        title: chip.title,
+                        count: model.count(for: chip),
+                        isActive: model.filter == chip
+                    ) {
+                        model.filter = chip
+                    }
+                }
+            }
+            .padding(.horizontal, 12)
+        }
+        .padding(.bottom, 7)
+    }
+}
+
+private struct FilterChip: View {
+    let title: String
+    let count: Int
+    let isActive: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Text(title)
+                Text("\(count)")
+                    .monospacedDigit()
+                    .foregroundStyle(isActive ? .white.opacity(0.8) : .secondary)
+            }
+            .font(.caption)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
+            .background(
+                isActive ? Color.accentColor : Color.secondary.opacity(0.12),
+                in: Capsule()
+            )
+            .foregroundStyle(isActive ? Color.white : Color.primary)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Plugin manager
+
+/// What used to be a toggle buried in the sidebar, one row per plugin: name, version and item
+/// count are all a person needs to decide whether to flip it.
+struct PluginManagerView: View {
+    @Bindable var model: AppModel
+
+    var body: some View {
+        List {
+            ForEach(model.plugins) { plugin in
+                PluginManagerRow(model: model, plugin: plugin)
+            }
+        }
+        .overlay {
+            if model.plugins.isEmpty {
+                ContentUnavailableView(
+                    "No plugins installed",
+                    systemImage: "puzzlepiece.extension",
+                    description: Text("Plugins installed through Claude Code will show up here.")
+                )
+            }
+        }
+    }
+}
+
+struct PluginManagerRow: View {
+    @Bindable var model: AppModel
+    let plugin: PluginInfo
+
+    private var itemCount: Int {
+        model.items.filter { $0.origin == .plugin(plugin.name) }.count
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.loadoutAmber.opacity(plugin.enabled ? 0.18 : 0.08))
+                .frame(width: 32, height: 32)
+                .overlay {
+                    Image(systemName: "puzzlepiece.extension")
+                        .foregroundStyle(plugin.enabled ? Color.loadoutAmber : .secondary)
+                }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(plugin.name)
+                    .fontWeight(.medium)
+                    .foregroundStyle(plugin.enabled ? .primary : .secondary)
+                Text("\(itemCount) \(itemCount == 1 ? "item" : "items") · v\(plugin.version)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Toggle("", isOn: Binding(
+                get: { plugin.enabled },
+                set: { _ in model.togglePlugin(plugin) }
+            ))
+            .toggleStyle(.switch)
+            .labelsHidden()
+            .help(plugin.enabled ? "Disable the \(plugin.name) plugin" : "Enable the \(plugin.name) plugin")
+        }
+        .padding(.vertical, 3)
+    }
+}
+
+// MARK: - Item row
+
 struct ItemRow: View {
     let item: Item
     let model: AppModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 6) {
-                Text(item.name)
-                    .fontWeight(.medium)
-                    .lineLimit(1)
-                Badge(text: badgeText, tone: badgeTone)
-                if item.warning != nil {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-                        .help(item.warning ?? "")
+        HStack(spacing: 9) {
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(originColor)
+                .frame(width: 3)
+                .padding(.vertical, 2)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(item.name)
+                        .fontWeight(.medium)
+                        .lineLimit(1)
+                    if let stateBadge {
+                        Badge(text: stateBadge.text, tone: stateBadge.tone)
+                    }
+                    if item.warning != nil {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                            .help(item.warning ?? "")
+                    }
+                    Spacer(minLength: 4)
+                    if item.kind == .skill, item.origin == .personal, item.enabled {
+                        AssistantDots(item: item, model: model)
+                    }
+                    Text("\(item.usage.count)")
+                        .font(.caption)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                        .help(item.usage.summary())
                 }
-                Spacer(minLength: 4)
-                if item.kind == .skill, item.origin == .personal, item.enabled {
-                    AssistantDots(item: item, model: model)
-                }
-                // Usage sits on its own, right-aligned: appended to the description it was
-                // the first thing to be cut off, which is backwards.
-                Text(usageBadge)
+                Text(item.description.isEmpty ? item.kind.label : item.description)
                     .font(.caption)
-                    .monospacedDigit()
-                    .foregroundStyle(item.usage.neverUsed ? Color.orange : Color.secondary)
-                    .help(item.usage.summary())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
             }
-            Text(item.description.isEmpty ? item.kind.label : item.description)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
         }
         .padding(.vertical, 3)
         .opacity(item.enabled ? 1 : 0.5)
     }
 
-    private var usageBadge: String {
-        guard item.enabled else { return "off" }
-        return item.usage.neverUsed ? "0" : "\(item.usage.count)"
-    }
-
-    private var badgeText: String {
-        if !item.enabled { return "disabled" }
+    /// Origin used to be spelled out in a badge on every row. The bar says it instead — one
+    /// glance down the list, rather than a word to read on each one.
+    private var originColor: Color {
+        guard item.enabled else { return .gray }
         switch item.origin {
-        case .personal: return item.kind == .skill ? "personal" : item.kind.label.lowercased()
-        case .project(let name): return name
-        case .plugin(let name): return name
+        case .personal: return .green
+        case .project: return .blue
+        case .plugin: return .loadoutAmber
         }
     }
 
-    private var badgeTone: Badge.Tone {
-        if !item.enabled { return .muted }
-        switch item.origin {
-        case .personal: return item.kind == .skill ? .own : .accent
-        case .project: return .accent
-        case .plugin: return .muted
-        }
+    /// The two facts the bar's color cannot carry on its own: that this is parked, and that
+    /// nobody has ever used it.
+    private var stateBadge: (text: String, tone: Badge.Tone)? {
+        if !item.enabled { return ("disabled", .muted) }
+        if item.usage.neverUsed { return ("never used", .warning) }
+        return nil
     }
 }
 
 struct Badge: View {
-    enum Tone { case own, accent, muted }
+    enum Tone { case own, accent, muted, warning }
     let text: String
     let tone: Tone
 
@@ -159,6 +306,7 @@ struct Badge: View {
         case .own: return .green.opacity(0.16)
         case .accent: return .accentColor.opacity(0.16)
         case .muted: return .secondary.opacity(0.14)
+        case .warning: return .orange.opacity(0.16)
         }
     }
 
@@ -167,6 +315,7 @@ struct Badge: View {
         case .own: return .green
         case .accent: return .accentColor
         case .muted: return .secondary
+        case .warning: return .orange
         }
     }
 }

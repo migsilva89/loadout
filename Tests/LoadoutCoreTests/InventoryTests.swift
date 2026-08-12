@@ -243,39 +243,94 @@ final class InventoryTests: XCTestCase {
         XCTAssertEqual(Filtering.sort(items, by: .name).map(\.name), ["alfa", "beta", "gama"])
     }
 
-    /// Turning a plugin off must not dump its items into "Desativadas" — they belong under
-    /// the plugin, next to the switch that turned them off.
-    func testDisabledOnlyCountsSkillsTheUserParked() {
+    /// The "Disabled" chip is a flat state check now — !enabled, full stop — so a plugin
+    /// switched off shows there too, next to skills the user parked by hand. That's the
+    /// approved redesign: one axis (kind) in the sidebar, state as a chip on top of it,
+    /// no more special-casing plugin-disabled versus user-disabled in separate places.
+    func testDisabledChipCountsAnyDisabledItemOfTheSelectedKind() {
         let fixture = Fixture()
         fixture.skill("parqueada", disabled: true)
         fixture.plugin("vercel", skills: ["deploy", "nextjs"], enabled: false)
 
         let items = InventoryScanner(paths: fixture.paths).scanAll().items
+        let skills = Filtering.slice(items, for: .skills)
 
-        XCTAssertEqual(Filtering.slice(items, for: .disabled).map(\.name), ["parqueada"])
         XCTAssertEqual(
-            Filtering.slice(items, for: .plugin("vercel")).map(\.name).sorted(),
+            Filtering.filter(skills, by: .disabled).map(\.name).sorted(),
+            ["deploy", "nextjs", "parqueada"]
+        )
+        XCTAssertEqual(
+            Filtering.slice(items, for: .skills).filter { $0.origin == .plugin("vercel") }.map(\.name).sorted(),
             ["deploy", "nextjs"]
         )
         XCTAssertTrue(
-            Filtering.slice(items, for: .plugin("vercel")).allSatisfy { !$0.enabled },
+            Filtering.slice(items, for: .skills)
+                .filter { $0.origin == .plugin("vercel") }
+                .allSatisfy { !$0.enabled },
             "continuam marcados como inativos, para aparecerem esbatidos"
         )
     }
 
-    func testTheGlobalSliceIsLabelledByWhereItAppliesNotByWhoseItIs() {
-        XCTAssertEqual(Selection.personal.title, "Global")
+    /// "Mine", not "Global": the redesign moves origin out of the sidebar entirely, so the
+    /// old rationale for calling it "Global" (a sidebar label about where a skill applies)
+    /// no longer applies to a filter chip, whose job is to say whose it is.
+    func testTheMineChipIsLabelledByWhoseItIsNotByWhereItApplies() {
+        XCTAssertEqual(ItemFilter.mine.title, "Mine")
     }
 
-    func testSidebarSlicesDoNotOverlap() {
+    func testSidebarRowsSliceByKindOnlyAndChipsNarrowFromThere() {
         let fixture = Fixture()
         fixture.skill("ativa")
         fixture.skill("parada", disabled: true)
         fixture.command("um-comando")
 
         let items = InventoryScanner(paths: fixture.paths).scanAll().items
-        XCTAssertEqual(Filtering.slice(items, for: .personal).map(\.name), ["ativa"])
-        XCTAssertEqual(Filtering.slice(items, for: .disabled).map(\.name), ["parada"])
-        XCTAssertEqual(Filtering.slice(items, for: .kind(.command)).map(\.name), ["um-comando"])
+        // The sidebar row alone: every skill, active or not.
+        XCTAssertEqual(Filtering.slice(items, for: .skills).map(\.name).sorted(), ["ativa", "parada"])
+        // The chip narrows it further.
+        XCTAssertEqual(
+            Filtering.filter(Filtering.slice(items, for: .skills), by: .disabled).map(\.name), ["parada"]
+        )
+        XCTAssertEqual(Filtering.slice(items, for: .commands).map(\.name), ["um-comando"])
+    }
+
+    func testMineChipIsPersonalOrigin() {
+        let items = [
+            Item(id: "1", name: "pessoal", kind: .skill, origin: .personal),
+            Item(id: "2", name: "projeto", kind: .skill, origin: .project("repo")),
+            Item(id: "3", name: "plugin", kind: .skill, origin: .plugin("vercel")),
+        ]
+        XCTAssertEqual(Filtering.filter(items, by: .mine).map(\.name), ["pessoal"])
+    }
+
+    func testThisProjectChipIsProjectOrigin() {
+        let items = [
+            Item(id: "1", name: "pessoal", kind: .skill, origin: .personal),
+            Item(id: "2", name: "projeto", kind: .skill, origin: .project("repo")),
+        ]
+        XCTAssertEqual(Filtering.filter(items, by: .thisProject).map(\.name), ["projeto"])
+    }
+
+    func testSharedChipIsSkillsLoadedByMoreThanOneAssistant() {
+        let items = [
+            Item(id: "1", name: "so-claude", kind: .skill, origin: .personal, assistants: ["claude"]),
+            Item(id: "2", name: "partilhada", kind: .skill, origin: .personal, assistants: ["claude", "codex"]),
+        ]
+        XCTAssertEqual(Filtering.filter(items, by: .shared).map(\.name), ["partilhada"])
+    }
+
+    func testNeverUsedChipIsZeroUsageCount() {
+        let items = [
+            Item(id: "1", name: "usada", kind: .skill, origin: .personal, usage: Usage(count: 3, lastUsed: nil, projectCount: 1)),
+            Item(id: "2", name: "nunca", kind: .skill, origin: .personal, usage: .none),
+        ]
+        XCTAssertEqual(Filtering.filter(items, by: .neverUsed).map(\.name), ["nunca"])
+    }
+
+    /// `.plugins` is a sidebar row with no items of its own — the plugin manager reads the
+    /// plugin list directly instead of going through `Filtering`.
+    func testPluginsSelectionHasNoItemSlice() {
+        let items = [Item(id: "1", name: "algo", kind: .skill, origin: .personal)]
+        XCTAssertEqual(Filtering.slice(items, for: .plugins), [])
     }
 }

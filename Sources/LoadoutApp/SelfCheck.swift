@@ -57,8 +57,9 @@ enum SelfCheck {
                 atPath: paths.skillsOff.appendingPathComponent("auto-teste/SKILL.md").path
             )
         )
-        model.selection = .disabled
-        check("appears under Disabled", model.count(for: .disabled) == 1)
+        model.selection = .skills
+        model.filter = .disabled
+        check("appears under Disabled", model.visibleItems.count == 1)
 
         let parked = model.items.first { $0.name == "auto-teste" }!
         model.toggle(parked)
@@ -75,7 +76,8 @@ enum SelfCheck {
         check("leaves backups", backups.contains("SKILL.md"))
 
         // Search
-        model.selection = .personal
+        model.selection = .skills
+        model.filter = .all
         model.query = "RESUME"
         check("searches without accents or case", model.visibleItems.count == 1)
         model.query = "this doesn't exist"

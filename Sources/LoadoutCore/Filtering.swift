@@ -12,24 +12,62 @@ public enum ItemSort: String, CaseIterable, Sendable {
     }
 }
 
-/// Which slice of the inventory the sidebar is asking for.
-public enum Selection: Equatable, Hashable, Sendable {
-    case personal
-    case projectItems
-    case disabled
-    case plugin(String)
-    case kind(ItemKind)
+/// Which row of the sidebar is picked. The sidebar has one axis now — what kind of thing this
+/// is — instead of the old mix of origin, state, and type all stacked in one column.
+///
+/// `.plugins` is not a kind of item: picking it swaps the list column for the plugin manager
+/// instead of slicing the inventory. It still lives here, rather than as a separate `Bool`,
+/// because the sidebar's `List` needs one selection value to drive both.
+public enum Selection: String, Equatable, Hashable, Sendable, CaseIterable {
+    case skills
+    case commands
+    case agents
+    case mcp
+    case plugins
 
     public var title: String {
         switch self {
-        // "Global", not "mine": what matters is that they load in every project,
-        // not whose they are.
-        case .personal: return "Global"
-        case .projectItems: return "Project"
+        case .skills: return "Skills"
+        case .commands: return "Commands"
+        case .agents: return "Agents"
+        case .mcp: return "MCP"
+        case .plugins: return "Plugins"
+        }
+    }
+
+    /// The item kind this row slices by. `nil` for `.plugins`, which has no items of its own —
+    /// the plugin manager reads the plugin list directly instead.
+    public var kind: ItemKind? {
+        switch self {
+        case .skills: return .skill
+        case .commands: return .command
+        case .agents: return .agent
+        case .mcp: return .mcp
+        case .plugins: return nil
+        }
+    }
+}
+
+/// Origin and state used to be sidebar rows of their own. They are chips above the list now,
+/// and they combine with whichever `Selection` the sidebar has picked — a single choice, not
+/// a multi-select, because "Mine and never used" is a rare enough need not to be worth the
+/// complexity of combining chips.
+public enum ItemFilter: String, Equatable, Hashable, Sendable, CaseIterable {
+    case all
+    case mine
+    case thisProject
+    case shared
+    case neverUsed
+    case disabled
+
+    public var title: String {
+        switch self {
+        case .all: return "All"
+        case .mine: return "Mine"
+        case .thisProject: return "This project"
+        case .shared: return "Shared"
+        case .neverUsed: return "Never used"
         case .disabled: return "Disabled"
-        case .plugin(let name): return name
-        case .kind(.mcp): return "MCP"
-        case .kind(let kind): return kind.label + "s"
         }
     }
 }
@@ -47,24 +85,31 @@ public enum Filtering {
             || normalize(item.description).contains(needle)
     }
 
+    /// The sidebar-row slice: everything of that kind, from every origin. `.plugins` has no
+    /// items of its own, so it slices to nothing — the plugin manager doesn't go through here.
     public static func slice(_ items: [Item], for selection: Selection) -> [Item] {
-        switch selection {
-        case .personal:
-            return items.filter { $0.origin == .personal && $0.enabled && $0.kind == .skill }
-        case .projectItems:
+        guard let kind = selection.kind else { return [] }
+        return items.filter { $0.kind == kind }
+    }
+
+    /// The chip, applied on top of the sidebar slice.
+    public static func filter(_ items: [Item], by filter: ItemFilter) -> [Item] {
+        switch filter {
+        case .all:
+            return items
+        case .mine:
+            return items.filter { $0.origin == .personal }
+        case .thisProject:
             return items.filter {
                 if case .project = $0.origin { return true }
                 return false
             }
+        case .shared:
+            return items.filter { $0.assistants.count > 1 }
+        case .neverUsed:
+            return items.filter { $0.usage.neverUsed }
         case .disabled:
-            // Only the ones the user parked by hand. Items belonging to a switched-off plugin
-            // are shown dimmed under that plugin, next to the switch that turned them off —
-            // mixing the two put one label on two very different things.
-            return items.filter { !$0.enabled && $0.origin == .personal }
-        case .plugin(let name):
-            return items.filter { $0.origin == .plugin(name) }
-        case .kind(let kind):
-            return items.filter { $0.kind == kind }
+            return items.filter { !$0.enabled }
         }
     }
 
@@ -82,9 +127,12 @@ public enum Filtering {
     }
 
     public static func apply(
-        _ items: [Item], selection: Selection, query: String, order: ItemSort
+        _ items: [Item], selection: Selection, filter chip: ItemFilter, query: String, order: ItemSort
     ) -> [Item] {
-        sort(slice(items, for: selection).filter { matches($0, query: query) }, by: order)
+        sort(
+            filter(slice(items, for: selection), by: chip).filter { matches($0, query: query) },
+            by: order
+        )
     }
 }
 

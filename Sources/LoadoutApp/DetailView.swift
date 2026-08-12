@@ -17,7 +17,6 @@ struct DetailView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
                     }
-                    stats(item)
                     if item.kind == .skill, item.origin == .personal, item.enabled {
                         AssistantPanel(item: item, model: model)
                     }
@@ -55,6 +54,9 @@ struct DetailView: View {
                 Text(subtitle(item))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                metadataLine(item)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Spacer()
             if item.kind == .skill, item.origin == .personal {
@@ -69,28 +71,17 @@ struct DetailView: View {
         }
     }
 
-    private func stats(_ item: Item) -> some View {
-        HStack(spacing: 9) {
-            stat("Uses, 90 days", "\(item.usage.count)")
-            stat("Last used", item.usage.lastUsed.map { Usage.relative($0) } ?? "—")
-            stat("Projects", "\(item.usage.projectCount)")
-            stat("Type", item.kind.label)
+    /// One quiet line instead of four cards competing for attention: the file below is what
+    /// the pane is for, and these numbers are context for it, not the headline.
+    private func metadataLine(_ item: Item) -> Text {
+        var parts: [String] = ["\(item.usage.count) uses"]
+        if let last = item.usage.lastUsed {
+            parts.append("last used \(Usage.relative(last))")
         }
-    }
-
-    private func stat(_ label: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.system(size: 18, weight: .semibold))
-                .monospacedDigit()
+        if item.usage.projectCount > 0 {
+            parts.append("\(item.usage.projectCount) \(item.usage.projectCount == 1 ? "project" : "projects")")
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        return Text(parts.joined(separator: " · "))
     }
 
     private func actions(_ item: Item) -> some View {
@@ -180,12 +171,22 @@ struct DetailView: View {
     }
 
     private func subtitle(_ item: Item) -> String {
-        var parts = ["\(item.kind.label) \(item.origin.label)"]
+        var parts = [subtitleOrigin(item)]
         parts.append(item.enabled ? "enabled" : "disabled")
         if let modified = item.modified {
             parts.append("modified \(Usage.relative(modified))")
         }
         return parts.joined(separator: " · ")
+    }
+
+    /// "Personal skill", "vercel command" — the origin qualifies the kind, so it reads as
+    /// English rather than as two labels stapled together.
+    private func subtitleOrigin(_ item: Item) -> String {
+        switch item.origin {
+        case .personal: return "Personal \(item.kind.label.lowercased())"
+        case .project(let name): return "\(item.kind.label) in \(name)"
+        case .plugin(let name): return "\(item.kind.label) from \(name)"
+        }
     }
 
     private func icon(for kind: ItemKind) -> String {

@@ -25,6 +25,9 @@ struct LoadoutApp: App {
                 .frame(minWidth: 900, minHeight: 560)
         }
         .defaultSize(width: 1180, height: 760)
+        // The unified toolbar prints the window title next to the leading items by default —
+        // that's the literal "Loadout" this redesign replaces with the app's own icon.
+        .windowToolbarStyle(UnifiedCompactWindowToolbarStyle(showsTitle: false))
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("New skill") { model.isCreating = true }
