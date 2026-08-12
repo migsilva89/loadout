@@ -29,7 +29,7 @@ struct DetailView: View {
                         // Top-aligned with the tiles, breathing room underneath.
                         HStack(alignment: .top, spacing: Metrics.lg) {
                             budgetSection(item)
-                                .padding(.bottom, Metrics.md)
+                                .padding(.bottom, Metrics.lg)
                             Spacer(minLength: Metrics.md)
                             // Capped so the flexible tiles don't swallow the spacer: the grid
                             // hangs off the trailing edge at a steady width instead.
@@ -174,8 +174,11 @@ struct DetailView: View {
     /// skill, and falls back to the kind for everything else.
     @ViewBuilder
     private func detailCards(_ item: Item) -> some View {
-        Grid(alignment: .topLeading, horizontalSpacing: Metrics.xs, verticalSpacing: Metrics.xs) {
-            GridRow {
+        // Two HStacks of two flexible tiles, not a Grid: an HStack splits its width equally
+        // between two max-width children, which is the only way all four tiles come out the
+        // same size regardless of what their text measures.
+        VStack(spacing: Metrics.xs) {
+            HStack(spacing: Metrics.xs) {
                 detailCard("Source", sourceText(item))
                 if let modified = item.modified {
                     let size = fileSize(item).map { " · \($0)" } ?? ""
@@ -184,7 +187,7 @@ struct DetailView: View {
                     detailCard("Type", item.kind.label)
                 }
             }
-            GridRow {
+            HStack(spacing: Metrics.xs) {
                 detailCard("Usage", usageValue(item), subtitle: usageSubtitle(item))
                 detailCard(fourthCard(item).0, fourthCard(item).1)
             }
@@ -219,7 +222,9 @@ struct DetailView: View {
                     .lineLimit(1)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        // Every tile the height of the tallest (caption, value and subtitle), captions all
+        // starting at the same top edge — the ones without a subtitle just breathe below.
+        .frame(maxWidth: .infinity, minHeight: 46, alignment: .topLeading)
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
