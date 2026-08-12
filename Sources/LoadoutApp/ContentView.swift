@@ -95,7 +95,7 @@ struct StatusBar: View {
     @Bindable var model: AppModel
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Metrics.sm) {
             if let progress = model.indexProgress {
                 ProgressView(value: progress)
                     .progressViewStyle(.linear)
@@ -115,8 +115,8 @@ struct StatusBar: View {
         }
         .font(.caption)
         .foregroundStyle(.secondary)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 7)
+        .padding(.horizontal, Metrics.md)
+        .padding(.vertical, Metrics.xs)
         .background(.bar)
     }
 }

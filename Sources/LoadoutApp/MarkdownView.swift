@@ -53,7 +53,7 @@ struct MarkdownView: View {
             }
             .padding(11)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 9))
+            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 9))
 
         case .heading(let level, let text):
             Text(inline(text))
@@ -97,7 +97,7 @@ struct MarkdownView: View {
                     .padding(10)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.secondary.opacity(0.09), in: RoundedRectangle(cornerRadius: 8))
+            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
 
         case .rule:
             Divider().padding(.vertical, 2)

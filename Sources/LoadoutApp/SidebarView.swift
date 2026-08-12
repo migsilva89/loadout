@@ -30,9 +30,11 @@ struct SidebarView: View {
     }
 
     private func row(_ selection: Selection) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Metrics.xs) {
+            // Monochrome, like Finder's own sidebar: the list-style selection highlight is
+            // what marks the current row, not a different colour per symbol.
             Image(systemName: selection.symbol)
-                .foregroundStyle(selection.tint)
+                .foregroundStyle(.secondary)
                 .frame(width: 18)
             Text(selection.title)
                 .font(.system(size: 14))
@@ -61,16 +63,6 @@ extension Selection: Identifiable {
         }
     }
 
-    var tint: Color {
-        switch self {
-        case .skills: return .blue
-        case .commands: return .green
-        case .agents: return .purple
-        case .mcp: return .orange
-        case .plugins: return .loadoutAmber
-        }
-    }
-
     /// What the search field's placeholder calls a row of this kind — "Search 56 skills",
     /// singular when there is only one.
     func searchNoun(plural: Bool) -> String {
@@ -82,11 +74,4 @@ extension Selection: Identifiable {
         case .plugins: return plural ? "plugins" : "plugin"
         }
     }
-}
-
-extension Color {
-    /// A mid-brightness gold, picked because it stays readable on both a white and a black
-    /// background — unlike a bright yellow, which washes out in light mode, or a dark brown,
-    /// which disappears in dark mode.
-    static let loadoutAmber = Color(red: 0.72, green: 0.48, blue: 0.06)
 }

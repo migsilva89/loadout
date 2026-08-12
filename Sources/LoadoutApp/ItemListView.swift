@@ -33,17 +33,17 @@ struct ItemListView: View {
     /// above it. The sort menu sits at the same row's trailing end, quiet on purpose — it is
     /// a secondary control, not a peer of search.
     private var listHeader: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Metrics.xs) {
             searchField
             sortMenu
         }
-        .padding(.horizontal, 12)
-        .padding(.top, 8)
-        .padding(.bottom, 6)
+        .padding(.horizontal, Metrics.sm)
+        .padding(.top, Metrics.xs)
+        .padding(.bottom, Metrics.xs)
     }
 
     private var searchField: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Metrics.xs) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
             TextField(searchPlaceholder, text: $model.query)
@@ -54,9 +54,9 @@ struct ItemListView: View {
                     searchFieldFocused = false
                 }
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, Metrics.xs)
         .padding(.vertical, 5)
-        .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 7))
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 7))
         .frame(maxWidth: .infinity)
     }
 
@@ -177,8 +177,9 @@ struct FilterChipsView: View {
                 }
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.bottom, 7)
+        .padding(.horizontal, Metrics.sm)
+        .padding(.top, 10)
+        .padding(.bottom, 12)
     }
 }
 
@@ -198,19 +199,19 @@ private struct FilterChip: View {
                 Text(title)
                 Text("\(count)")
                     .monospacedDigit()
-                    .foregroundStyle(isActive ? .white.opacity(0.8) : .secondary)
+                    .foregroundStyle(isActive ? Color.white.opacity(0.8) : .secondary)
             }
             .font(.system(size: 12))
             .padding(.horizontal, 11)
             .padding(.vertical, 5)
             .background(
-                isActive ? Color.accentColor : Color.secondary.opacity(0.12),
+                isActive ? Color.accentColor : Color(nsColor: .quaternaryLabelColor),
                 in: Capsule()
             )
             .foregroundStyle(isActive ? Color.white : Color.primary)
             .opacity(isEmpty ? 0.45 : 1)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.borderless)
     }
 }
 
@@ -248,13 +249,13 @@ struct PluginManagerRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Metrics.sm) {
             RoundedRectangle(cornerRadius: 8)
-                .fill(Color.loadoutAmber.opacity(plugin.enabled ? 0.18 : 0.08))
+                .fill(plugin.enabled ? Color.orange.opacity(0.18) : Color(nsColor: .quaternaryLabelColor))
                 .frame(width: 32, height: 32)
                 .overlay {
                     Image(systemName: "puzzlepiece.extension")
-                        .foregroundStyle(plugin.enabled ? Color.loadoutAmber : .secondary)
+                        .foregroundStyle(plugin.enabled ? Color.orange : .secondary)
                 }
             VStack(alignment: .leading, spacing: 2) {
                 Text(plugin.name)
@@ -273,7 +274,7 @@ struct PluginManagerRow: View {
             .labelsHidden()
             .help(plugin.enabled ? "Disable the \(plugin.name) plugin" : "Enable the \(plugin.name) plugin")
         }
-        .padding(.vertical, 7)
+        .padding(.vertical, Metrics.xs)
     }
 }
 
@@ -284,13 +285,13 @@ struct ItemRow: View {
     let model: AppModel
 
     var body: some View {
-        HStack(spacing: 9) {
+        HStack(spacing: Metrics.xs) {
             RoundedRectangle(cornerRadius: 1.5)
                 .fill(originColor)
                 .frame(width: 3)
                 .padding(.vertical, 2)
             VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 6) {
+                HStack(spacing: Metrics.xs) {
                     Text(item.name)
                         .fontWeight(.medium)
                         .lineLimit(1)
@@ -318,18 +319,20 @@ struct ItemRow: View {
                     .lineLimit(2)
             }
         }
-        .padding(.vertical, 7)
+        .padding(.vertical, Metrics.xs)
         .opacity(item.enabled ? 1 : 0.5)
     }
 
     /// Origin used to be spelled out in a badge on every row. The bar says it instead — one
-    /// glance down the list, rather than a word to read on each one.
+    /// glance down the list, rather than a word to read on each one. System colours only,
+    /// even here: green for what's yours, blue for what the project brought, orange for what
+    /// a plugin shipped, secondary once it's off.
     private var originColor: Color {
-        guard item.enabled else { return .gray }
+        guard item.enabled else { return .secondary }
         switch item.origin {
         case .personal: return .green
         case .project: return .blue
-        case .plugin: return .loadoutAmber
+        case .plugin: return .orange
         }
     }
 
@@ -343,7 +346,7 @@ struct ItemRow: View {
 }
 
 struct Badge: View {
-    enum Tone { case own, accent, muted, warning }
+    enum Tone { case muted, warning }
     let text: String
     let tone: Tone
 
@@ -358,17 +361,13 @@ struct Badge: View {
 
     private var background: Color {
         switch tone {
-        case .own: return .green.opacity(0.16)
-        case .accent: return .accentColor.opacity(0.16)
-        case .muted: return .secondary.opacity(0.14)
+        case .muted: return Color(nsColor: .quaternaryLabelColor)
         case .warning: return .orange.opacity(0.16)
         }
     }
 
     private var foreground: Color {
         switch tone {
-        case .own: return .green
-        case .accent: return .accentColor
         case .muted: return .secondary
         case .warning: return .orange
         }
@@ -396,9 +395,18 @@ struct AssistantDots: View {
 
 /// The full picture for the selected skill: every assistant on the machine, named, with the
 /// ones that are missing it offering to take it.
+///
+/// Collapsed by default behind a stock `DisclosureGroup`: with up to twelve assistants, the
+/// full grid used to eat half the detail pane before a person had even looked at the file it
+/// belongs to. The closed row still answers the one question that matters at a glance — which
+/// assistants have it, and how many — and expanding it is one click away, remembered across
+/// launches the same way any other disclosure state is.
 struct AssistantPanel: View {
     let item: Item
     @Bindable var model: AppModel
+    @AppStorage("assistantPanelExpanded") private var isExpanded = false
+
+    private var present: [Assistant] { model.visibleAssistants.filter { item.assistants.contains($0.id) } }
 
     /// Three states, not two: has it, does not have it, or has nowhere to keep skills yet.
     private func status(_ assistant: Assistant, has: Bool) -> String {
@@ -413,14 +421,10 @@ struct AssistantPanel: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Text("Assistants")
-                .font(.caption2)
-                .textCase(.uppercase)
-                .foregroundStyle(.secondary)
+        DisclosureGroup(isExpanded: $isExpanded) {
             LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 178), spacing: 8)],
-                alignment: .leading, spacing: 6
+                columns: [GridItem(.adaptive(minimum: 178), spacing: Metrics.xs)],
+                alignment: .leading, spacing: Metrics.xs
             ) {
                 ForEach(model.visibleAssistants) { assistant in
                     let has = item.assistants.contains(assistant.id)
@@ -444,13 +448,22 @@ struct AssistantPanel: View {
                         .padding(.horizontal, 9)
                         .padding(.vertical, 5)
                         .background(
-                            Color.secondary.opacity(has ? 0.10 : 0.04),
+                            has ? Color.accentColor.opacity(0.12) : Color(nsColor: .controlBackgroundColor),
                             in: RoundedRectangle(cornerRadius: 8)
                         )
                     }
                     .buttonStyle(.plain)
                     .help(help(assistant, has: has))
                 }
+            }
+            .padding(.top, Metrics.xs)
+        } label: {
+            HStack(spacing: Metrics.xs) {
+                ForEach(present) { assistant in
+                    AssistantMark(assistant: assistant, present: true)
+                }
+                Text("\(present.count) of \(model.visibleAssistants.count) assistants")
+                    .foregroundStyle(.secondary)
             }
         }
     }
