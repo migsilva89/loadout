@@ -21,12 +21,7 @@ struct DetailView: View {
                     // No outer boxed section here: the grid's own tiles are the cards, and
                     // wrapping them in another same-colour box just merged the two into one
                     // undifferentiated slab.
-                    VStack(alignment: .leading, spacing: Metrics.xs) {
-                        Text("Details")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                        detailRows(item)
-                    }
+                    detailCards(item)
                     if item.budget.descriptionCharacters > 0 || item.budget.bodyCharacters > 0 {
                         VStack(alignment: .leading, spacing: Metrics.xs) {
                             Text("Token budget")
@@ -163,42 +158,33 @@ struct DetailView: View {
     /// Xcode inspector, the Finder's own panes. The boxed mini-cards this replaces were
     /// dashboard vocabulary: nine bordered tiles with uppercase captions, each drawing a frame
     /// around four characters. A calm pair of columns says the same in a third of the space.
-    /// Three rows, down from eight: the kind and the state were already said by the header and
-    /// the switch beside it, and the file's size is a detail of when it was last touched, not
-    /// a fact of its own.
+    /// The same three facts, as a row of very small cards instead of a labelled table — the
+    /// caption inside each card replaces both the row label and the section's own "Details"
+    /// title, so the whole block shrinks to one line of tiles.
     @ViewBuilder
-    private func detailRows(_ item: Item) -> some View {
-        Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: Metrics.md, verticalSpacing: 7) {
-            field("Source", sourceText(item))
+    private func detailCards(_ item: Item) -> some View {
+        HStack(alignment: .top, spacing: Metrics.xs) {
+            detailCard("Source", sourceText(item))
             if let modified = item.modified {
                 let size = fileSize(item).map { " · \($0)" } ?? ""
-                field("Modified", Usage.relative(modified) + size)
+                detailCard("Modified", Usage.relative(modified) + size)
             }
-            usageField(item)
+            detailCard("Usage", usageSentence(item))
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func field(_ label: String, _ value: String) -> some View {
-        GridRow {
+    private func detailCard(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
             Text(label)
-                .foregroundStyle(.secondary)
-                .gridColumnAlignment(.trailing)
+                .font(.system(size: captionSize, weight: captionWeight))
+                .foregroundStyle(.secondary.opacity(captionOpacity))
             Text(value)
+                .font(.system(size: 12.5))
                 .textSelection(.enabled)
         }
-        .font(.callout)
-    }
-
-    /// Three numbers that answer one question, so they share one line instead of three frames.
-    private func usageField(_ item: Item) -> some View {
-        GridRow {
-            Text("Usage")
-                .foregroundStyle(.secondary)
-                .gridColumnAlignment(.trailing)
-            Text(usageSentence(item))
-        }
-        .font(.callout)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
     }
 
     private func usageSentence(_ item: Item) -> String {
