@@ -26,10 +26,15 @@ struct DetailView: View {
                     // sit empty on a wide pane. On a narrow pane the same two blocks stack,
                     // which is exactly the old layout.
                     ViewThatFits(in: .horizontal) {
-                        HStack(alignment: .top, spacing: Metrics.lg) {
+                        // Centre-aligned, not top: the budget is two lines against the tiles'
+                        // four, and hugging the top left its own corner of dead space below.
+                        HStack(alignment: .center, spacing: Metrics.lg) {
                             budgetSection(item)
                             Spacer(minLength: Metrics.md)
+                            // Capped so the flexible tiles don't swallow the spacer: the grid
+                            // hangs off the trailing edge at a steady width instead.
                             detailCards(item)
+                                .frame(maxWidth: 560, alignment: .trailing)
                         }
                         VStack(alignment: .leading, spacing: Metrics.md) {
                             budgetSection(item)
@@ -164,19 +169,36 @@ struct DetailView: View {
     /// Xcode inspector, the Finder's own panes. The boxed mini-cards this replaces were
     /// dashboard vocabulary: nine bordered tiles with uppercase captions, each drawing a frame
     /// around four characters. A calm pair of columns says the same in a third of the space.
-    /// The same three facts, as a row of very small cards instead of a labelled table — the
-    /// caption inside each card replaces both the row label and the section's own "Details"
-    /// title, so the whole block shrinks to one line of tiles.
+    /// Four very small cards in a 2×2 grid — the caption inside each card replaces both the
+    /// row label and a section title. The fourth corner counts assistants for a personal
+    /// skill, and falls back to the kind for everything else.
     @ViewBuilder
     private func detailCards(_ item: Item) -> some View {
-        HStack(alignment: .top, spacing: Metrics.xs) {
-            detailCard("Source", sourceText(item))
-            if let modified = item.modified {
-                let size = fileSize(item).map { " · \($0)" } ?? ""
-                detailCard("Modified", Usage.relative(modified) + size)
+        Grid(alignment: .topLeading, horizontalSpacing: Metrics.xs, verticalSpacing: Metrics.xs) {
+            GridRow {
+                detailCard("Source", sourceText(item))
+                if let modified = item.modified {
+                    let size = fileSize(item).map { " · \($0)" } ?? ""
+                    detailCard("Modified", Usage.relative(modified) + size)
+                } else {
+                    detailCard("Type", item.kind.label)
+                }
             }
-            detailCard("Usage", usageSentence(item))
+            GridRow {
+                detailCard("Usage", usageSentence(item))
+                detailCard(fourthCard(item).0, fourthCard(item).1)
+            }
         }
+    }
+
+    /// Which assistants matter for a personal skill; the kind is the honest filler otherwise.
+    private func fourthCard(_ item: Item) -> (String, String) {
+        guard item.kind == .skill, item.origin == .personal else {
+            return ("Type", item.kind.label)
+        }
+        let total = model.assistants.count
+        let has = item.assistants.count
+        return ("Assistants", "\(has) of \(total)")
     }
 
     private func detailCard(_ label: String, _ value: String) -> some View {
@@ -187,7 +209,11 @@ struct DetailView: View {
             Text(value)
                 .font(.system(size: 12.5))
                 .textSelection(.enabled)
+                // Wrap rather than truncate: "last used 7 days ago" cut to "7 d…" said
+                // nothing, and these tiles have room to grow a line.
+                .fixedSize(horizontal: false, vertical: true)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
