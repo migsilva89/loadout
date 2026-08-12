@@ -7,22 +7,29 @@ struct ContentView: View {
 
     var body: some View {
         NavigationSplitView {
-            ItemListView(model: model)
-                .safeAreaInset(edge: .bottom, spacing: 0) { ListFooter(model: model) }
-                .navigationSplitViewColumnWidth(min: 340, ideal: 392, max: 520)
+            SidebarView(model: model)
+                .navigationSplitViewColumnWidth(min: 340, ideal: 372, max: 520)
         } detail: {
             DetailView(model: model)
         }
+        .background(V2.window)
+        // The design is one deliberate dark theme, not a pair — the palette in Theme.swift
+        // is authored against these exact surfaces, so the window opts out of following the
+        // system appearance.
+        .preferredColorScheme(.dark)
         .toolbar {
-            // Only the New-skill button remains up here — the context picker moved into the
-            // list header, next to the search and filters it scopes.
+            // The kind bar lives in the title bar now, as the design draws it: one inset
+            // segmented control, name and count per kind, window-level because switching
+            // kind changes both columns below it.
+            ToolbarItem(placement: .principal) {
+                KindTabs(model: model)
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     model.isCreating = true
                 } label: {
                     Label("New skill", systemImage: "plus")
                 }
-                .controlSize(.regular)
                 .help("Create a new personal skill (⌘N)")
                 .pointingHand()
             }
@@ -53,88 +60,49 @@ struct ContentView: View {
     }
 }
 
-// MARK: - Context picker
+// MARK: - Kind tabs
 
-struct ContextPicker: View {
+/// The five kinds as one segmented control in the title bar — the design's replacement for
+/// the old icon bar above the list. The selected segment is a lifted tile; the counts ride
+/// along quieter than the names.
+struct KindTabs: View {
     @Bindable var model: AppModel
 
     var body: some View {
-        Menu {
-            Picker("Context", selection: Binding(
-                get: { model.context?.id },
-                set: { id in
-                    model.changeContext(to: model.projects.first { $0.id == id })
-                }
-            )) {
-                Text("Global").tag(String?.none)
-                Divider()
-                ForEach(model.projects) { project in
-                    Text(project.relativePath).tag(String?.some(project.id))
-                }
-            }
-            .pickerStyle(.inline)
-        } label: {
-            HStack(spacing: 5) {
-                Image(systemName: model.context == nil ? "globe" : "folder")
-                // Truncated in the middle at a fixed cap: a project can be called anything,
-                // and one long name must not shove the whole header row off the pane.
-                Text(model.context?.name ?? "Global")
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .frame(maxWidth: 140)
-                    .fixedSize(horizontal: false, vertical: true)
+        HStack(spacing: 1) {
+            ForEach(Selection.allCases, id: \.self) { selection in
+                tab(selection)
             }
         }
-        .menuStyle(.button)
-        .buttonStyle(.bordered)
-        .fixedSize()
-        .help("Switch which project's files Claude sees, or go back to Global")
-        .pointingHand()
+        .padding(2)
+        .background(V2.well, in: RoundedRectangle(cornerRadius: 7))
+        .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Color.black.opacity(0.5), lineWidth: 0.5))
     }
-}
 
-// MARK: - List footer
-
-/// The list column's bottom edge: Settings at the leading end — its home now that the sidebar
-/// that used to carry it is gone — and the status text at the trailing end, sharing one line
-/// the way they used to share one line split across two columns.
-struct ListFooter: View {
-    @Bindable var model: AppModel
-
-    var body: some View {
-        HStack(spacing: Metrics.sm) {
-            SettingsLink {
-                HStack(spacing: 6) {
-                    Image(systemName: "gearshape")
-                    Text("Settings")
-                }
+    private func tab(_ selection: Selection) -> some View {
+        let isActive = model.selection == selection
+        return Button {
+            model.selection = selection
+        } label: {
+            HStack(spacing: 6) {
+                Text(selection.title)
+                    .font(.system(size: 12.5, weight: isActive ? .medium : .regular))
+                    .foregroundStyle(isActive ? Color.white : Color.white.opacity(0.55))
+                Text("\(model.count(for: selection))")
+                    .font(.system(size: 10.5))
+                    .monospacedDigit()
+                    .foregroundStyle(Color.white.opacity(isActive ? 0.6 : 0.3))
             }
-            .buttonStyle(.plain)
-            .help("Appearance, usage indexing, assistants and backups (⌘,)")
-            .pointingHand()
-
-            Spacer()
-
-            if let progress = model.indexProgress {
-                ProgressView(value: progress)
-                    .progressViewStyle(.linear)
-                    .frame(width: 100)
-                Text("Indexing usage…")
-            } else if let status = model.statusMessage {
-                Image(systemName: "checkmark.circle")
-                Text(status)
-            } else {
-                Text("\(model.items.count) \(model.items.count == 1 ? "item" : "items") · \(model.plugins.count) \(model.plugins.count == 1 ? "plugin" : "plugins")")
-            }
-            if model.isDirty {
-                Text("unsaved")
-                    .foregroundStyle(.orange)
-            }
+            .padding(.horizontal, 13)
+            .padding(.vertical, 4)
+            .background(
+                isActive ? Color.white.opacity(0.16) : Color.clear,
+                in: RoundedRectangle(cornerRadius: 6)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 6))
         }
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, Metrics.md)
-        .padding(.vertical, Metrics.xs)
-        .background(.bar)
+        .buttonStyle(.plain)
+        .help(selection.rowHint)
+        .pointingHand()
     }
 }

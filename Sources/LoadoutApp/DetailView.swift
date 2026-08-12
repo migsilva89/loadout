@@ -1,240 +1,228 @@
 import SwiftUI
 import LoadoutCore
 
+/// The v2 detail pane: identity header with the one big switch, then cards — Token budget and
+/// Details side by side, the Assistants grid, and the document with its own toolbar. Every
+/// section is a rounded surface on the darker window ground, the way the design draws them.
 struct DetailView: View {
     @Bindable var model: AppModel
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         if let item = model.selected {
             ScrollView {
-                VStack(alignment: .leading, spacing: Metrics.md) {
+                VStack(alignment: .leading, spacing: 14) {
                     header(item)
                     if let warning = item.warning {
-                        Label(warning, systemImage: "exclamationmark.triangle.fill")
-                            .font(.callout)
-                            .foregroundStyle(.orange)
-                            .padding(Metrics.sm)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+                        warningCallout(warning)
                     }
-                    // No outer boxed section here: the grid's own tiles are the cards, and
-                    // wrapping them in another same-colour box just merged the two into one
-                    // undifferentiated slab.
-                    // One band instead of two stacked blocks: the cards keep their intrinsic
-                    // width on the left and the budget takes the trailing corner that used to
-                    // sit empty on a wide pane. On a narrow pane the same two blocks stack,
-                    // which is exactly the old layout.
+                    // The two fact cards share a row while the pane is wide and stack when it
+                    // isn't — same content either way.
                     ViewThatFits(in: .horizontal) {
-                        // Top-aligned with the tiles, breathing room underneath. The budget
-                        // block stretches to the band's full height (set by the taller tiles)
-                        // so its title can stay pinned at the top while the gauges float
-                        // centred in whatever space is left below it.
-                        HStack(alignment: .top, spacing: Metrics.lg) {
-                            budgetSectionCentered(item)
-                                .frame(maxHeight: .infinity, alignment: .topLeading)
-                            Spacer(minLength: Metrics.md)
-                            // Capped so the flexible tiles don't swallow the spacer: the grid
-                            // hangs off the trailing edge at a steady width instead.
-                            detailCards(item)
-                                .frame(maxWidth: 560, alignment: .trailing)
+                        HStack(alignment: .top, spacing: 12) {
+                            budgetCard(item).frame(maxWidth: .infinity)
+                            detailsCard(item).frame(maxWidth: .infinity)
                         }
-                        VStack(alignment: .leading, spacing: Metrics.md) {
-                            budgetSection(item)
-                            detailCards(item)
-                        }
-                    }
-                    // The breathing room goes under the whole band, not under the budget
-                    // block: the tiles are the taller side, so padding inside the shorter
-                    // block was swallowed without moving anything on screen.
-                    .padding(.bottom, Metrics.lg)
-                    if let folder = item.directory ?? item.path?.deletingLastPathComponent() {
-                        VStack(alignment: .leading, spacing: Metrics.xs) {
-                            Text("Files")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                            filesBox(item, folder: folder)
+                        VStack(spacing: 12) {
+                            budgetCard(item)
+                            detailsCard(item)
                         }
                     }
                     if item.kind == .skill, item.origin == .personal, item.enabled {
-                        section {
-                            AssistantPanel(item: item, model: model)
-                        }
+                        assistantsCard(item)
                     }
-                    // The toolbar — file name, size, and every button that acts on the file —
-                    // sits above the box now, not inside it: the box holds the document, the
-                    // way a toolbar sits above the document it controls rather than inside it.
-                    VStack(alignment: .leading, spacing: Metrics.xs) {
-                        documentToolbar(item)
-                        VStack(alignment: .leading, spacing: 0) {
-                            editor(item)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(Metrics.sm)
-                        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
-                    }
+                    documentCard(item)
                 }
-                // A fixed inset on both edges instead of a centred, capped column: the
-                // sections reach the full width of the pane, the way a stock sidebar
-                // inspector's boxes do.
-                .padding(.horizontal, Metrics.lg)
-                .padding(.vertical, Metrics.lg)
+                .padding(.horizontal, 24)
+                .padding(.top, 20)
+                .padding(.bottom, 28)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .background(V2.window)
         } else {
             ContentUnavailableView(
                 "Select an item",
                 systemImage: "square.stack.3d.up",
                 description: Text("The list on the left contains everything Claude loads.")
             )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(V2.window)
         }
     }
 
-    // MARK: - Sections
+    // MARK: - Header
 
-    /// A titled, full-width box — the hand-rolled stand-in for a grouped `Form` section, used
-    /// because the real one caps its content to a centred column and leaves dead margins on
-    /// a wide pane. Same look (a system surface, a quiet header), without the cap.
-    private func section<Header: View, Content: View>(
-        @ViewBuilder header: () -> Header,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: Metrics.xs) {
-            header()
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 0, content: content)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(Metrics.sm)
-                .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
-        }
-    }
-
-    private func section<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        content()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(Metrics.sm)
-            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
-    }
-
-    // MARK: - Pieces
-
-    /// Identity only — name, kind and the enable switch. What used to be a second line of
-    /// prose here ("Personal skill · enabled · modified 2 days ago") now lives as real rows
-    /// in the Details section below, instead of being said twice.
     private func header(_ item: Item) -> some View {
-        HStack(alignment: .center, spacing: Metrics.md) {
-            RoundedRectangle(cornerRadius: 11)
-                .fill(item.enabled ? kindTint(item.kind).opacity(0.15) : Color(nsColor: .quaternaryLabelColor))
-                .frame(width: 42, height: 42)
+        HStack(alignment: .center, spacing: 12) {
+            RoundedRectangle(cornerRadius: 9)
+                .fill(
+                    LinearGradient(
+                        colors: [item.kind.tint, item.kind.tint.opacity(0.65)],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                )
+                .frame(width: 40, height: 40)
                 .overlay {
                     Image(systemName: icon(for: item.kind))
-                        .font(.system(size: 19))
-                        .foregroundStyle(item.enabled ? kindTint(item.kind) : .secondary)
+                        .font(.system(size: 18))
+                        .foregroundStyle(.white)
                 }
-            Text(item.name)
-                .font(.system(size: 19, weight: .semibold))
-                .lineLimit(1)
-            // The switch belongs at the far edge, not glued to the title: it acts on the whole
-            // item, and a control touching the name reads as part of the name.
-            Spacer(minLength: Metrics.md)
+                .shadow(color: .black.opacity(0.5), radius: 1.5, y: 1)
+                .saturation(item.enabled ? 1 : 0.2)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.name)
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundStyle(V2.text)
+                    .lineLimit(1)
+                Text(subtitle(item))
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(V2.textDim)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 12)
             if item.kind == .skill, item.origin == .personal {
-                Toggle("", isOn: Binding(
-                    get: { item.enabled },
-                    set: { _ in model.toggle(item) }
-                ))
-                .toggleStyle(.switch)
-                .tint(.green)
-                .labelsHidden()
-                .help(
-                    item.enabled
-                        ? "Move this skill to skills-off so Claude stops loading it"
-                        : "Move this skill back to skills so Claude loads it again"
+                Text(item.enabled ? "Enabled" : "Disabled")
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(V2.textMid)
+                MiniSwitch(on: item.enabled, width: 40, height: 24) { model.toggle(item) }
+            }
+        }
+    }
+
+    /// "Personal skill · 12 KB · modified 1 month ago" — origin, weight and age in one quiet line.
+    private func subtitle(_ item: Item) -> String {
+        var parts = [sourceText(item)]
+        if let size = fileSize(item) { parts.append(size) }
+        if let modified = item.modified { parts.append("modified \(Usage.relative(modified))") }
+        return parts.joined(separator: " · ")
+    }
+
+    private func sourceText(_ item: Item) -> String {
+        let kind = item.kind.label
+        switch item.origin {
+        case .personal: return "Personal \(kind.lowercased())"
+        case .project(let name): return "\(kind) in \(name)"
+        case .plugin(let name): return "\(kind) from \(name)"
+        }
+    }
+
+    private func warningCallout(_ warning: String) -> some View {
+        Label(warning, systemImage: "exclamationmark.triangle.fill")
+            .font(.system(size: 12.5))
+            .foregroundStyle(V2.amber)
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(V2.amber.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    // MARK: - Token budget card
+
+    private func budgetCard(_ item: Item) -> some View {
+        V2Card {
+            VStack(spacing: 0) {
+                cardHeader { V2CardCaption(text: "Token budget") }
+                meterRow(
+                    label: "Description",
+                    fraction: Double(item.budget.descriptionCharacters) / Double(Budget.maxDescriptionCharacters),
+                    over: item.budget.descriptionCharacters > Budget.maxDescriptionCharacters,
+                    value: "~\(item.budget.descriptionTokens) / ~\(Budget.estimatedTokens(characters: Budget.maxDescriptionCharacters)) tok"
                 )
+                meterRow(
+                    label: "Body",
+                    fraction: Double(item.budget.bodyLines) / Double(Budget.maxBodyLines),
+                    over: item.budget.bodyLines > Budget.maxBodyLines,
+                    value: "\(item.budget.bodyLines) / \(Budget.maxBodyLines) lines"
+                )
+            }
+        }
+        .help(budgetHelp(item))
+    }
+
+    private func meterRow(label: String, fraction: Double, over: Bool, value: String) -> some View {
+        HStack(spacing: 11) {
+            Text(label)
+                .font(.system(size: 12.5))
+                .foregroundStyle(Color.white.opacity(0.75))
+                .frame(width: 78, alignment: .leading)
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.black.opacity(0.4))
+                    Capsule()
+                        .fill(over ? V2.amber : V2.green)
+                        .frame(width: proxy.size.width * min(1, max(0.02, fraction)))
+                }
+            }
+            .frame(height: 5)
+            Text(value)
+                .font(.system(size: 11.5))
+                .monospacedDigit()
+                .foregroundStyle(over ? V2.amber : Color.white.opacity(0.5))
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 13)
+        .padding(.vertical, 11)
+        .overlay(alignment: .bottom) { Rectangle().fill(Color.white.opacity(0.06)).frame(height: 0.5) }
+    }
+
+    private func budgetHelp(_ item: Item) -> String {
+        let base = "The description is in context in every session, used or not. The body only when the skill triggers. Estimated at four characters per token."
+        guard item.budget.isOverBudget else { return base }
+        return (item.budget.breaches + [base]).joined(separator: "\n")
+    }
+
+    // MARK: - Details card
+
+    private func detailsCard(_ item: Item) -> some View {
+        V2Card {
+            VStack(spacing: 0) {
+                cardHeader { V2CardCaption(text: "Details") }
+                detailRow(label: "Source", value: sourceText(item))
+                detailRow(label: "Usage", value: usageValue(item))
+                detailRow(label: "Last used", value: lastUsedValue(item))
+                if let folder = item.directory ?? item.path?.deletingLastPathComponent() {
+                    detailRow(
+                        label: "Location", value: displayPath(folder), mono: true,
+                        action: ("Reveal", { model.revealInFinder() }),
+                        actionHint: "Reveal \(displayPath(folder)) in Finder"
+                    )
+                    let extras = folderContents(folder).filter { $0 != item.path?.lastPathComponent }
+                    if !extras.isEmpty {
+                        detailRow(label: "Files", value: extras.joined(separator: "  "), mono: true)
+                    }
+                }
+            }
+        }
+    }
+
+    private func detailRow(
+        label: String, value: String, mono: Bool = false,
+        action: (String, () -> Void)? = nil, actionHint: String = ""
+    ) -> some View {
+        HStack(spacing: 12) {
+            Text(label)
+                .font(.system(size: 12.5))
+                .foregroundStyle(Color.white.opacity(0.5))
+                .frame(width: 74, alignment: .leading)
+            Text(value)
+                .font(mono ? .system(size: 11.5, design: .monospaced) : .system(size: 12.5))
+                .foregroundStyle(mono ? V2.textMid : Color.white.opacity(0.88))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let (title, act) = action {
+                Button(action: act) {
+                    Text(title)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(V2.link)
+                }
+                .buttonStyle(.plain)
+                .help(actionHint)
                 .pointingHand()
             }
         }
-    }
-
-    /// The frontmatter section: what the old header's second line and footer used to say, now
-    /// as a reflowing grid of small cards instead of label/value rows. A grid scans the way a
-    /// glance actually works — several facts at once, not one column read top to bottom — and
-    /// it uses a wide pane's width instead of leaving it as dead margin either side of a list.
-
-    /// The small uppercase tile captions ("TYPE", "LOCATION", …) needed more weight in light
-    /// mode to hold the same contrast an uppercase label reads at in dark mode — dark was
-    /// already legible at the smaller, lighter values, so only light gets the bump.
-    private var captionSize: CGFloat { colorScheme == .dark ? 10 : 10.5 }
-    private var captionWeight: Font.Weight { colorScheme == .dark ? .medium : .semibold }
-    private var captionOpacity: Double { colorScheme == .dark ? 0.75 : 0.8 }
-
-    // `LazyVGrid`, unlike `Grid`, has no cell-spanning modifier — a tile inside it can't be
-    // told to stretch across the row's other columns. Location is rendered as its own
-    // full-width tile below the grid instead, which reads the same either way: a block of
-    // small cards, with the one long value sitting underneath at the pane's own width.
-    /// Label and value in two columns, the way a Mac inspector states facts — Get Info, the
-    /// Xcode inspector, the Finder's own panes. The boxed mini-cards this replaces were
-    /// dashboard vocabulary: nine bordered tiles with uppercase captions, each drawing a frame
-    /// around four characters. A calm pair of columns says the same in a third of the space.
-    /// Four very small cards in a 2×2 grid — the caption inside each card replaces both the
-    /// row label and a section title. The fourth corner counts assistants for a personal
-    /// skill, and falls back to the kind for everything else.
-    @ViewBuilder
-    private func detailCards(_ item: Item) -> some View {
-        // Two HStacks of two flexible tiles, not a Grid: an HStack splits its width equally
-        // between two max-width children, which is the only way all four tiles come out the
-        // same size regardless of what their text measures.
-        VStack(spacing: Metrics.xs) {
-            HStack(spacing: Metrics.xs) {
-                detailCard("Source", sourceText(item))
-                if let modified = item.modified {
-                    let size = fileSize(item).map { " · \($0)" } ?? ""
-                    detailCard("Modified", Usage.relative(modified) + size)
-                } else {
-                    detailCard("Type", item.kind.label)
-                }
-            }
-            HStack(spacing: Metrics.xs) {
-                detailCard("Usage", usageValue(item), subtitle: usageSubtitle(item))
-                detailCard(fourthCard(item).0, fourthCard(item).1)
-            }
-        }
-    }
-
-    /// Which assistants matter for a personal skill; the kind is the honest filler otherwise.
-    private func fourthCard(_ item: Item) -> (String, String) {
-        guard item.kind == .skill, item.origin == .personal else {
-            return ("Type", item.kind.label)
-        }
-        let total = model.assistants.count
-        let has = item.assistants.count
-        return ("Assistants", "\(has) of \(total)")
-    }
-
-    /// The subtitle is the deliberate second line — quiet, under the value — for the one card
-    /// whose fact doesn't fit a single breath. Everything else stays caption + value.
-    private func detailCard(_ label: String, _ value: String, subtitle: String? = nil) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label)
-                .font(.system(size: captionSize, weight: captionWeight))
-                .foregroundStyle(.secondary.opacity(captionOpacity))
-            Text(value)
-                .font(.system(size: 12.5))
-                .textSelection(.enabled)
-                .lineLimit(1)
-            if let subtitle {
-                Text(subtitle)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-        }
-        // Every tile the height of the tallest (caption, value and subtitle), captions all
-        // starting at the same top edge — the ones without a subtitle just breathe below.
-        .frame(maxWidth: .infinity, minHeight: 46, alignment: .topLeading)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+        .padding(.horizontal, 13)
+        .padding(.vertical, 9)
+        .overlay(alignment: .bottom) { Rectangle().fill(Color.white.opacity(0.06)).frame(height: 0.5) }
     }
 
     private func usageValue(_ item: Item) -> String {
@@ -244,139 +232,24 @@ struct DetailView: View {
         return "\(uses) in \(projects)"
     }
 
-    private func usageSubtitle(_ item: Item) -> String? {
-        guard item.usage.count > 0 else { return "in the last 90 days" }
-        return item.usage.lastUsed.map { "last used \(Usage.relative($0))" }
+    private func lastUsedValue(_ item: Item) -> String {
+        guard item.usage.count > 0, let last = item.usage.lastUsed else { return "— (last 90 days)" }
+        return Usage.relative(last)
     }
 
-    @ViewBuilder
-    private func budgetSection(_ item: Item) -> some View {
-        if item.budget.descriptionCharacters > 0 || item.budget.bodyCharacters > 0 {
-            VStack(alignment: .leading, spacing: Metrics.xs) {
-                Text("Token budget")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                budgetRows(item)
-            }
-        }
+    private func fileSize(_ item: Item) -> String? {
+        guard let path = item.path,
+              let attributes = try? FileManager.default.attributesOfItem(atPath: path.path),
+              let bytes = attributes[.size] as? Int
+        else { return nil }
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: Int64(bytes))
     }
 
-    /// Wide-band variant only: the title is pinned to the top edge, matching the tiles, while
-    /// the gauge rows are free to float vertically centred in whatever height the tiles leave
-    /// underneath it. The narrow stacked fallback keeps using `budgetSection` unchanged, since
-    /// there the block sizes itself and centring has nothing to centre within.
-    @ViewBuilder
-    private func budgetSectionCentered(_ item: Item) -> some View {
-        if item.budget.descriptionCharacters > 0 || item.budget.bodyCharacters > 0 {
-            VStack(alignment: .leading, spacing: Metrics.xs) {
-                Text("Token budget")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 0)
-                budgetRows(item)
-                Spacer(minLength: 0)
-            }
-        }
-    }
-
-    /// The description is loaded in every session whether the skill fires or not; the body only
-    /// on trigger. Each cost drawn as a bar against the documented limit — every track the same
-    /// width, so the fill is the only thing that varies — green while inside, orange past it.
-    private func budgetRows(_ item: Item) -> some View {
-        Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: Metrics.md, verticalSpacing: 8) {
-            gaugeRow(
-                label: "Description",
-                fraction: Double(item.budget.descriptionCharacters) / Double(Budget.maxDescriptionCharacters),
-                over: item.budget.descriptionCharacters > Budget.maxDescriptionCharacters,
-                text: "~\(item.budget.descriptionTokens) / ~\(Budget.estimatedTokens(characters: Budget.maxDescriptionCharacters)) tokens"
-            )
-            gaugeRow(
-                label: "Body",
-                fraction: Double(item.budget.bodyLines) / Double(Budget.maxBodyLines),
-                over: item.budget.bodyLines > Budget.maxBodyLines,
-                text: "\(item.budget.bodyLines) / \(Budget.maxBodyLines) lines"
-            )
-        }
-        .help(budgetHelp(item))
-    }
-
-    private func gaugeRow(label: String, fraction: Double, over: Bool, text: String) -> some View {
-        GridRow {
-            Text(label)
-                .foregroundStyle(.secondary)
-                .gridColumnAlignment(.trailing)
-            ZStack(alignment: .leading) {
-                Capsule()
-                    .fill(Color.primary.opacity(0.12))
-                Capsule()
-                    .fill(over ? Color.orange : Color.green)
-                    .frame(width: gaugeWidth * min(1, max(0.02, fraction)))
-            }
-            .frame(width: gaugeWidth, height: 6)
-            HStack(spacing: 5) {
-                Text(text)
-                    .foregroundStyle(over ? Color.orange : Color.secondary)
-                    .monospacedDigit()
-                if over {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-                }
-            }
-        }
-        .font(.callout)
-    }
-
-    private let gaugeWidth: CGFloat = 200
-
-    private func budgetHelp(_ item: Item) -> String {
-        let base = "The description is in context in every session, used or not. The body only when the skill triggers. Estimated at four characters per token."
-        guard item.budget.isOverBudget else { return base }
-        return (item.budget.breaches + [base]).joined(separator: "\n")
-    }
-
-    /// The folder, what travels with it beyond the markdown itself, and Finder — the one
-    /// action left, since the folder is where you'd go to touch scripts and references.
-    private func filesBox(_ item: Item, folder: URL) -> some View {
-        HStack(alignment: .center, spacing: Metrics.md) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(displayPath(folder))
-                    .font(.system(size: 12, design: .monospaced))
-                    .textSelection(.enabled)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                // Only what travels with the document, never the document itself: every
-                // skill has its SKILL.md, so listing it says nothing.
-                let extras = folderContents(folder).filter { $0 != item.path?.lastPathComponent }
-                if !extras.isEmpty {
-                    Text(extras.joined(separator: "   "))
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                }
-            }
-            Spacer(minLength: Metrics.sm)
-            Button { model.revealInFinder() } label: {
-                Label {
-                    Text("Finder")
-                } icon: {
-                    AppIconView(path: AppIconCache.finder)
-                }
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .help(revealHelp(item))
-            .pointingHand()
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(Metrics.sm)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
-    }
-
-
-    /// Everything beside the markdown, folders marked with a trailing slash.
-    ///
-    /// Resolves symlinks first: six of the real skills are links into a shared `.agents/skills`
-    /// tree, and listing a link's contents without resolving it returns nothing at all.
+    /// Everything beside the markdown, folders marked with a trailing slash. Resolves symlinks
+    /// first: several real skills are links into a shared `.agents/skills` tree, and listing
+    /// a link's contents without resolving it returns nothing at all.
     private func folderContents(_ folder: URL) -> [String] {
         let fm = FileManager.default
         let target = folder.resolvingSymlinksInPath()
@@ -392,158 +265,249 @@ struct DetailView: View {
             .sorted()
     }
 
-    /// Origin and kind in one breath — "Personal skill", "Command from nikus" — now that the
-    /// separate Type row is gone.
-    private func sourceText(_ item: Item) -> String {
-        let kind = item.kind.label
-        switch item.origin {
-        case .personal: return "Personal \(kind.lowercased())"
-        case .project(let name): return "\(kind) in \(name)"
-        case .plugin(let name): return "\(kind) from \(name)"
-        }
-    }
-
     private func displayPath(_ url: URL) -> String {
         url.path.replacingOccurrences(
             of: FileManager.default.homeDirectoryForCurrentUser.path, with: "~"
         )
     }
 
-    /// Only the controls. The file's name said nothing a person could not already see — it is
-    /// `SKILL.md` for every skill, and the item's own name for a command or an agent — and its
-    /// size moved into the Details grid, where the other facts about the file live.
-    private func documentToolbar(_ item: Item) -> some View {
-        HStack(spacing: Metrics.md) {
-            actions(item)
-            Spacer(minLength: Metrics.sm)
+    // MARK: - Assistants card
+
+    private func assistantsCard(_ item: Item) -> some View {
+        let assistants = model.visibleAssistants
+        let loaded = assistants.filter { item.assistants.contains($0.id) }.count
+        return V2Card {
+            VStack(spacing: 0) {
+                cardHeader {
+                    HStack(spacing: 8) {
+                        V2CardCaption(text: "Assistants")
+                        Text("\(loaded) loaded of \(assistants.count)")
+                            .font(.system(size: 11))
+                            .foregroundStyle(V2.textFaint)
+                    }
+                }
+                // A fixed four-up grid, the design's shape: every assistant on the machine,
+                // each row a click that adds or removes this skill for it.
+                LazyVGrid(
+                    columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 4),
+                    spacing: 0
+                ) {
+                    ForEach(assistants) { assistant in
+                        assistantCell(assistant, item: item)
+                    }
+                }
+            }
         }
     }
 
-    private func fileSize(_ item: Item) -> String? {
-        guard let path = item.path,
-              let attributes = try? FileManager.default.attributesOfItem(atPath: path.path),
-              let bytes = attributes[.size] as? Int
-        else { return nil }
-        let formatter = ByteCountFormatter()
-        formatter.countStyle = .file
-        return formatter.string(fromByteCount: Int64(bytes))
+    private func assistantCell(_ assistant: Assistant, item: Item) -> some View {
+        let has = item.assistants.contains(assistant.id)
+        let none = !has && !assistant.hasSkillsFolder
+        return Button {
+            model.setAssistant(assistant, on: item, present: !has)
+        } label: {
+            HStack(spacing: 9) {
+                AssistantMark(assistant: assistant, present: has || !none, size: 20)
+                Text(assistant.label)
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(Color.white.opacity(none ? 0.4 : 0.88))
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(has ? "loaded" : (none ? "no skills" : "add"))
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(has ? V2.green : (none ? Color.white.opacity(0.25) : V2.link))
+            }
+            .padding(.horizontal, 13)
+            .padding(.vertical, 9)
+            .overlay(alignment: .bottom) { Rectangle().fill(Color.white.opacity(0.06)).frame(height: 0.5) }
+            .overlay(alignment: .trailing) { Rectangle().fill(Color.white.opacity(0.06)).frame(width: 0.5) }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(assistantHelp(assistant, has: has))
+        .pointingHand()
     }
 
-    private func actions(_ item: Item) -> some View {
-        HStack(spacing: Metrics.xs) {
-            // Reading or editing: one switch, because they are the same pane in two modes.
-            Picker("", selection: Binding(
-                get: { model.showsPreview },
-                set: { model.showsPreview = $0 }
-            )) {
-                Image(systemName: "eye").tag(true)
-                Image(systemName: "square.and.pencil").tag(false)
+    private func assistantHelp(_ assistant: Assistant, has: Bool) -> String {
+        if has { return "Click to stop \(assistant.label) from loading this skill" }
+        if assistant.hasSkillsFolder { return "Click to add this skill to \(assistant.label)" }
+        return "\(assistant.label) doesn't have a skills folder yet. Click to create \(assistant.skillsRoot.path) and add this skill."
+    }
+
+    // MARK: - Document card
+
+    private func documentCard(_ item: Item) -> some View {
+        V2Card {
+            VStack(spacing: 0) {
+                documentToolbar(item)
+                Rectangle().fill(Color.white.opacity(0.08)).frame(height: 0.5)
+                documentBody(item)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
-            .help(model.showsPreview ? "View raw file" : "View as Markdown")
-            .pointingHand()
+        }
+    }
+
+    private func documentToolbar(_ item: Item) -> some View {
+        HStack(spacing: 8) {
+            // Reading or editing: one segmented switch, because they are the same document
+            // in two modes.
+            HStack(spacing: 1) {
+                viewModeTab("Preview", selected: model.showsPreview) { model.showsPreview = true }
+                viewModeTab("Edit", selected: !model.showsPreview) { model.showsPreview = false }
+            }
+            .padding(2)
+            .background(V2.well, in: RoundedRectangle(cornerRadius: 7))
 
             if item.isEditable {
                 askButton
             }
 
-            Spacer()
+            Spacer(minLength: 8)
+
+            budgetChip(item)
+
             if item.isEditable {
-                Button("Save") { model.save() }
-                    .buttonStyle(.borderedProminent)
+                Button("Revert") { model.revert() }
+                    .buttonStyle(V2ToolbarButtonStyle(prominent: false, enabled: model.isDirty))
                     .disabled(!model.isDirty)
-                    .keyboardShortcut("s", modifiers: .command)
-                    .help("Write your changes to the file on disk (⌘S)")
+                    .help("Throw away the unsaved changes and reload the file from disk")
                     .pointingHand()
+                Button {
+                    model.save()
+                } label: {
+                    HStack(spacing: 6) {
+                        Text("Save")
+                        Text("⌘S")
+                            .font(.system(size: 11))
+                            .opacity(0.6)
+                    }
+                }
+                .buttonStyle(V2ToolbarButtonStyle(prominent: true, enabled: model.isDirty))
+                .disabled(!model.isDirty)
+                .keyboardShortcut("s", modifiers: .command)
+                .help("Write your changes to the file on disk (⌘S)")
+                .pointingHand()
             }
         }
-        .controlSize(.small)
+        .padding(.horizontal, 10)
+        .frame(height: 40)
+    }
+
+    private func viewModeTab(_ name: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(name)
+                .font(.system(size: 12))
+                .foregroundStyle(selected ? Color.white : Color.white.opacity(0.55))
+                .padding(.horizontal, 13)
+                .padding(.vertical, 4)
+                .background(
+                    selected ? Color.white.opacity(0.16) : Color.clear,
+                    in: RoundedRectangle(cornerRadius: 6)
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 6))
+        }
+        .buttonStyle(.plain)
+        .help(name == "Preview" ? "Read the document as rendered Markdown" : "Edit the raw file")
+        .pointingHand()
+    }
+
+    /// The body's line count against the documented limit, always in view while editing —
+    /// green while inside, amber the moment the file crosses the line.
+    private func budgetChip(_ item: Item) -> some View {
+        let over = item.budget.bodyLines > Budget.maxBodyLines
+        let color = over ? V2.amber : V2.green
+        return HStack(spacing: 5) {
+            Image(systemName: "clock")
+                .font(.system(size: 10))
+            Text("\(item.budget.bodyLines) / \(Budget.maxBodyLines) lines")
+                .monospacedDigit()
+        }
+        .font(.system(size: 11.5))
+        .foregroundStyle(color)
+        .padding(.horizontal, 9)
+        .frame(height: 22)
+        .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(color.opacity(0.28), lineWidth: 0.5))
+        .help(budgetHelp(item))
     }
 
     /// One button when exactly one assistant CLI is installed, a menu when there's a choice,
-    /// and a disabled button naming what it's looking for when there's none. Whichever CLI is
-    /// picked is what the sheet, opened right after, actually runs.
+    /// and a disabled button naming what it's looking for when there's none.
     @ViewBuilder
     private var askButton: some View {
         let clis = model.assistantCLIs
         if clis.isEmpty {
-            Button {} label: {
-                Label("Ask", systemImage: "sparkles")
-            }
-            .buttonStyle(.bordered)
-            .disabled(true)
-            .help("Looks for \(AssistantCLIRegistry.builtinLabels.joined(separator: ", ")) on your PATH — none of them are installed.")
-            .pointingHand()
+            Button {} label: { askLabel }
+                .buttonStyle(V2ToolbarButtonStyle(prominent: false, enabled: false))
+                .disabled(true)
+                .help("Looks for \(AssistantCLIRegistry.builtinLabels.joined(separator: ", ")) on your PATH — none of them are installed.")
         } else if let only = clis.count == 1 ? clis.first : nil {
-            Button { model.askAssistant(only) } label: {
-                Label {
-                    Text("Ask \(only.label)")
-                } icon: {
-                    assistantMark(for: only)
-                }
-            }
-            .buttonStyle(.bordered)
-            .help("Ask \(only.label) for help with this skill, in a sheet that writes nothing until you decide")
-            .pointingHand()
+            Button { model.askAssistant(only) } label: { askLabel }
+                .buttonStyle(V2ToolbarButtonStyle(prominent: false, enabled: true))
+                .help("Ask \(only.label) for help with this skill, in a sheet that writes nothing until you decide")
+                .pointingHand()
         } else {
             Menu {
                 ForEach(clis) { cli in
-                    Button { model.askAssistant(cli) } label: {
-                        Label {
-                            Text(cli.label)
-                        } icon: {
-                            assistantMark(for: cli)
-                        }
-                    }
+                    Button(cli.label) { model.askAssistant(cli) }
                 }
             } label: {
-                Label("Ask", systemImage: "sparkles")
+                askLabel
             }
-            .buttonStyle(.bordered)
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .padding(.horizontal, 10)
+            .frame(height: 24)
+            .background(V2.button, in: RoundedRectangle(cornerRadius: 7))
+            .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Color.white.opacity(0.10), lineWidth: 0.5))
             .help("Ask an assistant for help with this skill, in a sheet that writes nothing until you decide")
             .pointingHand()
         }
     }
 
-    /// The real app icon when the CLI's id matches an installed assistant — `cursor-agent`
-    /// maps to the `cursor` assistant, everything else matches its own id — and two letters
-    /// otherwise, the same fallback `AssistantMark` already uses everywhere else.
-    private func assistantMark(for cli: AssistantCLI) -> some View {
-        let mappedID = cli.id == "cursor-agent" ? "cursor" : cli.id
-        let assistant = model.assistants.first { $0.id == mappedID } ?? Assistant(
-            id: mappedID, label: cli.label,
-            skillsRoot: URL(fileURLWithPath: "/dev/null"),
-            appPath: AssistantRegistry.known[mappedID]?.app
-        )
-        return AssistantMark(assistant: assistant, present: true)
+    private var askLabel: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 11))
+                .foregroundStyle(V2.link)
+            Text("Ask")
+                .font(.system(size: 12))
+        }
     }
 
+    // MARK: Document body
+
     @ViewBuilder
-    private func editor(_ item: Item) -> some View {
+    private func documentBody(_ item: Item) -> some View {
         if item.kind == .mcp {
             Text("This server is defined in ~/.claude.json, not in a separate file.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 12.5))
+                .foregroundStyle(V2.textMid)
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
         } else if model.showsPreview {
             MarkdownView(text: model.draft)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 16)
         } else if item.isEditable {
-            TextEditor(text: Binding(
-                get: { model.draft },
-                set: { model.draft = $0; model.isDirty = true }
-            ))
-            .font(.system(size: 12, design: .monospaced))
-            .frame(minHeight: 300)
-            .padding(Metrics.xs)
-            .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color(nsColor: .separatorColor)))
+            VStack(spacing: 0) {
+                TextEditor(text: Binding(
+                    get: { model.draft },
+                    set: { model.draft = $0; model.isDirty = true }
+                ))
+                .font(.system(size: 12.5, design: .monospaced))
+                .scrollContentBackground(.hidden)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .frame(minHeight: 320)
+                .background(V2.editor)
+                editorStatusBar
+            }
         } else {
-            VStack(alignment: .leading, spacing: Metrics.xs) {
+            VStack(alignment: .leading, spacing: 8) {
                 Label("This comes from a plugin, so it's read-only.", systemImage: "lock")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 11))
+                    .foregroundStyle(V2.textDim)
                 ScrollView {
                     Text(model.draft)
                         .font(.system(size: 12, design: .monospaced))
@@ -552,19 +516,42 @@ struct DetailView: View {
                 }
                 .frame(minHeight: 300)
             }
+            .padding(16)
         }
     }
 
-    /// Names the folder Finder will reveal, since neither the icon nor the label says where
-    /// that actually is.
-    private func revealHelp(_ item: Item) -> String {
-        guard let location = item.directory ?? item.path else { return "Reveal this item in Finder" }
-        return "Reveal \(displayPath(location)) in Finder"
+    /// The design's editor footer: quiet facts about the buffer, nothing interactive.
+    private var editorStatusBar: some View {
+        HStack(spacing: 14) {
+            Text("\(model.draft.components(separatedBy: "\n").count) lines")
+            Text("Markdown")
+            Text("UTF-8")
+            Spacer()
+            if model.isDirty {
+                Text("unsaved")
+                    .foregroundStyle(V2.amber)
+            }
+        }
+        .font(.system(size: 11))
+        .monospacedDigit()
+        .foregroundStyle(V2.textDim)
+        .padding(.horizontal, 12)
+        .frame(height: 28)
+        .background(V2.footer)
+        .overlay(alignment: .top) { Rectangle().fill(Color.white.opacity(0.07)).frame(height: 0.5) }
     }
 
-    /// The same hue the kind bar paints this kind with, so the header tile and the bar agree
-    /// on what colour a skill or a command is.
-    private func kindTint(_ kind: ItemKind) -> Color { kind.tint }
+    // MARK: - Shared pieces
+
+    private func cardHeader<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        HStack {
+            content()
+            Spacer()
+        }
+        .padding(.horizontal, 13)
+        .padding(.vertical, 9)
+        .overlay(alignment: .bottom) { Rectangle().fill(Color.white.opacity(0.08)).frame(height: 0.5) }
+    }
 
     private func icon(for kind: ItemKind) -> String {
         switch kind {
@@ -574,5 +561,31 @@ struct DetailView: View {
         case .mcp: return "network"
         case .plugin: return "puzzlepiece.extension"
         }
+    }
+}
+
+/// The document toolbar's buttons: quiet pill normally, accent-filled for the one primary
+/// action, both fading out instead of vanishing while there is nothing to act on.
+struct V2ToolbarButtonStyle: ButtonStyle {
+    var prominent: Bool
+    var enabled: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 12))
+            .foregroundStyle(
+                enabled ? (prominent ? Color.white : Color.white.opacity(0.85)) : Color.white.opacity(0.28)
+            )
+            .padding(.horizontal, prominent ? 12 : 11)
+            .frame(height: 24)
+            .background(
+                enabled ? (prominent ? V2.accent : V2.button) : Color.clear,
+                in: RoundedRectangle(cornerRadius: 7)
+            )
+            .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(
+                Color.white.opacity(enabled && prominent ? 0.14 : 0.08), lineWidth: 0.5
+            ))
+            .contentShape(RoundedRectangle(cornerRadius: 7))
+            .opacity(configuration.isPressed ? 0.8 : 1)
     }
 }

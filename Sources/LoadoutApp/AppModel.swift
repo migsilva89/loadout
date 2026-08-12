@@ -123,6 +123,12 @@ final class AppModel {
         if let id = env["LOADOUT_ASSISTANT"] {
             assistantFilter = .one(id)
         }
+        if let raw = env["LOADOUT_FILTER"], let chip = ItemFilter(rawValue: raw) {
+            filter = chip
+        }
+        if env["LOADOUT_VIEW"] == "edit" {
+            showsPreview = false
+        }
     }
 
     // MARK: - Reading
@@ -183,6 +189,12 @@ final class AppModel {
         }
         draft = (try? String(contentsOf: path, encoding: .utf8)) ?? ""
         isDirty = false
+    }
+
+    /// Throw away the unsaved edits and reload the file exactly as it is on disk — the
+    /// document toolbar's Revert.
+    func revert() {
+        loadDraft()
     }
 
     func select(_ id: String?) {
