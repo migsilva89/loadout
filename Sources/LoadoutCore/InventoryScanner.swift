@@ -104,7 +104,7 @@ public struct InventoryScanner: Sendable {
         let folderName = folder.lastPathComponent
         var warning = front.warning
         if let declared = front.name, declared != folderName {
-            warning = warning ?? "O name no frontmatter (\(declared)) não coincide com a pasta (\(folderName))."
+            warning = warning ?? "The name in the frontmatter (\(declared)) doesn't match the folder (\(folderName))."
         }
         return Item(
             id: "skill:\(origin.label):\(folderName)",
@@ -251,7 +251,7 @@ public struct InventoryScanner: Sendable {
     }
 
     private func mcpItem(name: String, config: Any, origin: Origin) -> Item {
-        var description = "Servidor MCP"
+        var description = "MCP server"
         if let dict = config as? [String: Any] {
             if let command = dict["command"] as? String {
                 description = command

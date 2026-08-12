@@ -27,31 +27,31 @@ struct LoadoutApp: App {
         .defaultSize(width: 1180, height: 760)
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("Nova skill") { model.isCreating = true }
+                Button("New skill") { model.isCreating = true }
                     .keyboardShortcut("n", modifiers: .command)
             }
             CommandGroup(after: .saveItem) {
-                Button("Guardar") { model.save() }
+                Button("Save") { model.save() }
                     .keyboardShortcut("s", modifiers: .command)
                     .disabled(!model.isDirty)
             }
             CommandMenu("Loadout") {
                 ForEach(model.assistants) { assistant in
-                    Button("Sincronizar tudo com o \(assistant.label) (\(model.gaps(for: assistant).count))") {
+                    Button("Sync all with \(assistant.label) (\(model.gaps(for: assistant).count))") {
                         model.syncAll(to: assistant)
                     }
                     .disabled(model.gaps(for: assistant).isEmpty)
                 }
                 Divider()
-                Button("Recarregar do disco") { model.reload() }
+                Button("Reload from disk") { model.reload() }
                     .keyboardShortcut("r", modifiers: .command)
-                Button("Indexar histórico completo") { model.refreshUsage(fullHistory: true) }
+                Button("Index full history") { model.refreshUsage(fullHistory: true) }
                 Divider()
-                Button("Revelar backups no Finder") { model.revealBackups() }
-                Button("Revelar no Finder") { model.revealInFinder() }
+                Button("Show backups in Finder") { model.revealBackups() }
+                Button("Show in Finder") { model.revealInFinder() }
                     .keyboardShortcut("r", modifiers: [.command, .shift])
                 Divider()
-                Button("Apagar seleção") { model.isConfirmingDelete = true }
+                Button("Move selection to Trash") { model.isConfirmingDelete = true }
                     .keyboardShortcut(.delete, modifiers: .command)
             }
         }

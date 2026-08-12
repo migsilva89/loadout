@@ -75,7 +75,7 @@ public final class Copilot: @unchecked Sendable {
         do {
             try task.run()
         } catch {
-            throw LoadoutError.io("Não consegui correr o claude: \(error.localizedDescription)")
+            throw LoadoutError.io("Couldn't run claude: \(error.localizedDescription)")
         }
 
         // Read while it runs, otherwise a chatty answer fills the pipe and deadlocks.

@@ -159,16 +159,16 @@ final class UsageTests: XCTestCase {
 
     func testUsageSummaryReadsLikeAPersonWroteIt() {
         let now = Date()
-        XCTAssertEqual(Usage.none.summary(), "nunca usada")
+        XCTAssertEqual(Usage.none.summary(), "never used")
         XCTAssertEqual(
             Usage(count: 1, lastUsed: now.addingTimeInterval(-86_400 * 1.2), projectCount: 1)
                 .summary(now: now),
-            "1 uso · ontem"
+            "1 use · yesterday"
         )
         XCTAssertEqual(
             Usage(count: 12, lastUsed: now.addingTimeInterval(-86_400 * 4), projectCount: 3)
                 .summary(now: now),
-            "12 usos · há 4 dias"
+            "12 uses · 4 days ago"
         )
     }
 

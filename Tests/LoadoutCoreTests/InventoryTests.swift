@@ -102,7 +102,7 @@ final class InventoryTests: XCTestCase {
         fixture.rawSkill("aberto", contents: "---\nname: aberto\ndescription: x\n\nSem fecho.")
 
         let item = InventoryScanner(paths: fixture.paths).scanAll().items.first { $0.kind == .skill }
-        XCTAssertEqual(item?.warning, "O frontmatter abre mas nunca fecha com ---.")
+        XCTAssertEqual(item?.warning, "The frontmatter opens but never closes with ---.")
     }
 
     func testMismatchBetweenFolderAndDeclaredNameIsFlagged() {
@@ -111,7 +111,7 @@ final class InventoryTests: XCTestCase {
 
         let item = InventoryScanner(paths: fixture.paths).scanAll().items.first { $0.kind == .skill }
         XCTAssertNotNil(item?.warning)
-        XCTAssertTrue(item?.warning?.contains("não coincide") == true)
+        XCTAssertTrue(item?.warning?.contains("doesn't match") == true)
     }
 
     // MARK: AC1.3
@@ -264,7 +264,7 @@ final class InventoryTests: XCTestCase {
     }
 
     func testTheGlobalSliceIsLabelledByWhereItAppliesNotByWhoseItIs() {
-        XCTAssertEqual(Selection.personal.title, "Globais")
+        XCTAssertEqual(Selection.personal.title, "Global")
     }
 
     func testSidebarSlicesDoNotOverlap() {

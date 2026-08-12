@@ -108,7 +108,7 @@ final class AppModel {
 
     func save() {
         guard let item = selected else { return }
-        perform("Guardado \(item.name).") {
+        perform("Saved \(item.name).") {
             try mutations.save(item, contents: draft)
             isDirty = false
         }
@@ -119,7 +119,7 @@ final class AppModel {
             errorMessage = LoadoutError.notEditable(item.name).errorDescription
             return
         }
-        perform(item.enabled ? "\(item.name) desativada." : "\(item.name) ativada.") {
+        perform(item.enabled ? "Disabled \(item.name)." : "Enabled \(item.name).") {
             if item.enabled {
                 try mutations.disableSkill(item)
             } else {
@@ -135,8 +135,8 @@ final class AppModel {
     /// Fills or removes a gap in the assistant dots.
     func setAssistant(_ assistant: Assistant, on item: Item, present: Bool) {
         let done = present
-            ? "\(item.name) passa a valer no \(assistant.label)."
-            : "\(item.name) deixa de ser carregada pelo \(assistant.label)."
+            ? "\(assistant.label) now loads \(item.name)."
+            : "\(assistant.label) no longer loads \(item.name)."
         perform(done) {
             if present {
                 try mutations.share(item, with: assistant)
@@ -158,7 +158,7 @@ final class AppModel {
     func syncAll(to assistant: Assistant) {
         let missing = gaps(for: assistant)
         guard !missing.isEmpty else {
-            statusMessage = "O \(assistant.label) já tem tudo."
+            statusMessage = "\(assistant.label) already has everything."
             return
         }
         var failures: [String] = []
@@ -171,29 +171,29 @@ final class AppModel {
         }
         reload()
         if failures.isEmpty {
-            statusMessage = "\(missing.count) skills passaram a valer no \(assistant.label)."
+            statusMessage = "\(assistant.label) now loads \(missing.count) \(missing.count == 1 ? "skill" : "skills")."
             errorMessage = nil
         } else {
-            errorMessage = "Ficaram de fora: \(failures.joined(separator: ", "))."
+            errorMessage = "Couldn't sync: \(failures.joined(separator: ", "))."
         }
     }
 
     func togglePlugin(_ plugin: PluginInfo) {
-        perform(plugin.enabled ? "Plugin \(plugin.name) desativado." : "Plugin \(plugin.name) ativado.") {
+        perform(plugin.enabled ? "Disabled the \(plugin.name) plugin." : "Enabled the \(plugin.name) plugin.") {
             try mutations.setPlugin(plugin, enabled: !plugin.enabled)
         }
     }
 
     func createSkill(name: String, description: String) {
-        perform("Skill \(name) criada.") {
+        perform("Created the \(name) skill.") {
             try mutations.createSkill(name: name, description: description)
-            selectedID = "skill:pessoal:\(name)"
+            selectedID = "skill:\(Origin.personal.label):\(name)"
         }
     }
 
     func deleteSelected() {
         guard let item = selected else { return }
-        perform("\(item.name) foi para o Lixo.") {
+        perform("Moved \(item.name) to the Trash.") {
             try mutations.delete(item)
             selectedID = nil
         }

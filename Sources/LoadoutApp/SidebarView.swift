@@ -14,7 +14,7 @@ struct SidebarView: View {
                 }
             }
         )) {
-            Section("Fontes") {
+            Section("Sources") {
                 row(.personal)
                 if model.context != nil { row(.projectItems) }
                 row(.disabled)
@@ -29,7 +29,7 @@ struct SidebarView: View {
                 }
             }
 
-            Section("Mais") {
+            Section("More") {
                 row(.kind(.command))
                 row(.kind(.agent))
                 row(.kind(.mcp))
@@ -71,7 +71,7 @@ struct PluginRow: View {
             .toggleStyle(.switch)
             .controlSize(.mini)
             .labelsHidden()
-            .help(plugin.enabled ? "Desativar o plugin \(plugin.name)" : "Ativar o plugin \(plugin.name)")
+            .help(plugin.enabled ? "Disable the \(plugin.name) plugin" : "Enable the \(plugin.name) plugin")
         }
     }
 }

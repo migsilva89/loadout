@@ -18,7 +18,7 @@ public struct Mutations: Sendable {
     @discardableResult
     public func disableSkill(_ item: Item) throws -> URL {
         guard item.kind == .skill else {
-            throw LoadoutError.notEditable("Só as skills se desativam desta maneira; \(item.name)")
+            throw LoadoutError.notEditable("Only skills can be disabled this way: \(item.name)")
         }
         guard case .personal = item.origin else {
             throw LoadoutError.notEditable(item.name)
@@ -48,7 +48,7 @@ public struct Mutations: Sendable {
             try fm.createDirectory(at: destinationRoot, withIntermediateDirectories: true)
             try fm.moveItem(at: folder, to: destination)
         } catch {
-            throw LoadoutError.io("Não consegui mover \(folder.lastPathComponent): \(error.localizedDescription)")
+            throw LoadoutError.io("Couldn't move \(folder.lastPathComponent): \(error.localizedDescription)")
         }
         return destination
     }
@@ -83,7 +83,7 @@ public struct Mutations: Sendable {
             )
             try fm.createSymbolicLink(at: link, withDestinationURL: canonical)
         } catch {
-            throw LoadoutError.io("Não consegui ligar \(item.name) ao \(assistant.label): \(error.localizedDescription)")
+            throw LoadoutError.io("Couldn't link \(item.name) to \(assistant.label): \(error.localizedDescription)")
         }
         return link
     }
@@ -95,20 +95,20 @@ public struct Mutations: Sendable {
     public func unshare(_ item: Item, from assistant: Assistant) throws {
         guard item.assistants.count > 1 else {
             throw LoadoutError.io(
-                "\(item.name) só existe no \(assistant.label). Desligá-la aí era perdê-la — usa Desativar."
+                "\(item.name) only exists in \(assistant.label). Removing it there would lose it — use Disable instead."
             )
         }
         let link = assistant.skillsRoot.appendingPathComponent(item.name)
         guard isSymlink(link) else {
             throw LoadoutError.io(
-                "A pasta em \(assistant.label) é a cópia verdadeira de \(item.name), não uma ligação. Não lhe toco."
+                "The folder in \(assistant.label) is the real copy of \(item.name), not a link. Nothing was changed."
             )
         }
         try backups.snapshot(link)
         do {
             try fm.removeItem(at: link)
         } catch {
-            throw LoadoutError.io("Não consegui remover a ligação: \(error.localizedDescription)")
+            throw LoadoutError.io("Couldn't remove the link: \(error.localizedDescription)")
         }
     }
 
@@ -127,7 +127,7 @@ public struct Mutations: Sendable {
         guard let source = realCopies.first else { throw LoadoutError.notFound(name) }
         guard realCopies.count == 1 else {
             throw LoadoutError.io(
-                "\(name) tem cópias próprias em mais do que um assistente e podem ser diferentes. Junta-as à mão primeiro."
+                "\(name) has its own copy in more than one assistant, and they may differ. Merge them by hand first."
             )
         }
 
@@ -137,7 +137,7 @@ public struct Mutations: Sendable {
             try fm.moveItem(at: source, to: canonical)
             try fm.createSymbolicLink(at: source, withDestinationURL: canonical)
         } catch {
-            throw LoadoutError.io("Não consegui partilhar \(name): \(error.localizedDescription)")
+            throw LoadoutError.io("Couldn't share \(name): \(error.localizedDescription)")
         }
         return canonical
     }
@@ -177,7 +177,7 @@ public struct Mutations: Sendable {
             )
             try data.write(to: file, options: .atomic)
         } catch {
-            throw LoadoutError.io("Não consegui escrever \(file.lastPathComponent): \(error.localizedDescription)")
+            throw LoadoutError.io("Couldn't write \(file.lastPathComponent): \(error.localizedDescription)")
         }
     }
 
@@ -196,7 +196,7 @@ public struct Mutations: Sendable {
         do {
             try contents.write(to: file, atomically: true, encoding: .utf8)
         } catch {
-            throw LoadoutError.io("Não consegui gravar \(file.lastPathComponent): \(error.localizedDescription)")
+            throw LoadoutError.io("Couldn't save \(file.lastPathComponent): \(error.localizedDescription)")
         }
     }
 
@@ -221,7 +221,7 @@ public struct Mutations: Sendable {
 
         let text = skillTemplate(
             name: name,
-            description: description.isEmpty ? "Descreve aqui quando é que esta skill deve disparar." : description
+            description: description.isEmpty ? "Describe when this skill should be triggered." : description
         )
         do {
             try fm.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -229,7 +229,7 @@ public struct Mutations: Sendable {
                 to: folder.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8
             )
         } catch {
-            throw LoadoutError.io("Não consegui criar \(name): \(error.localizedDescription)")
+            throw LoadoutError.io("Couldn't create \(name): \(error.localizedDescription)")
         }
         return folder
     }
@@ -242,7 +242,7 @@ public struct Mutations: Sendable {
         do {
             try fm.trashItem(at: target, resultingItemURL: nil)
         } catch {
-            throw LoadoutError.io("Não consegui mandar \(item.name) para o Lixo: \(error.localizedDescription)")
+            throw LoadoutError.io("Couldn't move \(item.name) to the Trash: \(error.localizedDescription)")
         }
     }
 }

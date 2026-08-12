@@ -6,8 +6,8 @@ public enum ItemSort: String, CaseIterable, Sendable {
 
     public var label: String {
         switch self {
-        case .name: return "Nome"
-        case .usage: return "Mais usadas"
+        case .name: return "Name"
+        case .usage: return "Most used"
         }
     }
 }
@@ -22,11 +22,11 @@ public enum Selection: Equatable, Hashable, Sendable {
 
     public var title: String {
         switch self {
-        // "Globais", not "pessoais": what matters is that they load in every project,
+        // "Global", not "mine": what matters is that they load in every project,
         // not whose they are.
-        case .personal: return "Globais"
-        case .projectItems: return "Projeto"
-        case .disabled: return "Desativadas"
+        case .personal: return "Global"
+        case .projectItems: return "Project"
+        case .disabled: return "Disabled"
         case .plugin(let name): return name
         case .kind(.mcp): return "MCP"
         case .kind(let kind): return kind.label + "s"
@@ -89,22 +89,22 @@ public enum Filtering {
 }
 
 public extension Usage {
-    /// "12 usos · há 2 dias", or "nunca usada".
+    /// "12 uses · 2 days ago", or "never used".
     func summary(now: Date = Date()) -> String {
-        guard count > 0 else { return "nunca usada" }
-        let uses = count == 1 ? "1 uso" : "\(count) usos"
+        guard count > 0 else { return "never used" }
+        let uses = count == 1 ? "1 use" : "\(count) uses"
         guard let last = lastUsed else { return uses }
         return "\(uses) · \(Self.relative(last, now: now))"
     }
 
     static func relative(_ date: Date, now: Date = Date()) -> String {
         let seconds = now.timeIntervalSince(date)
-        if seconds < 3600 { return "há minutos" }
-        if seconds < 86_400 { return "hoje" }
+        if seconds < 3600 { return "minutes ago" }
+        if seconds < 86_400 { return "today" }
         let days = Int(seconds / 86_400)
-        if days == 1 { return "ontem" }
-        if days < 30 { return "há \(days) dias" }
+        if days == 1 { return "yesterday" }
+        if days < 30 { return "\(days) days ago" }
         let months = days / 30
-        return months == 1 ? "há 1 mês" : "há \(months) meses"
+        return months == 1 ? "1 month ago" : "\(months) months ago"
     }
 }

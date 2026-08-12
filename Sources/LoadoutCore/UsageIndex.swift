@@ -28,7 +28,7 @@ public final class UsageIndex: @unchecked Sendable {
             at: paths.index.deletingLastPathComponent(), withIntermediateDirectories: true
         )
         guard sqlite3_open(paths.index.path, &db) == SQLITE_OK else {
-            throw LoadoutError.io("Não consegui abrir o índice em \(paths.index.path).")
+            throw LoadoutError.io("Couldn't open the index at \(paths.index.path).")
         }
         try exec("PRAGMA journal_mode=WAL;")
         try exec("""
@@ -341,7 +341,7 @@ public final class UsageIndex: @unchecked Sendable {
     private func exec(_ sql: String) throws {
         var error: UnsafeMutablePointer<CChar>?
         if sqlite3_exec(db, sql, nil, nil, &error) != SQLITE_OK {
-            let message = error.map { String(cString: $0) } ?? "erro desconhecido"
+            let message = error.map { String(cString: $0) } ?? "unknown error"
             sqlite3_free(error)
             throw LoadoutError.io("SQLite: \(message)")
         }

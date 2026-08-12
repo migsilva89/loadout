@@ -11,8 +11,8 @@ public enum ItemKind: String, Codable, Sendable, CaseIterable {
     public var label: String {
         switch self {
         case .skill: return "Skill"
-        case .command: return "Comando"
-        case .agent: return "Agente"
+        case .command: return "Command"
+        case .agent: return "Agent"
         case .mcp: return "MCP"
         case .plugin: return "Plugin"
         }
@@ -30,7 +30,7 @@ public enum Origin: Equatable, Hashable, Codable, Sendable {
 
     public var label: String {
         switch self {
-        case .personal: return "pessoal"
+        case .personal: return "personal"
         case .project(let name): return name
         case .plugin(let name): return name
         }
@@ -162,19 +162,19 @@ public enum LoadoutError: LocalizedError, Equatable {
     public var errorDescription: String? {
         switch self {
         case .notEditable(let what):
-            return "\(what) vem de um plugin e é só de leitura. O interruptor é o do plugin."
+            return "\(what) comes from a plugin and is read-only. Use the plugin switch instead."
         case .alreadyExists(let url):
-            return "Já existe algo em \(url.path). Nada foi alterado."
+            return "Something already exists at \(url.path). Nothing was changed."
         case .invalidName(let name):
-            return "O nome \"\(name)\" não serve: usa minúsculas, números e hífenes, como imark-review."
+            return "The name \"\(name)\" isn't valid. Use lowercase letters, numbers, and hyphens, like imark-review."
         case .missingField(let field):
-            return "Falta o campo \(field) no frontmatter."
+            return "The frontmatter is missing the \(field) field."
         case .backupFailed(let reason):
-            return "Não foi possível fazer a cópia de segurança, por isso não escrevi nada. \(reason)"
+            return "Couldn't make a backup, so nothing was written. \(reason)"
         case .claudeNotFound:
-            return "Não encontrei o comando claude no PATH. Instala o Claude Code ou ajusta o PATH."
+            return "Couldn't find the claude command in PATH. Install Claude Code or update your PATH."
         case .notFound(let what):
-            return "Não encontrei \(what)."
+            return "Couldn't find \(what)."
         case .io(let reason):
             return reason
         }

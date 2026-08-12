@@ -125,7 +125,7 @@ final class AssistantTests: XCTestCase {
 
         XCTAssertThrowsError(try mutations.promoteToShared(named: "divergente", across: allAssistants(fixture))) {
             XCTAssertTrue(
-                $0.localizedDescription.contains("mais do que um assistente"),
+                $0.localizedDescription.contains("more than one assistant"),
                 "explica porque é que se recusa"
             )
         }
@@ -154,7 +154,7 @@ final class AssistantTests: XCTestCase {
         let mutations = Mutations(paths: fixture.paths)
 
         XCTAssertThrowsError(try mutations.unshare(item("unica", in: fixture), from: assistant("claude", in: fixture))) {
-            XCTAssertTrue($0.localizedDescription.contains("Desativar"), "aponta para a alternativa certa")
+            XCTAssertTrue($0.localizedDescription.contains("Disable"), "aponta para a alternativa certa")
         }
         XCTAssertTrue(fixture.exists(fixture.paths.skills.appendingPathComponent("unica/SKILL.md")))
     }

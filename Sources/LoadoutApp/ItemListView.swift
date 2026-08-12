@@ -16,12 +16,12 @@ struct ItemListView: View {
     /// nothing else.
     private var listHeader: some View {
         HStack(spacing: 8) {
-            Text("\(model.visibleItems.count) \(model.visibleItems.count == 1 ? "item" : "itens")")
+            Text("\(model.visibleItems.count) \(model.visibleItems.count == 1 ? "item" : "items")")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
             Spacer()
-            Picker("Ordenar", selection: $model.order) {
+            Picker("Sort", selection: $model.order) {
                 ForEach(ItemSort.allCases, id: \.self) { Text($0.label).tag($0) }
             }
             .pickerStyle(.segmented)
@@ -43,19 +43,19 @@ struct ItemListView: View {
                     .tag(item.id)
                     .contextMenu {
                         if item.kind == .skill, item.origin == .personal {
-                            Button(item.enabled ? "Desativar" : "Ativar") { model.toggle(item) }
+                            Button(item.enabled ? "Disable" : "Enable") { model.toggle(item) }
                         }
-                        Button("Revelar no Finder") {
+                        Button("Show in Finder") {
                             model.select(item.id)
                             model.revealInFinder()
                         }
-                        Button("Abrir no editor") {
+                        Button("Open in editor") {
                             model.select(item.id)
                             model.openInEditor()
                         }
                         if item.isEditable {
                             Divider()
-                            Button("Mandar para o Lixo", role: .destructive) {
+                            Button("Move to Trash", role: .destructive) {
                                 model.select(item.id)
                                 model.isConfirmingDelete = true
                             }
@@ -66,12 +66,12 @@ struct ItemListView: View {
         .overlay {
             if model.visibleItems.isEmpty {
                 ContentUnavailableView(
-                    model.query.isEmpty ? "Nada aqui" : "Sem resultados",
+                    model.query.isEmpty ? "Nothing here" : "No results",
                     systemImage: model.query.isEmpty ? "tray" : "magnifyingglass",
                     description: Text(
                         model.query.isEmpty
-                            ? "Esta fonte não tem nada. Cria uma skill com ⌘N."
-                            : "Nada corresponde a \"\(model.query)\"."
+                            ? "This source is empty. Create a skill with ⌘N."
+                            : "Nothing matches \"\(model.query)\"."
                     )
                 )
             }
@@ -122,9 +122,9 @@ struct ItemRow: View {
     }
 
     private var badgeText: String {
-        if !item.enabled { return "desativada" }
+        if !item.enabled { return "disabled" }
         switch item.origin {
-        case .personal: return item.kind == .skill ? "pessoal" : item.kind.label.lowercased()
+        case .personal: return item.kind == .skill ? "personal" : item.kind.label.lowercased()
         case .project(let name): return name
         case .plugin(let name): return name
         }
@@ -184,7 +184,7 @@ struct AssistantDots: View {
         HStack(spacing: 3) {
             ForEach(present) { assistant in
                 AssistantMark(assistant: assistant, present: true)
-                    .help("\(assistant.label) carrega esta skill")
+                    .help("\(assistant.label) loads this skill")
             }
         }
     }
@@ -198,19 +198,19 @@ struct AssistantPanel: View {
 
     /// Three states, not two: has it, does not have it, or has nowhere to keep skills yet.
     private func status(_ assistant: Assistant, has: Bool) -> String {
-        if has { return "tem" }
-        return assistant.hasSkillsFolder ? "pôr lá" : "sem skills"
+        if has { return "loaded" }
+        return assistant.hasSkillsFolder ? "add" : "no skills"
     }
 
     private func help(_ assistant: Assistant, has: Bool) -> String {
-        if has { return "Clica para o \(assistant.label) deixar de carregar esta skill" }
-        if assistant.hasSkillsFolder { return "Clica para pôr esta skill no \(assistant.label)" }
-        return "O \(assistant.label) ainda não tem pasta de skills. Clicar cria \(assistant.skillsRoot.path) e põe esta lá."
+        if has { return "Click to stop \(assistant.label) from loading this skill" }
+        if assistant.hasSkillsFolder { return "Click to add this skill to \(assistant.label)" }
+        return "\(assistant.label) doesn't have a skills folder yet. Click to create \(assistant.skillsRoot.path) and add this skill."
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text("Assistentes")
+            Text("Assistants")
                 .font(.caption2)
                 .textCase(.uppercase)
                 .foregroundStyle(.secondary)

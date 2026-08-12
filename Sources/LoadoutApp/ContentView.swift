@@ -23,30 +23,30 @@ struct ContentView: View {
                 Button {
                     model.isCreating = true
                 } label: {
-                    Label("Nova skill", systemImage: "plus")
+                    Label("New skill", systemImage: "plus")
                 }
-                .help("Nova skill (⌘N)")
+                .help("New skill (⌘N)")
             }
         }
         .background(WindowPlacement())
-        .searchable(text: $model.query, placement: .toolbar, prompt: "Procurar")
+        .searchable(text: $model.query, placement: .toolbar, prompt: "Search")
         .safeAreaInset(edge: .bottom) { StatusBar(model: model) }
         .sheet(isPresented: $model.isCreating) { NewSkillSheet(model: model) }
         .sheet(isPresented: $model.isAskingClaude) { CopilotSheet(model: model) }
-        .alert("Apagar \(model.selected?.name ?? "")?", isPresented: $model.isConfirmingDelete) {
-            Button("Cancelar", role: .cancel) {}
-            Button("Mandar para o Lixo", role: .destructive) { model.deleteSelected() }
+        .alert("Move \(model.selected?.name ?? "") to the Trash?", isPresented: $model.isConfirmingDelete) {
+            Button("Cancel", role: .cancel) {}
+            Button("Move to Trash", role: .destructive) { model.deleteSelected() }
         } message: {
-            Text("A pasta vai para o Lixo, e fica uma cópia nos backups do Loadout.")
+            Text("The folder moves to the Trash, and a copy stays in the Loadout backups.")
         }
         .alert(
-            "Não deu",
+            "Something went wrong",
             isPresented: Binding(
                 get: { model.errorMessage != nil },
                 set: { if !$0 { model.errorMessage = nil } }
             )
         ) {
-            Button("Está bem") { model.errorMessage = nil }
+            Button("OK") { model.errorMessage = nil }
         } message: {
             Text(model.errorMessage ?? "")
         }
@@ -60,7 +60,7 @@ struct ContextPicker: View {
 
     var body: some View {
         Menu {
-            Picker("Contexto", selection: Binding(
+            Picker("Context", selection: Binding(
                 get: { model.context?.id },
                 set: { id in
                     model.changeContext(to: model.projects.first { $0.id == id })
@@ -82,7 +82,7 @@ struct ContextPicker: View {
         .menuStyle(.button)
         .buttonStyle(.bordered)
         .fixedSize()
-        .help("O que o Claude vê nesta pasta")
+        .help("What Claude sees in this folder")
     }
 }
 
@@ -97,16 +97,16 @@ struct StatusBar: View {
                 ProgressView(value: progress)
                     .progressViewStyle(.linear)
                     .frame(width: 120)
-                Text("A indexar o uso…")
+                Text("Indexing usage…")
             } else if let status = model.statusMessage {
                 Image(systemName: "checkmark.circle")
                 Text(status)
             } else {
-                Text("\(model.items.count) itens · \(model.plugins.count) plugins")
+                Text("\(model.items.count) \(model.items.count == 1 ? "item" : "items") · \(model.plugins.count) \(model.plugins.count == 1 ? "plugin" : "plugins")")
             }
             Spacer()
             if model.isDirty {
-                Text("por guardar")
+                Text("unsaved")
                     .foregroundStyle(.orange)
             }
         }

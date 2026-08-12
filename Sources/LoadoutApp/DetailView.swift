@@ -30,9 +30,9 @@ struct DetailView: View {
             .background(Color(nsColor: .textBackgroundColor))
         } else {
             ContentUnavailableView(
-                "Escolhe alguma coisa",
+                "Select an item",
                 systemImage: "square.stack.3d.up",
-                description: Text("A lista à esquerda tem tudo o que o Claude carrega.")
+                description: Text("The list on the left contains everything Claude loads.")
             )
         }
     }
@@ -64,17 +64,17 @@ struct DetailView: View {
                 ))
                 .toggleStyle(.switch)
                 .labelsHidden()
-                .help(item.enabled ? "Desativar" : "Ativar")
+                .help(item.enabled ? "Disable" : "Enable")
             }
         }
     }
 
     private func stats(_ item: Item) -> some View {
         HStack(spacing: 9) {
-            stat("Usos, 90 dias", "\(item.usage.count)")
-            stat("Última vez", item.usage.lastUsed.map { Usage.relative($0) } ?? "—")
-            stat("Projetos", "\(item.usage.projectCount)")
-            stat("Tipo", item.kind.label)
+            stat("Uses, 90 days", "\(item.usage.count)")
+            stat("Last used", item.usage.lastUsed.map { Usage.relative($0) } ?? "—")
+            stat("Projects", "\(item.usage.projectCount)")
+            stat("Type", item.kind.label)
         }
     }
 
@@ -106,20 +106,20 @@ struct DetailView: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .fixedSize()
-            .help(model.showsPreview ? "Ver o ficheiro em bruto" : "Ver em markdown")
+            .help(model.showsPreview ? "View raw file" : "View as Markdown")
 
             Button { model.openInEditor() } label: { Image(systemName: "arrow.up.forward.app") }
-                .help("Abrir no editor")
+                .help("Open in editor")
             Button { model.revealInFinder() } label: { Image(systemName: "folder") }
-                .help("Revelar no Finder")
+                .help("Show in Finder")
             if item.isEditable {
                 Button { model.isAskingClaude = true } label: { Image(systemName: "bubble.left.and.text.bubble.right") }
-                    .help("Pedir ao Claude")
+                    .help("Ask Claude")
             }
 
             Spacer()
             if item.isEditable {
-                Button("Guardar") { model.save() }
+                Button("Save") { model.save() }
                     .disabled(!model.isDirty)
                     .keyboardShortcut("s", modifiers: .command)
             }
@@ -129,7 +129,7 @@ struct DetailView: View {
     @ViewBuilder
     private func editor(_ item: Item) -> some View {
         if item.kind == .mcp {
-            Text("Este servidor está definido dentro de ~/.claude.json, não num ficheiro próprio.")
+            Text("This server is defined in ~/.claude.json, not in a separate file.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         } else if model.showsPreview {
@@ -149,7 +149,7 @@ struct DetailView: View {
             .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator))
         } else {
             VStack(alignment: .leading, spacing: 6) {
-                Label("Vem de um plugin, por isso é só de leitura.", systemImage: "lock")
+                Label("This comes from a plugin, so it's read-only.", systemImage: "lock")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 ScrollView {
@@ -181,9 +181,9 @@ struct DetailView: View {
 
     private func subtitle(_ item: Item) -> String {
         var parts = ["\(item.kind.label) \(item.origin.label)"]
-        parts.append(item.enabled ? "ativa" : "desativada")
+        parts.append(item.enabled ? "enabled" : "disabled")
         if let modified = item.modified {
-            parts.append("alterada \(Usage.relative(modified))")
+            parts.append("modified \(Usage.relative(modified))")
         }
         return parts.joined(separator: " · ")
     }

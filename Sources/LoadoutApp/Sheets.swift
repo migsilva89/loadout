@@ -10,11 +10,11 @@ struct NewSkillSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Nova skill")
+            Text("New skill")
                 .font(.title3.weight(.semibold))
 
             VStack(alignment: .leading, spacing: 5) {
-                TextField("nome-da-skill", text: $name)
+                TextField("skill-name", text: $name)
                     .textFieldStyle(.roundedBorder)
                 Text(hint)
                     .font(.caption)
@@ -22,19 +22,19 @@ struct NewSkillSheet: View {
             }
 
             VStack(alignment: .leading, spacing: 5) {
-                TextField("Quando é que esta skill deve disparar", text: $description, axis: .vertical)
+                TextField("When should this skill be triggered?", text: $description, axis: .vertical)
                     .lineLimit(3...5)
                     .textFieldStyle(.roundedBorder)
-                Text("A description é o que faz o Claude escolher a skill. Diz quando usar, não o que é.")
+                Text("The description helps Claude choose the skill. Say when to use it, not what it is.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             HStack {
                 Spacer()
-                Button("Cancelar") { dismiss() }
+                Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button("Criar") {
+                Button("Create") {
                     model.createSkill(name: name, description: description)
                     dismiss()
                 }
@@ -49,8 +49,8 @@ struct NewSkillSheet: View {
     private var isNameValid: Bool { isValidSkillName(name) }
 
     private var hint: String {
-        if name.isEmpty { return "Minúsculas, números e hífenes. Vai ser o nome da pasta." }
-        return isNameValid ? "~/.claude/skills/\(name)/SKILL.md" : "Só minúsculas, números e hífenes."
+        if name.isEmpty { return "Use lowercase letters, numbers, and hyphens. This becomes the folder name." }
+        return isNameValid ? "~/.claude/skills/\(name)/SKILL.md" : "Use only lowercase letters, numbers, and hyphens."
     }
 }
 
@@ -58,14 +58,14 @@ struct NewSkillSheet: View {
 struct CopilotSheet: View {
     @Bindable var model: AppModel
     @Environment(\.dismiss) private var dismiss
-    @State private var prompt = "Melhora a description desta skill para disparar nas alturas certas, e explica o que mudaste."
+    @State private var prompt = "Improve this skill's description so it triggers at the right times, and explain what you changed."
     @State private var answer = ""
     @State private var running = false
     @State private var failure: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Pedir ao Claude")
+            Text("Ask Claude")
                 .font(.title3.weight(.semibold))
             Text(subtitle)
                 .font(.caption)
@@ -84,7 +84,7 @@ struct CopilotSheet: View {
             }
 
             ScrollView {
-                Text(answer.isEmpty ? "A resposta aparece aqui. Nada é escrito sem seres tu a decidir." : answer)
+                Text(answer.isEmpty ? "The answer appears here. Nothing is written until you decide." : answer)
                     .font(.system(size: 12, design: answer.isEmpty ? .default : .monospaced))
                     .foregroundStyle(answer.isEmpty ? .secondary : .primary)
                     .textSelection(.enabled)
@@ -97,18 +97,18 @@ struct CopilotSheet: View {
             HStack {
                 if running { ProgressView().controlSize(.small) }
                 Spacer()
-                Button("Fechar") {
+                Button("Close") {
                     model.copilot.cancel()
                     dismiss()
                 }
                 if running {
-                    Button("Cancelar") { model.copilot.cancel() }
+                    Button("Cancel") { model.copilot.cancel() }
                 } else {
-                    Button("Perguntar") { ask() }
+                    Button("Ask") { ask() }
                         .keyboardShortcut(.defaultAction)
                         .disabled(prompt.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
-                Button("Copiar resposta") {
+                Button("Copy answer") {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(answer, forType: .string)
                 }
@@ -121,7 +121,7 @@ struct CopilotSheet: View {
 
     private var subtitle: String {
         guard let item = model.selected else { return "" }
-        return "Corre claude -p na pasta de \(item.name)."
+        return "Runs claude -p in the \(item.name) folder."
     }
 
     private func ask() {
@@ -139,7 +139,7 @@ struct CopilotSheet: View {
                 let result = try copilot.run(prompt: question, in: directory)
                 await MainActor.run {
                     answer = result.output
-                    failure = result.timedOut ? "O pedido excedeu o tempo e foi terminado." : nil
+                    failure = result.timedOut ? "The request timed out and was stopped." : nil
                     running = false
                 }
             } catch {

@@ -23,12 +23,12 @@ public struct Frontmatter: Equatable, Sendable {
     public static func parse(_ text: String) -> Frontmatter {
         let lines = text.components(separatedBy: "\n")
         guard let first = lines.first, first.trimmingCharacters(in: .whitespaces) == "---" else {
-            return Frontmatter(body: text, warning: "Sem frontmatter: falta o bloco --- no início.")
+            return Frontmatter(body: text, warning: "Missing frontmatter: add a --- block at the start.")
         }
         guard let closing = lines.dropFirst().firstIndex(where: {
             $0.trimmingCharacters(in: .whitespaces) == "---"
         }) else {
-            return Frontmatter(body: text, warning: "O frontmatter abre mas nunca fecha com ---.")
+            return Frontmatter(body: text, warning: "The frontmatter opens but never closes with ---.")
         }
 
         var fields: [String: String] = [:]
@@ -48,13 +48,13 @@ public struct Frontmatter: Equatable, Sendable {
             }
 
             guard let colon = trimmed.firstIndex(of: ":") else {
-                warning = warning ?? "Linha de frontmatter sem \":\" — ignorada: \(trimmed)"
+                warning = warning ?? "Ignored a frontmatter line without a colon: \(trimmed)"
                 continue
             }
             let key = String(trimmed[trimmed.startIndex..<colon]).trimmingCharacters(in: .whitespaces)
             let value = String(trimmed[trimmed.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
             guard !key.isEmpty else {
-                warning = warning ?? "Linha de frontmatter sem chave — ignorada."
+                warning = warning ?? "Ignored a frontmatter line without a key."
                 continue
             }
             // `description: >` (or `|`) means the real value is the indented block below.
@@ -67,9 +67,9 @@ public struct Frontmatter: Equatable, Sendable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         if fields["name"] == nil {
-            warning = warning ?? "O frontmatter não tem campo name."
+            warning = warning ?? "The frontmatter is missing the name field."
         } else if fields["description"] == nil {
-            warning = warning ?? "O frontmatter não tem campo description."
+            warning = warning ?? "The frontmatter is missing the description field."
         }
 
         return Frontmatter(fields: fields, body: body, warning: warning)
@@ -118,10 +118,10 @@ public func skillTemplate(name: String, description: String) -> String {
 
     # \(name)
 
-    Escreve aqui o que a skill faz e como se usa.
+    Write what the skill does and how to use it here.
 
-    ## Quando usar
+    ## When to use
 
-    ## Passos
+    ## Steps
     """
 }
