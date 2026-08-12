@@ -587,17 +587,12 @@ struct AssistantDots: View {
 /// The full picture for the selected skill: every assistant on the machine, named, with the
 /// ones that are missing it offering to take it.
 ///
-/// Collapsed by default behind a stock `DisclosureGroup`: with up to twelve assistants, the
-/// full grid used to eat half the detail pane before a person had even looked at the file it
-/// belongs to. The closed row still answers the one question that matters at a glance — which
-/// assistants have it, and how many — and expanding it is one click away, remembered across
-/// launches the same way any other disclosure state is.
+/// Always open, no disclosure and no title row: the grid itself already names every assistant
+/// and marks the ones that load the skill, so a "Used by …" line above it only said the same
+/// thing smaller. The adaptive grid keeps it to two or three rows at worst.
 struct AssistantPanel: View {
     let item: Item
     @Bindable var model: AppModel
-    @AppStorage("assistantPanelExpanded") private var isExpanded = false
-
-    private var present: [Assistant] { model.visibleAssistants.filter { item.assistants.contains($0.id) } }
 
     /// Three states, not two: has it, does not have it, or has nowhere to keep skills yet.
     private func status(_ assistant: Assistant, has: Bool) -> String {
@@ -611,22 +606,8 @@ struct AssistantPanel: View {
         return "\(assistant.label) doesn't have a skills folder yet. Click to create \(assistant.skillsRoot.path) and add this skill."
     }
 
-    /// "Used by Claude Code", "Used by Claude Code and Codex", and past three a count takes
-    /// over so the row cannot grow without bound.
-    private var loadedByLabel: String {
-        let names = present.map(\.label)
-        switch names.count {
-        case 0: return "No assistant loads this yet"
-        case 1: return "Used by \(names[0])"
-        case 2: return "Used by \(names[0]) and \(names[1])"
-        case 3: return "Used by \(names[0]), \(names[1]) and \(names[2])"
-        default: return "Used by \(names.count) of \(model.visibleAssistants.count) assistants"
-        }
-    }
-
     var body: some View {
-        DisclosureGroup(isExpanded: $isExpanded) {
-            LazyVGrid(
+        LazyVGrid(
                 columns: [GridItem(.adaptive(minimum: 178), spacing: Metrics.xs)],
                 alignment: .leading, spacing: Metrics.xs
             ) {
@@ -661,21 +642,5 @@ struct AssistantPanel: View {
                     .pointingHand()
                 }
             }
-            .padding(.top, Metrics.xs)
-        } label: {
-            HStack(spacing: Metrics.xs) {
-                ForEach(present) { assistant in
-                    AssistantMark(assistant: assistant, present: true)
-                        .pointingHand()
-                }
-                // Names, not a fraction: "1 of 12" says how many and hides which, and which
-                // is the only part a person is actually asking.
-                Text(loadedByLabel)
-                    .foregroundStyle(.secondary)
-            }
-            .contentShape(Rectangle())
-            .help("Show every assistant on this machine, and which of them load this skill")
-            .pointingHand()
-        }
     }
 }
