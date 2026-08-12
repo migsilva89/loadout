@@ -45,7 +45,10 @@ private struct AppearanceTab: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
-        .padding(20)
+        // Grouped is what System Settings looks like, and it pins content to the top of the
+        // pane instead of floating it in the middle of a fixed-size tab.
+        .formStyle(.grouped)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 }
 
@@ -98,7 +101,10 @@ private struct UsageTab: View {
                     .pointingHand()
             }
         }
-        .padding(20)
+        // Grouped is what System Settings looks like, and it pins content to the top of the
+        // pane instead of floating it in the middle of a fixed-size tab.
+        .formStyle(.grouped)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 }
 
@@ -108,16 +114,120 @@ private struct AssistantsTab: View {
     @Bindable var model: AppModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text("Assistants unchecked here still work — sharing and syncing keep going. They just don't show up in the list rows or the detail panel.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 20)
-                .padding(.top, 16)
-                .padding(.bottom, 8)
-            List {
+        List {
+            Section {
                 ForEach(model.assistants) { assistant in
                     AssistantSettingsRow(model: model, assistant: assistant)
+                }
+            } header: {
+                Text("Assistants unchecked here still work — sharing and syncing keep going. They just don't show up in the list rows or the detail panel.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textCase(nil)
+            }
+
+            Section {
+                ForEach(model.assistantCLIs) { cli in
+                    AskCLIRow(model: model, cli: cli)
+                }
+            } header: {
+                HStack {
+                    Text("Ask CLIs")
+                    Spacer()
+                    Button("Add…") { model.isAddingAssistantCLI = true }
+                        .buttonStyle(.link)
+                        .font(.caption)
+                        .pointingHand()
+                }
+            } footer: {
+                Text("What \"Ask\" in a skill's detail runs. The four built-ins show up on their own once installed; add anything else by hand.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+}
+
+/// One assistant CLI in Settings › Assistants › Ask CLIs: its resolved path, whether it's a
+/// built-in or something the owner added, and a way to try it without leaving the sheet.
+private struct AskCLIRow: View {
+    @Bindable var model: AppModel
+    let cli: AssistantCLI
+    @State private var testing = false
+    @State private var testResult: String?
+
+    private var displayPath: String {
+        cli.executable.path.replacingOccurrences(
+            of: FileManager.default.homeDirectoryForCurrentUser.path, with: "~"
+        )
+    }
+
+    private var customEntry: CustomAssistantCLI? {
+        model.customAssistantCLIs.first { $0.id == cli.id }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(cli.label)
+                        Text(cli.isCustom ? "Custom" : "Built-in")
+                            .font(.caption2)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Color.secondary.opacity(0.15), in: Capsule())
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(displayPath)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if testing { ProgressView().controlSize(.small) }
+                Button("Test") { test() }
+                    .disabled(testing)
+                    .help("Actually runs \(cli.label) with a trivial prompt (\"reply with OK\") to check it works")
+                    .pointingHand()
+                if let customEntry {
+                    Button("Edit") { model.editingCustomAssistantCLI = customEntry }
+                        .pointingHand()
+                    Button("Remove") { model.removeCustomAssistantCLI(customEntry) }
+                        .pointingHand()
+                }
+            }
+            if let testResult {
+                Text(testResult)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 3)
+    }
+
+    private func test() {
+        testing = true
+        testResult = nil
+        let copilot = model.copilot
+        let target = cli
+        let directory = FileManager.default.temporaryDirectory
+
+        Task.detached(priority: .userInitiated) {
+            do {
+                let result = try copilot.run(cli: target, prompt: "reply with OK", in: directory, timeout: 30)
+                await MainActor.run {
+                    let firstLine = result.output.split(separator: "\n").first.map(String.init) ?? "(no output)"
+                    testResult = result.timedOut
+                        ? "Timed out."
+                        : "Exit code \(result.exitCode) — \(firstLine)"
+                    testing = false
+                }
+            } catch {
+                await MainActor.run {
+                    testResult = (error as? LoadoutError)?.errorDescription ?? error.localizedDescription
+                    testing = false
                 }
             }
         }
@@ -214,7 +324,8 @@ private struct BackupsTab: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(20)
+        .formStyle(.grouped)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .task { await countSnapshots() }
         .alert("Delete snapshots older than 30 days?", isPresented: $confirmingDelete) {
             Button("Cancel", role: .cancel) {}

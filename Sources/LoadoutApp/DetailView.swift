@@ -3,6 +3,7 @@ import LoadoutCore
 
 struct DetailView: View {
     @Bindable var model: AppModel
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         if let item = model.selected {
@@ -134,6 +135,13 @@ struct DetailView: View {
         [GridItem(.adaptive(minimum: 150), spacing: Metrics.xs)]
     }
 
+    /// The small uppercase tile captions ("TYPE", "LOCATION", …) needed more weight in light
+    /// mode to hold the same contrast an uppercase label reads at in dark mode — dark was
+    /// already legible at the smaller, lighter values, so only light gets the bump.
+    private var captionSize: CGFloat { colorScheme == .dark ? 10 : 10.5 }
+    private var captionWeight: Font.Weight { colorScheme == .dark ? .medium : .semibold }
+    private var captionOpacity: Double { colorScheme == .dark ? 0.75 : 0.8 }
+
     // `LazyVGrid`, unlike `Grid`, has no cell-spanning modifier — a tile inside it can't be
     // told to stretch across the row's other columns. Location is rendered as its own
     // full-width tile below the grid instead, which reads the same either way: a block of
@@ -163,8 +171,8 @@ struct DetailView: View {
     private func detailTile(_ caption: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(caption.uppercased())
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(.primary.opacity(0.75))
+                .font(.system(size: captionSize, weight: captionWeight))
+                .foregroundStyle(.primary.opacity(captionOpacity))
             Text(value)
                 .font(.body.weight(.medium))
                 .lineLimit(2)
@@ -185,8 +193,8 @@ struct DetailView: View {
     private func locationTile(_ location: URL) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text("LOCATION")
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(.primary.opacity(0.75))
+                .font(.system(size: captionSize, weight: captionWeight))
+                .foregroundStyle(.primary.opacity(captionOpacity))
             Text(displayPath(location))
                 .font(.system(size: 12, design: .monospaced))
                 .foregroundStyle(.secondary)
@@ -285,16 +293,7 @@ struct DetailView: View {
             .pointingHand()
 
             if item.isEditable {
-                Button { model.isAskingClaude = true } label: {
-                    Label {
-                        Text("Ask Claude")
-                    } icon: {
-                        AppIconView(path: AppIconCache.claude)
-                    }
-                }
-                .buttonStyle(.bordered)
-                .help("Ask Claude for help with this skill, in a sheet that writes nothing until you decide")
-                .pointingHand()
+                askButton
             }
 
             Spacer()
@@ -308,6 +307,64 @@ struct DetailView: View {
             }
         }
         .controlSize(.small)
+    }
+
+    /// One button when exactly one assistant CLI is installed, a menu when there's a choice,
+    /// and a disabled button naming what it's looking for when there's none. Whichever CLI is
+    /// picked is what the sheet, opened right after, actually runs.
+    @ViewBuilder
+    private var askButton: some View {
+        let clis = model.assistantCLIs
+        if clis.isEmpty {
+            Button {} label: {
+                Label("Ask", systemImage: "sparkles")
+            }
+            .buttonStyle(.bordered)
+            .disabled(true)
+            .help("Looks for \(AssistantCLIRegistry.builtinLabels.joined(separator: ", ")) on your PATH — none of them are installed.")
+            .pointingHand()
+        } else if let only = clis.count == 1 ? clis.first : nil {
+            Button { model.askAssistant(only) } label: {
+                Label {
+                    Text("Ask \(only.label)")
+                } icon: {
+                    assistantMark(for: only)
+                }
+            }
+            .buttonStyle(.bordered)
+            .help("Ask \(only.label) for help with this skill, in a sheet that writes nothing until you decide")
+            .pointingHand()
+        } else {
+            Menu {
+                ForEach(clis) { cli in
+                    Button { model.askAssistant(cli) } label: {
+                        Label {
+                            Text(cli.label)
+                        } icon: {
+                            assistantMark(for: cli)
+                        }
+                    }
+                }
+            } label: {
+                Label("Ask", systemImage: "sparkles")
+            }
+            .buttonStyle(.bordered)
+            .help("Ask an assistant for help with this skill, in a sheet that writes nothing until you decide")
+            .pointingHand()
+        }
+    }
+
+    /// The real app icon when the CLI's id matches an installed assistant — `cursor-agent`
+    /// maps to the `cursor` assistant, everything else matches its own id — and two letters
+    /// otherwise, the same fallback `AssistantMark` already uses everywhere else.
+    private func assistantMark(for cli: AssistantCLI) -> some View {
+        let mappedID = cli.id == "cursor-agent" ? "cursor" : cli.id
+        let assistant = model.assistants.first { $0.id == mappedID } ?? Assistant(
+            id: mappedID, label: cli.label,
+            skillsRoot: URL(fileURLWithPath: "/dev/null"),
+            appPath: AssistantRegistry.known[mappedID]?.app
+        )
+        return AssistantMark(assistant: assistant, present: true)
     }
 
     @ViewBuilder

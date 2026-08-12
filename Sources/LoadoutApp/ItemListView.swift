@@ -4,6 +4,7 @@ import LoadoutCore
 struct ItemListView: View {
     @Bindable var model: AppModel
     @FocusState private var searchFieldFocused: Bool
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(spacing: 0) {
@@ -57,10 +58,21 @@ struct ItemListView: View {
         }
         .padding(.horizontal, Metrics.xs)
         .padding(.vertical, 5)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 7))
+        .background(searchFieldFill, in: RoundedRectangle(cornerRadius: 7))
+        .overlay {
+            if colorScheme == .light {
+                RoundedRectangle(cornerRadius: 7).strokeBorder(Color.primary.opacity(0.14))
+            }
+        }
         .frame(maxWidth: .infinity)
         .help("Filter the list as you type (⌘F)")
         .pointingHand()
+    }
+
+    /// `.controlBackgroundColor` alone read as a floating placeholder against a white pane —
+    /// only light mode gets the stronger fill and the hairline border above; dark was fine.
+    private var searchFieldFill: Color {
+        colorScheme == .dark ? Color(nsColor: .controlBackgroundColor) : Color.primary.opacity(0.06)
     }
 
     private var searchPlaceholder: String {
@@ -244,10 +256,27 @@ private struct FilterChip: View {
     let count: Int
     let isActive: Bool
     let action: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
 
     /// A chip with nothing in it stays clickable — the zero is itself information — but reads
     /// quieter, so an eye scanning the row lands on the chips that actually have something.
     private var isEmpty: Bool { count == 0 && !isActive }
+
+    /// `Color.primary.opacity(x)` reads very differently on the two grounds — dark mode was
+    /// already fine, light mode read as floating text rather than a control — so these branch
+    /// on appearance instead of picking one value that compromises both.
+    private var fill: Color {
+        isActive ? Color.accentColor : Color.primary.opacity(colorScheme == .dark ? 0.07 : 0.10)
+    }
+
+    private var border: Color {
+        colorScheme == .dark ? Color(nsColor: .separatorColor) : Color.primary.opacity(0.16)
+    }
+
+    private var countColor: Color {
+        if isActive { return Color.white.opacity(0.8) }
+        return colorScheme == .dark ? Color.primary.opacity(0.75) : Color.primary.opacity(0.9)
+    }
 
     var body: some View {
         Button(action: action) {
@@ -255,23 +284,16 @@ private struct FilterChip: View {
                 Text(title)
                 Text("\(count)")
                     .monospacedDigit()
-                    .foregroundStyle(isActive ? Color.white.opacity(0.8) : .secondary)
+                    .fontWeight(.medium)
+                    .foregroundStyle(countColor)
             }
             .font(.system(size: 11))
             .padding(.horizontal, 7)
             .padding(.vertical, 3.5)
-            .background(
-                // `.quaternaryLabelColor`, and later `.controlColor`, both turned out close
-                // to invisible against a white pane in light mode — barely a chip at all. A
-                // tint of `.primary` itself always has some presence against the surface
-                // behind it, in either appearance; the hairline border below is the part
-                // that actually guarantees the edge is visible.
-                isActive ? Color.accentColor : Color.primary.opacity(0.07),
-                in: Capsule()
-            )
+            .background(fill, in: Capsule())
             .overlay {
                 if !isActive {
-                    Capsule().strokeBorder(Color(nsColor: .separatorColor))
+                    Capsule().strokeBorder(border)
                 }
             }
             .foregroundStyle(isActive ? Color.white : Color.primary)
@@ -360,6 +382,7 @@ struct PluginManagerRow: View {
 struct ItemRow: View {
     let item: Item
     let model: AppModel
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         HStack(spacing: Metrics.xs) {
@@ -398,7 +421,11 @@ struct ItemRow: View {
                     Text("\(item.usage.count)")
                         .font(.caption)
                         .monospacedDigit()
-                        .foregroundStyle(item.usage.count == 0 ? .orange : .secondary)
+                        .foregroundStyle(
+                            item.usage.count == 0
+                                ? Color.orange
+                                : (colorScheme == .dark ? Color.primary.opacity(0.7) : Color.primary.opacity(0.85))
+                        )
                         .help(item.usage.summary())
                 }
                 Text(item.description.isEmpty ? item.kind.label : item.description)

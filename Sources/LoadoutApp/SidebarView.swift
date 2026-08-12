@@ -6,6 +6,7 @@ import LoadoutCore
 /// They live above the list now, as chips that combine with whichever row is picked here.
 struct SidebarView: View {
     @Bindable var model: AppModel
+    @Environment(\.colorScheme) private var colorScheme
 
     private let rows: [Selection] = [.skills, .commands, .agents, .mcp]
 
@@ -28,6 +29,28 @@ struct SidebarView: View {
             row(.plugins)
         }
         .listStyle(.sidebar)
+        // Settings at the foot of the sidebar, where Mail, Notes and Music keep theirs — the
+        // menu bar entry stays, this is just the door you can see.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
+                Divider()
+                SettingsLink {
+                    HStack(spacing: 8) {
+                        Image(systemName: "gearshape")
+                            .frame(width: 18)
+                        Text("Settings")
+                        Spacer()
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .help("Appearance, usage indexing, assistants and backups (⌘,)")
+                .pointingHand()
+            }
+            .background(.bar)
+        }
     }
 
     private func row(_ selection: Selection) -> some View {
@@ -45,7 +68,7 @@ struct SidebarView: View {
             Text("\(model.count(for: selection))")
                 .font(.callout)
                 .monospacedDigit()
-                .foregroundStyle(.secondary)
+                .foregroundStyle(colorScheme == .dark ? Color.primary.opacity(0.7) : Color.primary.opacity(0.85))
         }
         .padding(.vertical, 3)
         .contentShape(Rectangle())

@@ -42,7 +42,11 @@ final class AppModel {
     // Sheets
     var isCreating = false
     var isConfirmingDelete = false
-    var isAskingClaude = false
+    /// The CLI the "Ask" sheet is targeting. Presenting the sheet and picking a CLI are the
+    /// same action — setting this to non-nil is what shows it.
+    var askCLI: AssistantCLI?
+    var isAddingAssistantCLI = false
+    var editingCustomAssistantCLI: CustomAssistantCLI?
 
     let paths: Paths
     let scanner: InventoryScanner
@@ -51,6 +55,26 @@ final class AppModel {
     private var usageIndex: UsageIndex?
     private var watcher: Watcher?
     private var indexTask: Task<Void, Never>?
+
+    /// Every CLI on this machine right now: the built-ins that are actually installed, plus
+    /// whatever the owner added by hand in Settings. Computed fresh each time rather than
+    /// cached, since Settings can add or remove a custom entry at any moment.
+    var assistantCLIs: [AssistantCLI] {
+        AssistantCLIRegistry.discover(customEntries: customAssistantCLIs)
+    }
+
+    /// The custom entries the owner added in Settings › Assistants › Ask CLIs, persisted as
+    /// JSON under one `UserDefaults` key.
+    private(set) var customAssistantCLIs: [CustomAssistantCLI] {
+        didSet { CustomAssistantCLIStore.save(customAssistantCLIs) }
+    }
+
+    /// Remembers which CLI was asked last, so both the plain-button path (one CLI installed)
+    /// and the menu (several) default to the same one next time.
+    private static let lastAssistantCLIKey = "lastAssistantCLI"
+    var lastAssistantCLIID: String? {
+        didSet { UserDefaults.standard.set(lastAssistantCLIID, forKey: Self.lastAssistantCLIKey) }
+    }
 
     /// Assistants Settings › Assistants has hidden from the rows and the detail panel.
     /// Stored under the same UserDefaults key the Settings tab reads with `@AppStorage`, so
@@ -74,6 +98,8 @@ final class AppModel {
             (UserDefaults.standard.string(forKey: Self.hiddenAssistantsKey) ?? "")
                 .split(separator: ",").map(String.init)
         )
+        self.customAssistantCLIs = CustomAssistantCLIStore.load()
+        self.lastAssistantCLIID = UserDefaults.standard.string(forKey: Self.lastAssistantCLIKey)
         reload()
         startWatching()
         refreshUsage()
@@ -242,6 +268,45 @@ final class AppModel {
             try mutations.delete(item)
             selectedID = nil
         }
+    }
+
+    // MARK: - Assistant CLIs ("Ask")
+
+    /// Opens the sheet targeting this CLI, and remembers the choice for next time.
+    func askAssistant(_ cli: AssistantCLI) {
+        lastAssistantCLIID = cli.id
+        askCLI = cli
+    }
+
+    /// Validates and saves a new custom entry. Throws `LoadoutError.invalidAssistantCLI`
+    /// rather than saving something that would only fail silently later, when it's run.
+    func addCustomAssistantCLI(name: String, path: String, template: String) throws {
+        try AssistantCLIValidation.validate(name: name, path: path, template: template)
+        let id = slug(name)
+        var entries = customAssistantCLIs.filter { $0.id != id }
+        entries.append(CustomAssistantCLI(id: id, label: name, executablePath: path, argumentTemplate: template))
+        customAssistantCLIs = entries
+    }
+
+    func updateCustomAssistantCLI(_ original: CustomAssistantCLI, name: String, path: String, template: String) throws {
+        try AssistantCLIValidation.validate(name: name, path: path, template: template)
+        var entries = customAssistantCLIs
+        guard let index = entries.firstIndex(where: { $0.id == original.id }) else { return }
+        entries[index] = CustomAssistantCLI(id: original.id, label: name, executablePath: path, argumentTemplate: template)
+        customAssistantCLIs = entries
+    }
+
+    func removeCustomAssistantCLI(_ entry: CustomAssistantCLI) {
+        customAssistantCLIs.removeAll { $0.id == entry.id }
+    }
+
+    /// A stable, unique-enough id from a display name — lowercase, hyphenated, the same shape
+    /// `known` built-in ids already use.
+    private func slug(_ name: String) -> String {
+        let base = name.trimmingCharacters(in: .whitespaces).lowercased()
+            .replacingOccurrences(of: " ", with: "-")
+            .filter { $0.isLetter || $0.isNumber || $0 == "-" }
+        return base.isEmpty ? UUID().uuidString : base
     }
 
     func revealInFinder() {

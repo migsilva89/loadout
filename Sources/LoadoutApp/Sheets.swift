@@ -1,4 +1,6 @@
 import SwiftUI
+import AppKit
+import UniformTypeIdentifiers
 import LoadoutCore
 
 /// Create a skill (AC4.3).
@@ -58,9 +60,11 @@ struct NewSkillSheet: View {
     }
 }
 
-/// Ask Claude about the selected skill (AC7). Nothing is written without a decision here.
+/// Ask an assistant CLI about the selected skill (AC7). Nothing is written without a decision
+/// here — the sheet only ever shows text back, whichever assistant produced it.
 struct CopilotSheet: View {
     @Bindable var model: AppModel
+    let cli: AssistantCLI
     @Environment(\.dismiss) private var dismiss
     @State private var prompt = "Improve this skill's description so it triggers at the right times, and explain what you changed."
     @State private var answer = ""
@@ -69,7 +73,7 @@ struct CopilotSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Ask Claude")
+            Text("Ask \(cli.label)")
                 .font(.title3.weight(.semibold))
             Text(subtitle)
                 .font(.caption)
@@ -109,13 +113,13 @@ struct CopilotSheet: View {
                 .pointingHand()
                 if running {
                     Button("Cancel") { model.copilot.cancel() }
-                        .help("Stop the running request to Claude")
+                        .help("Stop the running request to \(cli.label)")
                         .pointingHand()
                 } else {
                     Button("Ask") { ask() }
                         .keyboardShortcut(.defaultAction)
                         .disabled(prompt.trimmingCharacters(in: .whitespaces).isEmpty)
-                        .help("Run claude -p with this prompt in the skill's folder (⌘↵)")
+                        .help("Run \(cli.invocationDescription) with this prompt in the skill's folder (⌘↵)")
                         .pointingHand()
                 }
                 Button("Copy answer") {
@@ -123,7 +127,7 @@ struct CopilotSheet: View {
                     NSPasteboard.general.setString(answer, forType: .string)
                 }
                 .disabled(answer.isEmpty)
-                .help("Copy Claude's answer to the clipboard")
+                .help("Copy \(cli.label)'s answer to the clipboard")
                 .pointingHand()
             }
         }
@@ -133,7 +137,7 @@ struct CopilotSheet: View {
 
     private var subtitle: String {
         guard let item = model.selected else { return "" }
-        return "Runs claude -p in the \(item.name) folder."
+        return "Runs \(cli.invocationDescription) in the \(item.name) folder."
     }
 
     private func ask() {
@@ -145,10 +149,11 @@ struct CopilotSheet: View {
         answer = ""
         let copilot = model.copilot
         let question = prompt
+        let target = cli
 
         Task.detached(priority: .userInitiated) {
             do {
-                let result = try copilot.run(prompt: question, in: directory)
+                let result = try copilot.run(cli: target, prompt: question, in: directory)
                 await MainActor.run {
                     answer = result.output
                     failure = result.timedOut ? "The request timed out and was stopped." : nil
@@ -160,6 +165,103 @@ struct CopilotSheet: View {
                     running = false
                 }
             }
+        }
+    }
+}
+
+/// Add or edit a custom assistant CLI (Settings › Assistants › Ask CLIs). Built-ins never open
+/// this sheet — they're read-only there.
+struct AssistantCLIFormSheet: View {
+    @Bindable var model: AppModel
+    /// `nil` means "Add…"; otherwise this is the entry being edited.
+    let editing: CustomAssistantCLI?
+    @Environment(\.dismiss) private var dismiss
+    @State private var name: String
+    @State private var path: String
+    @State private var template: String
+    @State private var failure: String?
+
+    init(model: AppModel, editing: CustomAssistantCLI?) {
+        self.model = model
+        self.editing = editing
+        _name = State(initialValue: editing?.label ?? "")
+        _path = State(initialValue: editing?.executablePath ?? "")
+        _template = State(initialValue: editing?.argumentTemplate ?? "{prompt}")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(editing == nil ? "Add an assistant CLI" : "Edit assistant CLI")
+                .font(.title3.weight(.semibold))
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Name").font(.caption).foregroundStyle(.secondary)
+                TextField("Gemini", text: $name)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Command").font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    TextField("/usr/local/bin/gemini", text: $path)
+                        .textFieldStyle(.roundedBorder)
+                    Button("Choose…") { choosePath() }
+                        .pointingHand()
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Arguments").font(.caption).foregroundStyle(.secondary)
+                TextField("-p {prompt}", text: $template)
+                    .textFieldStyle(.roundedBorder)
+                Text("Use {prompt} where the question goes, e.g. \"-p {prompt}\" or \"exec {prompt}\".")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let failure {
+                Label(failure, systemImage: "exclamationmark.triangle")
+                    .font(.callout)
+                    .foregroundStyle(.orange)
+            }
+
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                    .pointingHand()
+                Button(editing == nil ? "Add" : "Save") { save() }
+                    .keyboardShortcut(.defaultAction)
+                    .pointingHand()
+            }
+        }
+        .padding(20)
+        .frame(width: 460)
+    }
+
+    private func choosePath() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = false
+        panel.treatsFilePackagesAsDirectories = false
+        panel.allowedContentTypes = [.unixExecutable]
+        panel.title = "Choose the assistant's executable"
+        if panel.runModal() == .OK, let url = panel.url {
+            path = url.path
+        }
+    }
+
+    private func save() {
+        do {
+            if let editing {
+                try model.updateCustomAssistantCLI(editing, name: name, path: path, template: template)
+            } else {
+                try model.addCustomAssistantCLI(name: name, path: path, template: template)
+            }
+            dismiss()
+        } catch {
+            failure = (error as? LoadoutError)?.errorDescription ?? error.localizedDescription
         }
     }
 }

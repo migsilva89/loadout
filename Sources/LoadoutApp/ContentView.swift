@@ -14,6 +14,7 @@ struct ContentView: View {
                 .navigationSplitViewColumnWidth(min: 260, ideal: 320, max: 420)
         } detail: {
             DetailView(model: model)
+                .safeAreaInset(edge: .bottom, spacing: 0) { StatusBar(model: model) }
         }
         .toolbar {
             // The context picker is what actually changes across a session; search and sort
@@ -34,9 +35,11 @@ struct ContentView: View {
             }
         }
         .background(WindowPlacement())
-        .safeAreaInset(edge: .bottom) { StatusBar(model: model) }
+
         .sheet(isPresented: $model.isCreating) { NewSkillSheet(model: model) }
-        .sheet(isPresented: $model.isAskingClaude) { CopilotSheet(model: model) }
+        .sheet(item: $model.askCLI) { cli in CopilotSheet(model: model, cli: cli) }
+        .sheet(isPresented: $model.isAddingAssistantCLI) { AssistantCLIFormSheet(model: model, editing: nil) }
+        .sheet(item: $model.editingCustomAssistantCLI) { entry in AssistantCLIFormSheet(model: model, editing: entry) }
         .alert("Move \(model.selected?.name ?? "") to the Trash?", isPresented: $model.isConfirmingDelete) {
             Button("Cancel", role: .cancel) {}
             Button("Move to Trash", role: .destructive) { model.deleteSelected() }

@@ -158,6 +158,7 @@ public enum LoadoutError: LocalizedError, Equatable {
     case claudeNotFound
     case notFound(String)
     case io(String)
+    case invalidAssistantCLI(String)
 
     public var errorDescription: String? {
         switch self {
@@ -172,10 +173,12 @@ public enum LoadoutError: LocalizedError, Equatable {
         case .backupFailed(let reason):
             return "Couldn't make a backup, so nothing was written. \(reason)"
         case .claudeNotFound:
-            return "Couldn't find the claude command in PATH. Install Claude Code or update your PATH."
+            return "Couldn't find an assistant CLI to run. Install Claude Code, Codex, Cursor, or opencode."
         case .notFound(let what):
             return "Couldn't find \(what)."
         case .io(let reason):
+            return reason
+        case .invalidAssistantCLI(let reason):
             return reason
         }
     }

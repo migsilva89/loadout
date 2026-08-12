@@ -36,7 +36,7 @@ public struct Assistant: Identifiable, Hashable, Sendable {
 public enum AssistantRegistry {
     /// Nicer names, and where each assistant's Mac app lives when it has one.
     /// Anything not listed still shows up, under its directory name.
-    static let known: [String: (label: String, app: String?)] = [
+    public static let known: [String: (label: String, app: String?)] = [
         "claude": ("Claude Code", "/Applications/Claude.app"),
         "codex": ("Codex", "/Applications/ChatGPT.app"),
         "cursor": ("Cursor", "/Applications/Cursor.app"),

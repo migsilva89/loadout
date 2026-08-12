@@ -189,19 +189,25 @@ final class UsageTests: XCTestCase {
 
     // MARK: AC7.2
 
-    func testCopilotSaysSoWhenTheBinaryIsMissing() {
-        let missing = Copilot(executable: nil)
+    private func cli(
+        id: String = "claude", executable: URL, template: String = "-p {prompt}"
+    ) -> AssistantCLI {
+        AssistantCLI(id: id, label: "Claude Code", executable: executable, argumentTemplate: template, isCustom: false)
+    }
 
-        XCTAssertFalse(missing.isAvailable)
-        XCTAssertThrowsError(try missing.run(prompt: "olá", in: URL(fileURLWithPath: "/tmp"))) {
+    func testCopilotSaysSoWhenNoCLIIsGiven() {
+        let copilot = Copilot()
+
+        XCTAssertThrowsError(try copilot.run(cli: nil, prompt: "olá", in: URL(fileURLWithPath: "/tmp"))) {
             XCTAssertEqual($0 as? LoadoutError, .claudeNotFound)
         }
     }
 
     func testCopilotReportsAPathThatIsNotRunnable() {
-        let bogus = Copilot(executable: URL(fileURLWithPath: "/nao/existe/claude"))
+        let copilot = Copilot()
+        let bogus = cli(executable: URL(fileURLWithPath: "/nao/existe/claude"))
 
-        XCTAssertThrowsError(try bogus.run(prompt: "olá", in: URL(fileURLWithPath: "/tmp"))) {
+        XCTAssertThrowsError(try copilot.run(cli: bogus, prompt: "olá", in: URL(fileURLWithPath: "/tmp"))) {
             guard case LoadoutError.io = $0 as! LoadoutError else {
                 return XCTFail("devia explicar que não conseguiu correr, deu \($0)")
             }
@@ -210,8 +216,11 @@ final class UsageTests: XCTestCase {
 
     func testCopilotRunsAProcessAndCapturesItsOutput() throws {
         // `echo` stands in for the CLI: the point is the plumbing, not the model.
-        let copilot = Copilot(executable: URL(fileURLWithPath: "/bin/echo"))
-        let result = try copilot.run(prompt: "olá", in: URL(fileURLWithPath: "/tmp"))
+        let copilot = Copilot()
+        let result = try copilot.run(
+            cli: cli(executable: URL(fileURLWithPath: "/bin/echo")),
+            prompt: "olá", in: URL(fileURLWithPath: "/tmp")
+        )
 
         XCTAssertTrue(result.output.contains("olá"))
         XCTAssertEqual(result.exitCode, 0)
@@ -226,10 +235,12 @@ final class UsageTests: XCTestCase {
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
         defer { try? FileManager.default.removeItem(at: script) }
 
-        let copilot = Copilot(executable: script)
+        let copilot = Copilot()
         let started = Date()
 
-        let result = try copilot.run(prompt: "olá", in: URL(fileURLWithPath: "/tmp"), timeout: 0.4)
+        let result = try copilot.run(
+            cli: cli(executable: script), prompt: "olá", in: URL(fileURLWithPath: "/tmp"), timeout: 0.4
+        )
 
         XCTAssertTrue(result.timedOut)
         XCTAssertLessThan(Date().timeIntervalSince(started), 10, "não ficou pendurado")
