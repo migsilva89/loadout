@@ -4,7 +4,6 @@ import LoadoutCore
 
 struct ContentView: View {
     @Bindable var model: AppModel
-    @FocusState private var searchFocused: Bool
 
     var body: some View {
         NavigationSplitView {
@@ -17,13 +16,8 @@ struct ContentView: View {
             DetailView(model: model)
         }
         .toolbar {
-            // The window's own icon, in place of printing "Loadout" next to the picker — the
-            // title bar already says what app this is.
-            ToolbarItem(placement: .navigation) {
-                Image(nsImage: NSApp.applicationIconImage)
-                    .resizable()
-                    .frame(width: 18, height: 18)
-            }
+            // The context picker is what actually changes across a session; search and sort
+            // moved into the list column itself, next to what they act on.
             ToolbarItem(placement: .navigation) {
                 ContextPicker(model: model)
                     .controlSize(.regular)
@@ -39,7 +33,6 @@ struct ContentView: View {
             }
         }
         .background(WindowPlacement())
-        .searchable(text: $model.query, placement: .toolbar, prompt: "Search")
         .safeAreaInset(edge: .bottom) { StatusBar(model: model) }
         .sheet(isPresented: $model.isCreating) { NewSkillSheet(model: model) }
         .sheet(isPresented: $model.isAskingClaude) { CopilotSheet(model: model) }

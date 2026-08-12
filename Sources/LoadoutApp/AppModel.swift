@@ -21,6 +21,9 @@ final class AppModel {
     var selectedID: String?
     var query: String = ""
     var order: ItemSort = .usage
+    /// Bridges ⌘F (a window-level command, with no view of its own) to the search field's
+    /// `@FocusState`, which can only live inside the view that owns the field.
+    var searchFocused: Bool = false
 
     // Editing
     var draft: String = ""
@@ -46,12 +49,28 @@ final class AppModel {
     private var watcher: Watcher?
     private var indexTask: Task<Void, Never>?
 
+    /// Assistants Settings › Assistants has hidden from the rows and the detail panel.
+    /// Stored under the same UserDefaults key the Settings tab reads with `@AppStorage`, so
+    /// either side changing it is seen by the other immediately.
+    private static let hiddenAssistantsKey = "hiddenAssistants"
+    var hiddenAssistantIDs: Set<String> {
+        didSet {
+            UserDefaults.standard.set(
+                hiddenAssistantIDs.sorted().joined(separator: ","), forKey: Self.hiddenAssistantsKey
+            )
+        }
+    }
+
     init(paths: Paths = .live()) {
         self.paths = paths
         self.scanner = InventoryScanner(paths: paths)
         self.mutations = Mutations(paths: paths)
         self.usageIndex = try? UsageIndex(paths: paths)
         self.projects = ProjectsIndex(paths: paths).load()
+        self.hiddenAssistantIDs = Set(
+            (UserDefaults.standard.string(forKey: Self.hiddenAssistantsKey) ?? "")
+                .split(separator: ",").map(String.init)
+        )
         reload()
         startWatching()
         refreshUsage()
@@ -142,6 +161,15 @@ final class AppModel {
 
     /// Every assistant found on this machine, in the order the row shows them.
     var assistants: [Assistant] { scanner.assistants }
+
+    /// The assistants shown in list rows and the detail panel — everything, minus what
+    /// Settings › Assistants hid. Sharing still works on a hidden one; it just isn't surfaced
+    /// here, the same way a disabled skill still exists on disk.
+    var visibleAssistants: [Assistant] { assistants.filter { !hiddenAssistantIDs.contains($0.id) } }
+
+    func setAssistantHidden(_ assistant: Assistant, hidden: Bool) {
+        if hidden { hiddenAssistantIDs.insert(assistant.id) } else { hiddenAssistantIDs.remove(assistant.id) }
+    }
 
     /// Fills or removes a gap in the assistant dots.
     func setAssistant(_ assistant: Assistant, on item: Item, present: Bool) {
@@ -240,11 +268,25 @@ final class AppModel {
 
     // MARK: - Usage index
 
+    /// How many transcript files and events are currently indexed, for Settings › Usage.
+    var indexedFileCount: Int { usageIndex?.indexedFileCount ?? 0 }
+    var indexedEventCount: Int { usageIndex?.eventCount ?? 0 }
+
     func refreshUsage(fullHistory: Bool = false) {
+        refreshUsage(since: fullHistory ? .distantPast : Date().addingTimeInterval(-UsageIndex.defaultWindow))
+    }
+
+    /// Settings › Usage picks the indexing window; changing it re-indexes from that point.
+    /// `nil` means "Everything" (AC6.3's full-history case, reused here).
+    func reindexUsage(windowDays: Int?) {
+        let since = windowDays.map { Date().addingTimeInterval(-Double($0) * 86_400) } ?? .distantPast
+        refreshUsage(since: since)
+    }
+
+    private func refreshUsage(since: Date) {
         guard let usageIndex else { return }
         indexTask?.cancel()
         indexProgress = 0
-        let since = fullHistory ? Date.distantPast : Date().addingTimeInterval(-UsageIndex.defaultWindow)
 
         indexTask = Task.detached(priority: .utility) { [weak self] in
             let report: @Sendable (Double?) -> Void = { value in

@@ -3,6 +3,7 @@ import LoadoutCore
 
 struct ItemListView: View {
     @Bindable var model: AppModel
+    @FocusState private var searchFieldFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -17,28 +18,74 @@ struct ItemListView: View {
                 list
             }
         }
+        // ⌘F is a window-level command with no view of its own; it asks the model to focus,
+        // and this is the only place that can turn that into the real `@FocusState`.
+        .onChange(of: model.searchFocused) { _, wantsFocus in
+            if wantsFocus { searchFieldFocused = true }
+        }
+        .onChange(of: searchFieldFocused) { _, focused in
+            if !focused { model.searchFocused = false }
+        }
     }
 
-    /// The sort control belongs to the list, not to the window: it changes this column and
-    /// nothing else.
+    /// The scope and count used to live in a "56 items" label; now they live in the search
+    /// field's own placeholder, so the field is the first thing read rather than a caption
+    /// above it. The sort menu sits at the same row's trailing end, quiet on purpose — it is
+    /// a secondary control, not a peer of search.
     private var listHeader: some View {
         HStack(spacing: 8) {
-            Text("\(model.visibleItems.count) \(model.visibleItems.count == 1 ? "item" : "items")")
-                .font(.caption)
+            searchField
+            sortMenu
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
+        .padding(.bottom, 6)
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
-                .monospacedDigit()
-            Spacer()
+            TextField(searchPlaceholder, text: $model.query)
+                .textFieldStyle(.plain)
+                .focused($searchFieldFocused)
+                .onExitCommand {
+                    model.query = ""
+                    searchFieldFocused = false
+                }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 7))
+        .frame(maxWidth: .infinity)
+    }
+
+    private var searchPlaceholder: String {
+        let count = model.visibleItems.count
+        let noun = model.selection.searchNoun(plural: count != 1)
+        return "Search \(count) \(noun)"
+    }
+
+    /// A menu rather than the old segmented control: sort is a secondary decision next to
+    /// search, and a menu reads quieter than a two-button toggle competing for the eye.
+    private var sortMenu: some View {
+        Menu {
             Picker("Sort", selection: $model.order) {
                 ForEach(ItemSort.allCases, id: \.self) { Text($0.label).tag($0) }
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .controlSize(.small)
-            .fixedSize()
+            .pickerStyle(.inline)
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.up.arrow.down")
+                Text(model.order.label)
+                Image(systemName: "chevron.down")
+                    .font(.caption2)
+            }
+            .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 12)
-        .padding(.top, 7)
-        .padding(.bottom, 4)
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Sort the list")
     }
 
     private var pluginHeader: some View {
@@ -106,28 +153,31 @@ struct ItemListView: View {
 struct FilterChipsView: View {
     @Bindable var model: AppModel
 
+    /// All · Personal · From plugins · Never used · Off · In 2+ assistants — origin chips lead,
+    /// state chips trail, and "In 2+ assistants" sits last because it is the one a person
+    /// reaches for least often.
     private var chips: [ItemFilter] {
         var base: [ItemFilter] = [.all, .mine]
         if model.context != nil { base.append(.thisProject) }
-        base.append(contentsOf: [.shared, .neverUsed, .disabled])
+        base.append(contentsOf: [.fromPlugins, .neverUsed, .disabled, .shared])
         return base
     }
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                ForEach(chips, id: \.self) { chip in
-                    FilterChip(
-                        title: chip.title,
-                        count: model.count(for: chip),
-                        isActive: model.filter == chip
-                    ) {
-                        model.filter = chip
-                    }
+        // Wrapping, not scrolling: a filter you have to scroll sideways to discover is a
+        // filter nobody uses, and the last chip was falling off the edge of the column.
+        ChipFlow(spacing: 6, lineSpacing: 6) {
+            ForEach(chips, id: \.self) { chip in
+                FilterChip(
+                    title: chip.title,
+                    count: model.count(for: chip),
+                    isActive: model.filter == chip
+                ) {
+                    model.filter = chip
                 }
             }
-            .padding(.horizontal, 12)
         }
+        .padding(.horizontal, 12)
         .padding(.bottom, 7)
     }
 }
@@ -138,6 +188,10 @@ private struct FilterChip: View {
     let isActive: Bool
     let action: () -> Void
 
+    /// A chip with nothing in it stays clickable — the zero is itself information — but reads
+    /// quieter, so an eye scanning the row lands on the chips that actually have something.
+    private var isEmpty: Bool { count == 0 && !isActive }
+
     var body: some View {
         Button(action: action) {
             HStack(spacing: 4) {
@@ -146,14 +200,15 @@ private struct FilterChip: View {
                     .monospacedDigit()
                     .foregroundStyle(isActive ? .white.opacity(0.8) : .secondary)
             }
-            .font(.caption)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 4)
+            .font(.system(size: 12))
+            .padding(.horizontal, 11)
+            .padding(.vertical, 5)
             .background(
                 isActive ? Color.accentColor : Color.secondary.opacity(0.12),
                 in: Capsule()
             )
             .foregroundStyle(isActive ? Color.white : Color.primary)
+            .opacity(isEmpty ? 0.45 : 1)
         }
         .buttonStyle(.plain)
     }
@@ -218,7 +273,7 @@ struct PluginManagerRow: View {
             .labelsHidden()
             .help(plugin.enabled ? "Disable the \(plugin.name) plugin" : "Enable the \(plugin.name) plugin")
         }
-        .padding(.vertical, 3)
+        .padding(.vertical, 7)
     }
 }
 
@@ -234,7 +289,7 @@ struct ItemRow: View {
                 .fill(originColor)
                 .frame(width: 3)
                 .padding(.vertical, 2)
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 6) {
                     Text(item.name)
                         .fontWeight(.medium)
@@ -263,7 +318,7 @@ struct ItemRow: View {
                     .lineLimit(2)
             }
         }
-        .padding(.vertical, 3)
+        .padding(.vertical, 7)
         .opacity(item.enabled ? 1 : 0.5)
     }
 
@@ -327,7 +382,7 @@ struct AssistantDots: View {
     let item: Item
     @Bindable var model: AppModel
 
-    private var present: [Assistant] { model.assistants.filter { item.assistants.contains($0.id) } }
+    private var present: [Assistant] { model.visibleAssistants.filter { item.assistants.contains($0.id) } }
 
     var body: some View {
         HStack(spacing: 3) {
@@ -367,7 +422,7 @@ struct AssistantPanel: View {
                 columns: [GridItem(.adaptive(minimum: 178), spacing: 8)],
                 alignment: .leading, spacing: 6
             ) {
-                ForEach(model.assistants) { assistant in
+                ForEach(model.visibleAssistants) { assistant in
                     let has = item.assistants.contains(assistant.id)
                     Button {
                         model.setAssistant(assistant, on: item, present: !has)

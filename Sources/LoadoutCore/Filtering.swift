@@ -56,18 +56,22 @@ public enum ItemFilter: String, Equatable, Hashable, Sendable, CaseIterable {
     case all
     case mine
     case thisProject
+    case fromPlugins
     case shared
     case neverUsed
     case disabled
 
+    /// "Personal", not "Mine": read next to a count on a chip, "Mine 12" reads like a
+    /// possessive fragment, where "Personal 12" reads as a label.
     public var title: String {
         switch self {
         case .all: return "All"
-        case .mine: return "Mine"
+        case .mine: return "Personal"
         case .thisProject: return "This project"
-        case .shared: return "Shared"
+        case .fromPlugins: return "From plugins"
+        case .shared: return "In 2+ assistants"
         case .neverUsed: return "Never used"
-        case .disabled: return "Disabled"
+        case .disabled: return "Off"
         }
     }
 }
@@ -102,6 +106,11 @@ public enum Filtering {
         case .thisProject:
             return items.filter {
                 if case .project = $0.origin { return true }
+                return false
+            }
+        case .fromPlugins:
+            return items.filter {
+                if case .plugin = $0.origin { return true }
                 return false
             }
         case .shared:

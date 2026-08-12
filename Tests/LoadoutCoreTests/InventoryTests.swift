@@ -271,11 +271,28 @@ final class InventoryTests: XCTestCase {
         )
     }
 
-    /// "Mine", not "Global": the redesign moves origin out of the sidebar entirely, so the
+    /// "Personal", not "Global": the redesign moves origin out of the sidebar entirely, so the
     /// old rationale for calling it "Global" (a sidebar label about where a skill applies)
     /// no longer applies to a filter chip, whose job is to say whose it is.
     func testTheMineChipIsLabelledByWhoseItIsNotByWhereItApplies() {
-        XCTAssertEqual(ItemFilter.mine.title, "Mine")
+        XCTAssertEqual(ItemFilter.mine.title, "Personal")
+    }
+
+    /// `.fromPlugins` narrows to items whose origin is `.plugin`, the same way `.thisProject`
+    /// narrows to `.project` — a chip per origin, so "From plugins" and "12" mean what they say.
+    func testFromPluginsChipIsolatesPluginOrigin() {
+        let fixture = Fixture()
+        fixture.skill("pessoal")
+        fixture.plugin("vercel", skills: ["deploy"])
+
+        let items = InventoryScanner(paths: fixture.paths).scanAll().items
+        let plugins = Filtering.filter(items, by: .fromPlugins)
+
+        XCTAssertEqual(plugins.map(\.name), ["deploy"])
+        XCTAssertTrue(plugins.allSatisfy {
+            if case .plugin = $0.origin { return true }
+            return false
+        })
     }
 
     func testSidebarRowsSliceByKindOnlyAndChipsNarrowFromThere() {

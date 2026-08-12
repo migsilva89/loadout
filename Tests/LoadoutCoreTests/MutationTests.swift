@@ -212,6 +212,60 @@ final class MutationTests: XCTestCase {
         XCTAssertNil(try backups.snapshot(fixture.paths.skills.appendingPathComponent("nao-existe")))
     }
 
+    // MARK: - Snapshot enumeration (Settings › Backups)
+
+    func testListSnapshotsFindsOnlyStampNamedFolders() throws {
+        let fixture = Fixture()
+        let backups = Backups(paths: fixture.paths)
+        fixture.skill("uma")
+        try backups.snapshot(fixture.paths.skills.appendingPathComponent("uma"))
+
+        // Something that isn't a stamp folder must never be mistaken for one.
+        try FileManager.default.createDirectory(
+            at: fixture.paths.backups.appendingPathComponent("not-a-stamp"),
+            withIntermediateDirectories: true
+        )
+        try "loose file".write(
+            to: fixture.paths.backups.appendingPathComponent("stray.txt"),
+            atomically: true, encoding: .utf8
+        )
+
+        let snapshots = backups.listSnapshots()
+        XCTAssertEqual(snapshots.count, 1, "só a pasta com nome de carimbo conta")
+        XCTAssertTrue(Backups.stampFormatter.date(from: snapshots[0].name) != nil)
+    }
+
+    func testTotalSizeSumsEveryFileAcrossEverySnapshot() throws {
+        let fixture = Fixture()
+        let backups = Backups(paths: fixture.paths)
+        fixture.skill("uma", extraFile: "conteúdo qualquer")
+        try backups.snapshot(fixture.paths.skills.appendingPathComponent("uma"))
+
+        XCTAssertGreaterThan(backups.totalSize(), 0)
+    }
+
+    func testDeleteSnapshotsOnlyRemovesOldStampFoldersDirectlyInsideBackups() throws {
+        let fixture = Fixture()
+        let backups = Backups(paths: fixture.paths)
+        fixture.skill("velha")
+        fixture.skill("nova")
+
+        let old = Backups.stampFormatter.date(from: "2020-01-01T00-00-00")!
+        let recent = Date()
+        try backups.snapshot(fixture.paths.skills.appendingPathComponent("velha"), stamp: old)
+        try backups.snapshot(fixture.paths.skills.appendingPathComponent("nova"), stamp: recent)
+
+        let cutoff = Date().addingTimeInterval(-30 * 24 * 3600)
+        let removed = try backups.deleteSnapshots(olderThan: cutoff)
+
+        XCTAssertEqual(removed, 1, "só a pasta antiga sai")
+        let remaining = backups.listSnapshots()
+        XCTAssertEqual(remaining.count, 1)
+        XCTAssertNotEqual(remaining.first?.date, old)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: fixture.paths.backups.path),
+                       "a pasta de backups em si nunca é apagada")
+    }
+
     // MARK: AC5.4
 
     func testWriteIsAbortedWhenTheSnapshotCannotBeMade() {

@@ -35,12 +35,14 @@ struct SidebarView: View {
                 .foregroundStyle(selection.tint)
                 .frame(width: 18)
             Text(selection.title)
+                .font(.system(size: 14))
             Spacer()
             Text("\(model.count(for: selection))")
                 .font(.callout)
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
         }
+        .padding(.vertical, 3)
         .tag(selection)
     }
 }
@@ -66,6 +68,18 @@ extension Selection: Identifiable {
         case .agents: return .purple
         case .mcp: return .orange
         case .plugins: return .loadoutAmber
+        }
+    }
+
+    /// What the search field's placeholder calls a row of this kind — "Search 56 skills",
+    /// singular when there is only one.
+    func searchNoun(plural: Bool) -> String {
+        switch self {
+        case .skills: return plural ? "skills" : "skill"
+        case .commands: return plural ? "commands" : "command"
+        case .agents: return plural ? "agents" : "agent"
+        case .mcp: return plural ? "MCP servers" : "MCP server"
+        case .plugins: return plural ? "plugins" : "plugin"
         }
     }
 }

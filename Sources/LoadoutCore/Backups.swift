@@ -55,4 +55,68 @@ public struct Backups: Sendable {
         f.locale = Locale(identifier: "en_US_POSIX")
         return f
     }()
+
+    // MARK: - Enumeration, for Settings › Backups
+
+    /// One stamp folder directly inside `paths.backups`.
+    public struct Snapshot: Identifiable, Sendable {
+        public var id: String { name }
+        public var name: String
+        public var date: Date
+        public var url: URL
+    }
+
+    /// Every top-level snapshot folder whose name round-trips through `stampFormatter`,
+    /// newest first. Anything else living in `paths.backups` — there shouldn't be anything,
+    /// but this is the boundary that keeps deletion from ever guessing — is silently skipped.
+    public func listSnapshots() -> [Snapshot] {
+        guard let entries = try? fm.contentsOfDirectory(
+            at: paths.backups, includingPropertiesForKeys: [.isDirectoryKey]
+        ) else { return [] }
+
+        var result: [Snapshot] = []
+        for entry in entries {
+            var isDirectory: ObjCBool = false
+            guard fm.fileExists(atPath: entry.path, isDirectory: &isDirectory), isDirectory.boolValue
+            else { continue }
+            guard let date = Self.stampFormatter.date(from: entry.lastPathComponent) else { continue }
+            result.append(Snapshot(name: entry.lastPathComponent, date: date, url: entry))
+        }
+        return result.sorted { $0.date > $1.date }
+    }
+
+    /// Bytes across every snapshot folder. Walking the whole backups tree is not cheap, so
+    /// this is deliberately synchronous — callers run it off the main thread themselves.
+    public func totalSize() -> Int64 {
+        listSnapshots().reduce(0) { $0 + directorySize($1.url) }
+    }
+
+    private func directorySize(_ url: URL) -> Int64 {
+        guard let walker = fm.enumerator(at: url, includingPropertiesForKeys: [.fileSizeKey])
+        else { return 0 }
+        var total: Int64 = 0
+        for case let file as URL in walker {
+            if let size = try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize {
+                total += Int64(size)
+            }
+        }
+        return total
+    }
+
+    /// Deletes snapshot folders older than `cutoff`, straight to the Trash — same rule as
+    /// everything else this app removes. Every candidate is re-checked against `listSnapshots()`
+    /// and against being a direct child of `paths.backups`, so this can never reach outside the
+    /// stamp folders it enumerated, and never removes `paths.backups` itself.
+    @discardableResult
+    public func deleteSnapshots(olderThan cutoff: Date) throws -> Int {
+        var removed = 0
+        for snapshot in listSnapshots() where snapshot.date < cutoff {
+            guard snapshot.url.deletingLastPathComponent().standardizedFileURL
+                == paths.backups.standardizedFileURL
+            else { continue }
+            try fm.trashItem(at: snapshot.url, resultingItemURL: nil)
+            removed += 1
+        }
+        return removed
+    }
 }
