@@ -22,7 +22,9 @@ public enum Selection: Equatable, Hashable, Sendable {
 
     public var title: String {
         switch self {
-        case .personal: return "Pessoais"
+        // "Globais", not "pessoais": what matters is that they load in every project,
+        // not whose they are.
+        case .personal: return "Globais"
         case .projectItems: return "Projeto"
         case .disabled: return "Desativadas"
         case .plugin(let name): return name
@@ -55,7 +57,10 @@ public enum Filtering {
                 return false
             }
         case .disabled:
-            return items.filter { !$0.enabled }
+            // Only the ones the user parked by hand. Items belonging to a switched-off plugin
+            // are shown dimmed under that plugin, next to the switch that turned them off —
+            // mixing the two put one label on two very different things.
+            return items.filter { !$0.enabled && $0.origin == .personal }
         case .plugin(let name):
             return items.filter { $0.origin == .plugin(name) }
         case .kind(let kind):

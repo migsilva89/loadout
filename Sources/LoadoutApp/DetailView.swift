@@ -92,12 +92,28 @@ struct DetailView: View {
 
     private func actions(_ item: Item) -> some View {
         HStack(spacing: 8) {
-            Button("Abrir no editor") { model.openInEditor() }
-            Button("Revelar no Finder") { model.revealInFinder() }
-            if item.isEditable {
-                Button("Pedir ao Claude") { model.isAskingClaude = true }
-                    .buttonStyle(.borderedProminent)
+            // Reading or editing: one switch, because they are the same pane in two modes.
+            Picker("", selection: Binding(
+                get: { model.showsPreview },
+                set: { model.showsPreview = $0 }
+            )) {
+                Image(systemName: "eye").tag(true)
+                Image(systemName: "chevron.left.forwardslash.chevron.right").tag(false)
             }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            .help(model.showsPreview ? "Ver o ficheiro em bruto" : "Ver em markdown")
+
+            Button { model.openInEditor() } label: { Image(systemName: "arrow.up.forward.app") }
+                .help("Abrir no editor")
+            Button { model.revealInFinder() } label: { Image(systemName: "folder") }
+                .help("Revelar no Finder")
+            if item.isEditable {
+                Button { model.isAskingClaude = true } label: { Image(systemName: "bubble.left.and.text.bubble.right") }
+                    .help("Pedir ao Claude")
+            }
+
             Spacer()
             if item.isEditable {
                 Button("Guardar") { model.save() }
@@ -113,6 +129,11 @@ struct DetailView: View {
             Text("Este servidor está definido dentro de ~/.claude.json, não num ficheiro próprio.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
+        } else if model.showsPreview {
+            MarkdownView(text: model.draft)
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
         } else if item.isEditable {
             TextEditor(text: Binding(
                 get: { model.draft },

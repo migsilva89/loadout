@@ -243,6 +243,30 @@ final class InventoryTests: XCTestCase {
         XCTAssertEqual(Filtering.sort(items, by: .name).map(\.name), ["alfa", "beta", "gama"])
     }
 
+    /// Turning a plugin off must not dump its items into "Desativadas" — they belong under
+    /// the plugin, next to the switch that turned them off.
+    func testDisabledOnlyCountsSkillsTheUserParked() {
+        let fixture = Fixture()
+        fixture.skill("parqueada", disabled: true)
+        fixture.plugin("vercel", skills: ["deploy", "nextjs"], enabled: false)
+
+        let items = InventoryScanner(paths: fixture.paths).scanAll().items
+
+        XCTAssertEqual(Filtering.slice(items, for: .disabled).map(\.name), ["parqueada"])
+        XCTAssertEqual(
+            Filtering.slice(items, for: .plugin("vercel")).map(\.name).sorted(),
+            ["deploy", "nextjs"]
+        )
+        XCTAssertTrue(
+            Filtering.slice(items, for: .plugin("vercel")).allSatisfy { !$0.enabled },
+            "continuam marcados como inativos, para aparecerem esbatidos"
+        )
+    }
+
+    func testTheGlobalSliceIsLabelledByWhereItAppliesNotByWhoseItIs() {
+        XCTAssertEqual(Selection.personal.title, "Globais")
+    }
+
     func testSidebarSlicesDoNotOverlap() {
         let fixture = Fixture()
         fixture.skill("ativa")

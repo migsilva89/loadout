@@ -5,6 +5,35 @@ struct ItemListView: View {
     @Bindable var model: AppModel
 
     var body: some View {
+        VStack(spacing: 0) {
+            listHeader
+            Divider()
+            list
+        }
+    }
+
+    /// The sort control belongs to the list, not to the window: it changes this column and
+    /// nothing else.
+    private var listHeader: some View {
+        HStack(spacing: 8) {
+            Text("\(model.visibleItems.count) \(model.visibleItems.count == 1 ? "item" : "itens")")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+            Spacer()
+            Picker("Ordenar", selection: $model.order) {
+                ForEach(ItemSort.allCases, id: \.self) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .controlSize(.small)
+            .fixedSize()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+    }
+
+    private var list: some View {
         List(selection: Binding(
             get: { model.selectedID },
             set: { model.select($0) }

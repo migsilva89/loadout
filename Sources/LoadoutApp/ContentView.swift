@@ -19,13 +19,6 @@ struct ContentView: View {
             ToolbarItem(placement: .navigation) {
                 ContextPicker(model: model)
             }
-            ToolbarItem(placement: .principal) {
-                Picker("Ordenar", selection: $model.order) {
-                    ForEach(ItemSort.allCases, id: \.self) { Text($0.label).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 190)
-            }
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     model.isCreating = true

@@ -22,6 +22,8 @@ final class AppModel {
     // Editing
     var draft: String = ""
     var isDirty = false
+    /// Reading mode: the same pane renders the markdown instead of showing the source.
+    var showsPreview = true
 
     // Status
     var errorMessage: String?
