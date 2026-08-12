@@ -35,6 +35,7 @@ struct ContentView: View {
                 .help("Nova skill (⌘N)")
             }
         }
+        .background(WindowPlacement())
         .searchable(text: $model.query, placement: .toolbar, prompt: "Procurar")
         .safeAreaInset(edge: .bottom) { StatusBar(model: model) }
         .sheet(isPresented: $model.isCreating) { NewSkillSheet(model: model) }
