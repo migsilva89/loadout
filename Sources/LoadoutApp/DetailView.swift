@@ -131,9 +131,6 @@ struct DetailView: View {
     /// as a reflowing grid of small cards instead of label/value rows. A grid scans the way a
     /// glance actually works — several facts at once, not one column read top to bottom — and
     /// it uses a wide pane's width instead of leaving it as dead margin either side of a list.
-    private var detailColumns: [GridItem] {
-        [GridItem(.adaptive(minimum: 150), spacing: Metrics.xs)]
-    }
 
     /// The small uppercase tile captions ("TYPE", "LOCATION", …) needed more weight in light
     /// mode to hold the same contrast an uppercase label reads at in dark mode — dark was
@@ -146,141 +143,136 @@ struct DetailView: View {
     // told to stretch across the row's other columns. Location is rendered as its own
     // full-width tile below the grid instead, which reads the same either way: a block of
     // small cards, with the one long value sitting underneath at the pane's own width.
+    /// Label and value in two columns, the way a Mac inspector states facts — Get Info, the
+    /// Xcode inspector, the Finder's own panes. The boxed mini-cards this replaces were
+    /// dashboard vocabulary: nine bordered tiles with uppercase captions, each drawing a frame
+    /// around four characters. A calm pair of columns says the same in a third of the space.
     @ViewBuilder
     private func detailRows(_ item: Item) -> some View {
-        VStack(alignment: .leading, spacing: Metrics.xs) {
-            LazyVGrid(columns: detailColumns, alignment: .leading, spacing: Metrics.xs) {
-                detailTile("Type", item.kind.label)
-                detailTile("Source", originText(item))
-                detailTile("State", item.enabled ? "Enabled" : "Disabled")
-                if let modified = item.modified {
-                    detailTile("Modified", Usage.relative(modified))
-                }
-                // What used to be one "Usage" row, split into the three facts it was
-                // summarising — each is its own small answer, not a sentence to parse.
-                detailTile("Uses", item.usage.count == 1 ? "1 use" : "\(item.usage.count) uses")
-                detailTile("Last used", item.usage.lastUsed.map { Usage.relative($0) } ?? "Never")
-                detailTile("Projects", "\(item.usage.projectCount)")
-                if item.budget.descriptionCharacters > 0 || item.budget.bodyCharacters > 0 {
-                    tokensTile(item)
-                }
-                if let size = fileSize(item) {
-                    detailTile("Size", size)
-                }
+        Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: Metrics.md, verticalSpacing: 7) {
+            field("Type", item.kind.label)
+            field("Source", originText(item))
+            field("State", item.enabled ? "Enabled" : "Disabled")
+            if let modified = item.modified {
+                field("Modified", Usage.relative(modified))
+            }
+            if let size = fileSize(item) {
+                field("Size", size)
+            }
+            usageField(item)
+            if item.budget.descriptionCharacters > 0 || item.budget.bodyCharacters > 0 {
+                tokensField(item)
             }
             if let folder = item.directory ?? item.path?.deletingLastPathComponent() {
-                filesTile(item, folder: folder)
-            } else if let location = item.path {
-                locationTile(location)
-            }
-        }
-    }
-
-    private func detailTile(_ caption: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(caption.uppercased())
-                .font(.system(size: captionSize, weight: captionWeight))
-                .foregroundStyle(.primary.opacity(captionOpacity))
-            Text(value)
-                .font(.body.weight(.medium))
-                .lineLimit(2)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 9)
-        .padding(.horizontal, 11)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 9))
-        // A hairline border, not just a fill: a `.controlBackgroundColor` tile can sit on
-        // almost the same tone as the pane behind it in light mode, and the fill alone stops
-        // being enough to read as its own card. The border guarantees the edge either way.
-        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Color(nsColor: .separatorColor)))
-    }
-
-    /// The path gets its own full-width tile — a monospaced, truncate-from-the-middle string
-    /// doesn't sit well next to short values in a two- or four-column grid, and it is the one
-    /// value worth selecting and copying.
-
-    /// The two costs, side by side and never added together: the description is loaded in every
-    /// session whether or not the skill fires, the body only when it does. Estimated at four
-    /// characters per token — there is no tokenizer on the machine, and the caption says so
-    /// rather than implying a precision this cannot have.
-    private func tokensTile(_ item: Item) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text("TOKENS, ESTIMATED")
-                .font(.system(size: captionSize, weight: captionWeight))
-                .foregroundStyle(.primary.opacity(captionOpacity))
-            HStack(spacing: 10) {
-                Text("\(item.budget.descriptionTokens) desc")
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(item.budget.descriptionCharacters > Budget.maxDescriptionCharacters ? Color.orange : Color.primary)
-                Text("\(item.budget.bodyTokens) body")
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(item.budget.bodyLines > Budget.maxBodyLines ? Color.orange : Color.primary)
+                filesField(item, folder: folder)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 9)
-        .padding(.horizontal, 11)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 9))
-        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Color(nsColor: .separatorColor)))
-        .help("The description is loaded in every session, used or not. The body only when the skill triggers. Roughly four characters per token.")
     }
 
-    /// "Files", not "Location": the folder usually holds more than the markdown — scripts,
-    /// references, assets — and knowing what travels with a skill matters more than repeating
-    /// a path whose head is already the item's name.
-    private func filesTile(_ item: Item, folder: URL) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            // The two actions live here rather than in the document's toolbar: they open and
-            // reveal this folder, so they belong beside it instead of beside the file.
-            HStack(spacing: Metrics.xs) {
-                Text("FILES")
-                    .font(.system(size: captionSize, weight: captionWeight))
-                    .foregroundStyle(.primary.opacity(captionOpacity))
-                Spacer()
-                Button { model.openInEditor() } label: {
-                    Label {
-                        Text("Open")
-                    } icon: {
-                        AppIconView(path: AppIconCache.editor(for: item.directory ?? item.path))
-                    }
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .help(editorHelp(item))
-                .pointingHand()
-
-                Button { model.revealInFinder() } label: {
-                    Label {
-                        Text("Finder")
-                    } icon: {
-                        AppIconView(path: AppIconCache.finder)
-                    }
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .help(revealHelp(item))
-                .pointingHand()
-            }
-            Text(displayPath(folder))
-                .font(.system(size: 12, design: .monospaced))
+    private func field(_ label: String, _ value: String) -> some View {
+        GridRow {
+            Text(label)
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
+                .gridColumnAlignment(.trailing)
+            Text(value)
                 .textSelection(.enabled)
-            let entries = folderContents(folder)
-            if !entries.isEmpty {
-                Text(entries.joined(separator: " · "))
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
+        }
+        .font(.callout)
+    }
+
+    /// Three numbers that answer one question, so they share one line instead of three frames.
+    private func usageField(_ item: Item) -> some View {
+        GridRow {
+            Text("Usage")
+                .foregroundStyle(.secondary)
+                .gridColumnAlignment(.trailing)
+            Text(usageSentence(item))
+        }
+        .font(.callout)
+    }
+
+    private func usageSentence(_ item: Item) -> String {
+        guard item.usage.count > 0 else { return "Never used in the last 90 days" }
+        let uses = item.usage.count == 1 ? "1 use" : "\(item.usage.count) uses"
+        let last = item.usage.lastUsed.map { Usage.relative($0) } ?? "unknown"
+        let projects = item.usage.projectCount == 1 ? "1 project" : "\(item.usage.projectCount) projects"
+        return "\(uses) · last \(last) · \(projects)"
+    }
+
+    /// The description is loaded in every session whether the skill fires or not; the body only
+    /// on trigger. Two costs, never summed, and orange the moment one breaks a documented limit.
+    private func tokensField(_ item: Item) -> some View {
+        GridRow {
+            Text("Tokens")
+                .foregroundStyle(.secondary)
+                .gridColumnAlignment(.trailing)
+            HStack(spacing: 6) {
+                Text("~\(item.budget.descriptionTokens) description")
+                    .foregroundStyle(item.budget.descriptionCharacters > Budget.maxDescriptionCharacters ? Color.orange : Color.primary)
+                Text("·").foregroundStyle(.tertiary)
+                Text("~\(item.budget.bodyTokens) body")
+                    .foregroundStyle(item.budget.bodyLines > Budget.maxBodyLines ? Color.orange : Color.primary)
+                if item.budget.isOverBudget {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .help(item.budget.breaches.joined(separator: "\n"))
+                }
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 9)
-        .padding(.horizontal, 11)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 9))
-        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Color(nsColor: .separatorColor)))
+        .font(.callout)
+        .help("The description is in context in every session, used or not. The body only when the skill triggers. Estimated at four characters per token.")
     }
+
+    /// The folder, what travels with it, and the two actions that act on it — all in the same
+    /// row, because a button that opens this folder belongs beside the folder's own name.
+    private func filesField(_ item: Item, folder: URL) -> some View {
+        GridRow {
+            Text("Files")
+                .foregroundStyle(.secondary)
+                .gridColumnAlignment(.trailing)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(displayPath(folder))
+                    .font(.system(size: 12, design: .monospaced))
+                    .textSelection(.enabled)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                let entries = folderContents(folder)
+                if !entries.isEmpty {
+                    Text(entries.joined(separator: "   "))
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+                HStack(spacing: Metrics.xs) {
+                    Button { model.openInEditor() } label: {
+                        Label {
+                            Text("Open")
+                        } icon: {
+                            AppIconView(path: AppIconCache.editor(for: item.directory ?? item.path))
+                        }
+                    }
+                    .help(editorHelp(item))
+                    .pointingHand()
+
+                    Button { model.revealInFinder() } label: {
+                        Label {
+                            Text("Finder")
+                        } icon: {
+                            AppIconView(path: AppIconCache.finder)
+                        }
+                    }
+                    .help(revealHelp(item))
+                    .pointingHand()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .padding(.top, 1)
+            }
+        }
+        .font(.callout)
+    }
+
 
     /// Everything beside the markdown, folders marked with a trailing slash.
     ///
@@ -299,26 +291,6 @@ struct DetailView: View {
                 return url.lastPathComponent + (isDirectory.boolValue ? "/" : "")
             }
             .sorted()
-    }
-
-
-    private func locationTile(_ location: URL) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text("LOCATION")
-                .font(.system(size: captionSize, weight: captionWeight))
-                .foregroundStyle(.primary.opacity(captionOpacity))
-            Text(displayPath(location))
-                .font(.system(size: 12, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .textSelection(.enabled)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 9)
-        .padding(.horizontal, 11)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 9))
-        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Color(nsColor: .separatorColor)))
     }
 
     /// "Personal", not "Personal skill": the section header already reads "Details", and the

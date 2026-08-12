@@ -407,11 +407,18 @@ struct ItemRow: View {
                 .frame(width: 7, height: 7)
                 .padding(.top, 6)
                 .help(originHint)
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: Metrics.xs) {
+                    // The name is what the eye is scanning for, so it gets the size and the
+                    // weight; everything else on the line is context for it.
                     Text(item.name)
-                        .fontWeight(.medium)
+                        .font(.system(size: 15, weight: .semibold))
                         .lineLimit(1)
+                    // Beside the name, not stranded at the far edge: which assistants load a
+                    // skill is a property of the skill, and reads as one next to it.
+                    if item.kind == .skill, item.origin == .personal, item.enabled {
+                        AssistantDots(item: item, model: model)
+                    }
                     if let stateBadge {
                         Badge(text: stateBadge.text, tone: stateBadge.tone)
                     }
@@ -428,10 +435,7 @@ struct ItemRow: View {
                             .foregroundStyle(.orange)
                             .help(item.warning ?? "")
                     }
-                    Spacer(minLength: 4)
-                    if item.kind == .skill, item.origin == .personal, item.enabled {
-                        AssistantDots(item: item, model: model)
-                    }
+                    Spacer(minLength: 6)
                     Text("\(item.usage.count)")
                         .font(.caption)
                         .monospacedDigit()
@@ -441,10 +445,28 @@ struct ItemRow: View {
                                 : (colorScheme == .dark ? Color.primary.opacity(0.7) : Color.primary.opacity(0.85))
                         )
                         .help(item.usage.summary())
+                    // Turning a skill off is the action you take from the list, so it lives in
+                    // the list — no trip through the detail pane to park something.
+                    if item.kind == .skill, item.origin == .personal {
+                        Toggle("", isOn: Binding(
+                            get: { item.enabled },
+                            set: { _ in model.toggle(item) }
+                        ))
+                        .toggleStyle(.switch)
+                        .controlSize(.mini)
+                        .labelsHidden()
+                        .tint(.green)
+                        .help(item.enabled
+                              ? "Move \(item.name) to skills-off so nothing loads it"
+                              : "Put \(item.name) back in ~/.claude/skills")
+                        .pointingHand()
+                    }
                 }
+                // Quieter than the name by two steps, size and colour both: it is there to be
+                // read once, not scanned.
                 Text(item.description.isEmpty ? item.kind.label : item.description)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.tertiary)
                     .lineLimit(2)
             }
         }
