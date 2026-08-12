@@ -455,7 +455,10 @@ struct ItemRow: View {
                         .toggleStyle(.switch)
                         .controlSize(.mini)
                         .labelsHidden()
-                        .tint(.green)
+                        // No green here, unlike the detail pane's single switch: twenty-one
+                        // green switches down a column pull the eye to the controls when the
+                        // job is reading names. The system tint keeps it quiet and still says
+                        // on or off.
                         .help(item.enabled
                               ? "Move \(item.name) to skills-off so nothing loads it"
                               : "Put \(item.name) back in ~/.claude/skills")
