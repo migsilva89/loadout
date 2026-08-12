@@ -73,9 +73,11 @@ Corre localmente, assinada ad hoc. Sem Developer ID, sem notarização.
 
 ## Assistentes
 
-O Claude Code lê `~/.claude/skills`; o Codex lê `~/.codex/skills`. A mesma skill pode existir num e não no outro, e o Loadout mostra isso por linha: dois pontos, `C` e `X`, aceso onde a skill existe.
+Cada assistente lê as suas skills de `~/.<nome>/skills` — `~/.claude/skills`, `~/.codex/skills`, e por aí. O Loadout descobre-os sozinho: qualquer pasta dessas que exista no disco entra, e um assistente instalado amanhã aparece sem mexer no código.
 
-Clicar num ponto apagado põe a skill nesse assistente. O que acontece no disco: a pasta é promovida a `~/.agents/skills/<nome>` e cada assistente fica com um symlink para lá — uma cópia, uma edição, os dois lados sempre iguais. Clicar num ponto aceso remove apenas essa ligação, nunca a única cópia real.
+Na linha da lista aparecem as marcas dos assistentes que já têm a skill. No painel de detalhe estão todos, com o nome por extenso e um "pôr lá" nos que faltam. As marcas são os ícones verdadeiros das apps instaladas, lidos do sistema em tempo de execução — nada de logótipos copiados para o repositório. Quem não tem app fica com as iniciais.
+
+Clicar num assistente que não tem a skill põe-na lá. O que acontece no disco: a pasta é promovida a `~/.agents/skills/<nome>` e cada assistente fica com um symlink para lá — uma cópia, uma edição, os dois lados sempre iguais. Clicar num ponto aceso remove apenas essa ligação, nunca a única cópia real.
 
 O menu Loadout tem "Sincronizar tudo com o …" para fechar as falhas de uma vez.
 

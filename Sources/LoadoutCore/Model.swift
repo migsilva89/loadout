@@ -44,27 +44,6 @@ public enum Origin: Equatable, Hashable, Codable, Sendable {
     }
 }
 
-/// A coding assistant that loads skills from its own directory.
-public enum Assistant: String, CaseIterable, Sendable, Codable {
-    case claudeCode
-    case codex
-
-    public var label: String {
-        switch self {
-        case .claudeCode: return "Claude Code"
-        case .codex: return "Codex"
-        }
-    }
-
-    /// One letter for the dots in the list.
-    public var initial: String {
-        switch self {
-        case .claudeCode: return "C"
-        case .codex: return "X"
-        }
-    }
-}
-
 /// One row in the inventory.
 public struct Item: Identifiable, Equatable, Sendable {
     public var id: String
@@ -82,8 +61,9 @@ public struct Item: Identifiable, Equatable, Sendable {
     /// Set when the frontmatter could not be read, so the UI can say so instead of lying.
     public var warning: String?
     public var usage: Usage
-    /// Which assistants load this skill. Empty for anything that is not a personal skill.
-    public var assistants: Set<Assistant>
+    /// Ids of the assistants that load this skill. Empty for anything that is not a
+    /// personal skill.
+    public var assistants: Set<String>
 
     public init(
         id: String,
@@ -97,7 +77,7 @@ public struct Item: Identifiable, Equatable, Sendable {
         enabled: Bool = true,
         warning: String? = nil,
         usage: Usage = .none,
-        assistants: Set<Assistant> = []
+        assistants: Set<String> = []
     ) {
         self.assistants = assistants
         self.id = id

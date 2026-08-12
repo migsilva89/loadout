@@ -129,6 +129,9 @@ final class AppModel {
         }
     }
 
+    /// Every assistant found on this machine, in the order the row shows them.
+    var assistants: [Assistant] { scanner.assistants }
+
     /// Fills or removes a gap in the assistant dots.
     func setAssistant(_ assistant: Assistant, on item: Item, present: Bool) {
         let done = present
@@ -147,7 +150,7 @@ final class AppModel {
     func gaps(for assistant: Assistant) -> [Item] {
         items.filter {
             $0.kind == .skill && $0.origin == .personal && $0.enabled
-                && !$0.assistants.contains(assistant) && !$0.assistants.isEmpty
+                && !$0.assistants.contains(assistant.id) && !$0.assistants.isEmpty
         }
     }
 

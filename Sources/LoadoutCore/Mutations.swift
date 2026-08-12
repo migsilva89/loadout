@@ -64,8 +64,8 @@ public struct Mutations: Sendable {
         guard item.kind == .skill, case .personal = item.origin else {
             throw LoadoutError.notEditable(item.name)
         }
-        let canonical = try promoteToShared(named: item.name)
-        let link = paths.skillsRoot(for: assistant).appendingPathComponent(item.name)
+        let canonical = try promoteToShared(named: item.name, across: AssistantRegistry.discover(paths: paths))
+        let link = assistant.skillsRoot.appendingPathComponent(item.name)
 
         if let existing = try? fm.destinationOfSymbolicLink(atPath: link.path) {
             // Already linked somewhere. Only repoint it if it is pointing at the wrong place.
@@ -98,7 +98,7 @@ public struct Mutations: Sendable {
                 "\(item.name) só existe no \(assistant.label). Desligá-la aí era perdê-la — usa Desativar."
             )
         }
-        let link = paths.skillsRoot(for: assistant).appendingPathComponent(item.name)
+        let link = assistant.skillsRoot.appendingPathComponent(item.name)
         guard isSymlink(link) else {
             throw LoadoutError.io(
                 "A pasta em \(assistant.label) é a cópia verdadeira de \(item.name), não uma ligação. Não lhe toco."
@@ -115,13 +115,13 @@ public struct Mutations: Sendable {
     /// Moves the real folder to `~/.agents/skills` and leaves a symlink where it was.
     /// Already-shared skills are returned untouched.
     @discardableResult
-    public func promoteToShared(named name: String) throws -> URL {
+    public func promoteToShared(named name: String, across assistants: [Assistant]) throws -> URL {
         let canonical = paths.sharedSkills.appendingPathComponent(name)
         if fm.fileExists(atPath: canonical.path) { return canonical }
 
         // The real folder is whichever assistant holds a directory rather than a link.
-        let realCopies = Assistant.allCases
-            .map { paths.skillsRoot(for: $0).appendingPathComponent(name) }
+        let realCopies = assistants
+            .map { $0.skillsRoot.appendingPathComponent(name) }
             .filter { fm.fileExists(atPath: $0.path) && !isSymlink($0) }
 
         guard let source = realCopies.first else { throw LoadoutError.notFound(name) }

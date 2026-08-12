@@ -18,6 +18,9 @@ struct DetailView: View {
                             .background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
                     }
                     stats(item)
+                    if item.kind == .skill, item.origin == .personal, item.enabled {
+                        AssistantPanel(item: item, model: model)
+                    }
                     actions(item)
                     editor(item)
                     footer(item)

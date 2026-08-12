@@ -36,7 +36,7 @@ struct LoadoutApp: App {
                     .disabled(!model.isDirty)
             }
             CommandMenu("Loadout") {
-                ForEach(Assistant.allCases, id: \.self) { assistant in
+                ForEach(model.assistants) { assistant in
                     Button("Sincronizar tudo com o \(assistant.label) (\(model.gaps(for: assistant).count))") {
                         model.syncAll(to: assistant)
                     }

@@ -32,11 +32,8 @@ public struct Paths: Sendable {
     /// The tree both assistants can point at, so a shared skill has one copy and one edit.
     public var sharedSkills: URL { home.appendingPathComponent(".agents/skills") }
 
-    public func skillsRoot(for assistant: Assistant) -> URL {
-        switch assistant {
-        case .claudeCode: return skills
-        case .codex: return codexSkills
-        }
+    public func skillsRoot(forAssistant id: String) -> URL {
+        home.appendingPathComponent(".\(id)/skills")
     }
 
     public var commands: URL { claude.appendingPathComponent("commands") }

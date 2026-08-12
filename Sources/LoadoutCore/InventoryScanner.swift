@@ -4,10 +4,13 @@ import Foundation
 /// whole picture, and the watcher just asks for another pass when something changes.
 public struct InventoryScanner: Sendable {
     public let paths: Paths
+    /// Discovered once per scanner, so a newly installed assistant shows up on the next reload.
+    public let assistants: [Assistant]
     private var fm: FileManager { .default }
 
     public init(paths: Paths) {
         self.paths = paths
+        self.assistants = AssistantRegistry.discover(paths: paths)
     }
 
     // MARK: - Whole inventory
@@ -41,15 +44,15 @@ public struct InventoryScanner: Sendable {
     func personalSkills() -> [Item] {
         var byName: [String: Item] = [:]
 
-        for assistant in Assistant.allCases {
-            for folder in skillFolders(in: paths.skillsRoot(for: assistant)) {
+        for assistant in assistants {
+            for folder in skillFolders(in: assistant.skillsRoot) {
                 let name = folder.lastPathComponent
                 if var existing = byName[name] {
-                    existing.assistants.insert(assistant)
+                    existing.assistants.insert(assistant.id)
                     byName[name] = existing
                 } else {
                     var item = skill(at: folder, origin: .personal, enabled: true)
-                    item.assistants = [assistant]
+                    item.assistants = [assistant.id]
                     byName[name] = item
                 }
             }

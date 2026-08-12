@@ -21,15 +21,6 @@ struct ItemListView: View {
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
             Spacer()
-            // A legend, because two lettered dots explain nothing on their own.
-            HStack(spacing: 4) {
-                Circle().fill(Color.accentColor).frame(width: 7, height: 7)
-                Text("C Claude · X Codex")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-            .help("Cheio: o assistente carrega a skill. Vazio: não a tem — clica para a pôr lá.")
-            Spacer()
             Picker("Ordenar", selection: $model.order) {
                 ForEach(ItemSort.allCases, id: \.self) { Text($0.label).tag($0) }
             }
@@ -180,37 +171,69 @@ struct Badge: View {
     }
 }
 
-/// Which assistants load this skill. A dark dot is a gap — clicking it fills the gap,
-/// whichever side is missing.
+/// Which assistants load this skill, using each one's real app icon where there is an app.
+/// Only the ones that have it are shown; the gaps live in the detail pane, where there is
+/// room for names.
 struct AssistantDots: View {
     let item: Item
     @Bindable var model: AppModel
 
+    private var present: [Assistant] { model.assistants.filter { item.assistants.contains($0.id) } }
+
     var body: some View {
         HStack(spacing: 3) {
-            ForEach(Assistant.allCases, id: \.self) { assistant in
-                let present = item.assistants.contains(assistant)
-                Button {
-                    model.setAssistant(assistant, on: item, present: !present)
-                } label: {
-                    // Filled versus hollow, not two shades of the same disc: at this size a
-                    // tint difference is not a difference.
-                    Text(assistant.initial)
-                        .font(.system(size: 9, weight: .semibold, design: .rounded))
-                        .frame(width: 16, height: 16)
-                        .background {
-                            if present {
-                                Circle().fill(Color.accentColor)
-                            } else {
-                                Circle().strokeBorder(Color.secondary.opacity(0.45), lineWidth: 1)
-                            }
+            ForEach(present) { assistant in
+                AssistantMark(assistant: assistant, present: true)
+                    .help("\(assistant.label) carrega esta skill")
+            }
+        }
+    }
+}
+
+/// The full picture for the selected skill: every assistant on the machine, named, with the
+/// ones that are missing it offering to take it.
+struct AssistantPanel: View {
+    let item: Item
+    @Bindable var model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text("Assistentes")
+                .font(.caption2)
+                .textCase(.uppercase)
+                .foregroundStyle(.secondary)
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 178), spacing: 8)],
+                alignment: .leading, spacing: 6
+            ) {
+                ForEach(model.assistants) { assistant in
+                    let has = item.assistants.contains(assistant.id)
+                    Button {
+                        model.setAssistant(assistant, on: item, present: !has)
+                    } label: {
+                        HStack(spacing: 7) {
+                            AssistantMark(assistant: assistant, present: has, size: 18)
+                            Text(assistant.label)
+                                .font(.callout)
+                                .foregroundStyle(has ? Color.primary : Color.secondary)
+                                .lineLimit(1)
+                            Spacer(minLength: 4)
+                            Text(has ? "tem" : "pôr lá")
+                                .font(.caption)
+                                .foregroundStyle(has ? Color.secondary : Color.accentColor)
                         }
-                        .foregroundStyle(present ? Color.white : Color.secondary.opacity(0.7))
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(
+                            Color.secondary.opacity(has ? 0.10 : 0.04),
+                            in: RoundedRectangle(cornerRadius: 8)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .help(has
+                          ? "Clica para o \(assistant.label) deixar de carregar esta skill"
+                          : "Clica para pôr esta skill no \(assistant.label)")
                 }
-                .buttonStyle(.plain)
-                .help(present
-                      ? "\(assistant.label) carrega esta skill. Clica para deixar de a carregar."
-                      : "\(assistant.label) não tem esta skill. Clica para a pôr lá.")
             }
         }
     }
