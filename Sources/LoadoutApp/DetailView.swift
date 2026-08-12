@@ -114,6 +114,7 @@ struct DetailView: View {
                     set: { _ in model.toggle(item) }
                 ))
                 .toggleStyle(.switch)
+                .tint(.green)
                 .labelsHidden()
                 .help(item.enabled ? "Disable" : "Enable")
             }

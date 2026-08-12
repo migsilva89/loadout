@@ -353,11 +353,22 @@ struct ItemRow: View {
                 .padding(.vertical, 2)
             VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: Metrics.xs) {
+                    Image(systemName: kindSymbol)
+                        .font(.system(size: 14))
+                        .foregroundStyle(kindTint)
                     Text(item.name)
                         .fontWeight(.medium)
                         .lineLimit(1)
                     if let stateBadge {
                         Badge(text: stateBadge.text, tone: stateBadge.tone)
+                    }
+                    if case .plugin(let pluginName) = item.origin {
+                        Text(pluginName)
+                            .font(.system(size: 10))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 1.5)
+                            .background(Color(nsColor: .systemYellow).opacity(0.18), in: RoundedRectangle(cornerRadius: 5))
+                            .foregroundStyle(Color(nsColor: .systemYellow))
                     }
                     if item.warning != nil {
                         Image(systemName: "exclamationmark.triangle.fill")
@@ -371,7 +382,7 @@ struct ItemRow: View {
                     Text("\(item.usage.count)")
                         .font(.caption)
                         .monospacedDigit()
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(item.usage.count == 0 ? .orange : .secondary)
                         .help(item.usage.summary())
                 }
                 Text(item.description.isEmpty ? item.kind.label : item.description)
@@ -394,6 +405,31 @@ struct ItemRow: View {
         case .personal: return .green
         case .project: return .blue
         case .plugin: return .orange
+        }
+    }
+
+    /// The kind icon: the same symbol the sidebar uses for this row's category, so a glance at
+    /// the leading edge of a row tells kind apart the same way the sidebar column does.
+    private var kindSymbol: String {
+        switch item.kind {
+        case .skill: return "sparkles"
+        case .command: return "terminal"
+        case .agent: return "person.2"
+        case .mcp: return "network"
+        case .plugin: return "puzzlepiece.extension"
+        }
+    }
+
+    /// One system colour per kind, matching the sidebar's palette — off once the row is
+    /// disabled, same as the origin bar.
+    private var kindTint: Color {
+        guard item.enabled else { return .secondary }
+        switch item.kind {
+        case .skill: return .blue
+        case .command: return .green
+        case .agent: return .purple
+        case .mcp: return .orange
+        case .plugin: return Color(nsColor: .systemYellow)
         }
     }
 
