@@ -29,7 +29,6 @@ struct DetailView: View {
                         // Top-aligned with the tiles, breathing room underneath.
                         HStack(alignment: .top, spacing: Metrics.lg) {
                             budgetSection(item)
-                                .padding(.bottom, Metrics.lg)
                             Spacer(minLength: Metrics.md)
                             // Capped so the flexible tiles don't swallow the spacer: the grid
                             // hangs off the trailing edge at a steady width instead.
@@ -41,6 +40,10 @@ struct DetailView: View {
                             detailCards(item)
                         }
                     }
+                    // The breathing room goes under the whole band, not under the budget
+                    // block: the tiles are the taller side, so padding inside the shorter
+                    // block was swallowed without moving anything on screen.
+                    .padding(.bottom, Metrics.lg)
                     if let folder = item.directory ?? item.path?.deletingLastPathComponent() {
                         VStack(alignment: .leading, spacing: Metrics.xs) {
                             Text("Files")
