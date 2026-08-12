@@ -539,12 +539,22 @@ struct AssistantDots: View {
     private var present: [Assistant] { model.visibleAssistants.filter { item.assistants.contains($0.id) } }
 
     var body: some View {
-        HStack(spacing: 3) {
-            ForEach(present) { assistant in
-                AssistantMark(assistant: assistant, present: true)
-                    .help("\(assistant.label) loads this skill")
-                    .pointingHand()
+        // Gathered into one pill rather than left loose: three or four bare icons in a row read
+        // as clutter competing with the name, where a single enclosed group reads as one fact.
+        if !present.isEmpty {
+            HStack(spacing: 2) {
+                ForEach(present) { assistant in
+                    AssistantMark(assistant: assistant, present: true, size: 13)
+                }
             }
+            .padding(.horizontal, 4)
+            .padding(.vertical, 2)
+            .background(Color.primary.opacity(0.07), in: Capsule())
+            .overlay(Capsule().strokeBorder(Color(nsColor: .separatorColor)))
+            .help(present.count == 1
+                  ? "\(present[0].label) loads this skill"
+                  : "Loaded by \(present.map(\.label).joined(separator: ", "))")
+            .pointingHand()
         }
     }
 }

@@ -230,9 +230,37 @@ struct DetailView: View {
     /// a path whose head is already the item's name.
     private func filesTile(_ item: Item, folder: URL) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("FILES")
-                .font(.system(size: captionSize, weight: captionWeight))
-                .foregroundStyle(.primary.opacity(captionOpacity))
+            // The two actions live here rather than in the document's toolbar: they open and
+            // reveal this folder, so they belong beside it instead of beside the file.
+            HStack(spacing: Metrics.xs) {
+                Text("FILES")
+                    .font(.system(size: captionSize, weight: captionWeight))
+                    .foregroundStyle(.primary.opacity(captionOpacity))
+                Spacer()
+                Button { model.openInEditor() } label: {
+                    Label {
+                        Text("Open")
+                    } icon: {
+                        AppIconView(path: AppIconCache.editor(for: item.directory ?? item.path))
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help(editorHelp(item))
+                .pointingHand()
+
+                Button { model.revealInFinder() } label: {
+                    Label {
+                        Text("Finder")
+                    } icon: {
+                        AppIconView(path: AppIconCache.finder)
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help(revealHelp(item))
+                .pointingHand()
+            }
             Text(displayPath(folder))
                 .font(.system(size: 12, design: .monospaced))
                 .foregroundStyle(.secondary)
@@ -336,35 +364,13 @@ struct DetailView: View {
                 get: { model.showsPreview },
                 set: { model.showsPreview = $0 }
             )) {
-                Text("Read").tag(true)
-                Text("Edit").tag(false)
+                Image(systemName: "eye").tag(true)
+                Image(systemName: "square.and.pencil").tag(false)
             }
             .pickerStyle(.segmented)
             .labelsHidden()
             .fixedSize()
             .help(model.showsPreview ? "View raw file" : "View as Markdown")
-            .pointingHand()
-
-            Button { model.openInEditor() } label: {
-                Label {
-                    Text("Open folder")
-                } icon: {
-                    AppIconView(path: AppIconCache.editor(for: item.directory ?? item.path))
-                }
-            }
-            .buttonStyle(.bordered)
-            .help(editorHelp(item))
-            .pointingHand()
-
-            Button { model.revealInFinder() } label: {
-                Label {
-                    Text("Show folder")
-                } icon: {
-                    AppIconView(path: AppIconCache.finder)
-                }
-            }
-            .buttonStyle(.bordered)
-            .help(revealHelp(item))
             .pointingHand()
 
             if item.isEditable {
