@@ -21,13 +21,19 @@ struct DetailView: View {
                     // No outer boxed section here: the grid's own tiles are the cards, and
                     // wrapping them in another same-colour box just merged the two into one
                     // undifferentiated slab.
-                    detailCards(item)
-                    if item.budget.descriptionCharacters > 0 || item.budget.bodyCharacters > 0 {
-                        VStack(alignment: .leading, spacing: Metrics.xs) {
-                            Text("Token budget")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                            budgetRows(item)
+                    // One band instead of two stacked blocks: the cards keep their intrinsic
+                    // width on the left and the budget takes the trailing corner that used to
+                    // sit empty on a wide pane. On a narrow pane the same two blocks stack,
+                    // which is exactly the old layout.
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .top, spacing: Metrics.lg) {
+                            detailCards(item)
+                            Spacer(minLength: Metrics.md)
+                            budgetSection(item)
+                        }
+                        VStack(alignment: .leading, spacing: Metrics.md) {
+                            detailCards(item)
+                            budgetSection(item)
                         }
                     }
                     if let folder = item.directory ?? item.path?.deletingLastPathComponent() {
@@ -195,6 +201,18 @@ struct DetailView: View {
         return "\(uses) in \(projects)\(last)"
     }
 
+    @ViewBuilder
+    private func budgetSection(_ item: Item) -> some View {
+        if item.budget.descriptionCharacters > 0 || item.budget.bodyCharacters > 0 {
+            VStack(alignment: .leading, spacing: Metrics.xs) {
+                Text("Token budget")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                budgetRows(item)
+            }
+        }
+    }
+
     /// The description is loaded in every session whether the skill fires or not; the body only
     /// on trigger. Each cost drawn as a bar against the documented limit — every track the same
     /// width, so the fill is the only thing that varies — green while inside, orange past it.
@@ -213,7 +231,6 @@ struct DetailView: View {
                 text: "\(item.budget.bodyLines) / \(Budget.maxBodyLines) lines"
             )
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .help(budgetHelp(item))
     }
 
