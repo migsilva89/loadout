@@ -21,6 +21,15 @@ struct ItemListView: View {
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
             Spacer()
+            // A legend, because two lettered dots explain nothing on their own.
+            HStack(spacing: 4) {
+                Circle().fill(Color.accentColor).frame(width: 7, height: 7)
+                Text("C Claude · X Codex")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .help("Cheio: o assistente carrega a skill. Vazio: não a tem — clica para a pôr lá.")
+            Spacer()
             Picker("Ordenar", selection: $model.order) {
                 ForEach(ItemSort.allCases, id: \.self) { Text($0.label).tag($0) }
             }
@@ -184,19 +193,24 @@ struct AssistantDots: View {
                 Button {
                     model.setAssistant(assistant, on: item, present: !present)
                 } label: {
+                    // Filled versus hollow, not two shades of the same disc: at this size a
+                    // tint difference is not a difference.
                     Text(assistant.initial)
                         .font(.system(size: 9, weight: .semibold, design: .rounded))
-                        .frame(width: 15, height: 15)
-                        .background(
-                            present ? Color.accentColor : Color.secondary.opacity(0.16),
-                            in: Circle()
-                        )
-                        .foregroundStyle(present ? Color.white : Color.secondary)
+                        .frame(width: 16, height: 16)
+                        .background {
+                            if present {
+                                Circle().fill(Color.accentColor)
+                            } else {
+                                Circle().strokeBorder(Color.secondary.opacity(0.45), lineWidth: 1)
+                            }
+                        }
+                        .foregroundStyle(present ? Color.white : Color.secondary.opacity(0.7))
                 }
                 .buttonStyle(.plain)
                 .help(present
-                      ? "Está no \(assistant.label) — clica para deixar de estar"
-                      : "Não está no \(assistant.label) — clica para pôr")
+                      ? "\(assistant.label) carrega esta skill. Clica para deixar de a carregar."
+                      : "\(assistant.label) não tem esta skill. Clica para a pôr lá.")
             }
         }
     }
