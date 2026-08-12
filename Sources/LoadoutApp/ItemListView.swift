@@ -59,6 +59,8 @@ struct ItemListView: View {
         .padding(.vertical, 5)
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 7))
         .frame(maxWidth: .infinity)
+        .help("Filter the list as you type (⌘F)")
+        .pointingHand()
     }
 
     private var searchPlaceholder: String {
@@ -86,7 +88,8 @@ struct ItemListView: View {
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
-        .help("Sort the list")
+        .help("Change the order the list is sorted in")
+        .pointingHand()
     }
 
     /// Only skills carry assistants, so this only appears while the sidebar is on Skills —
@@ -99,10 +102,13 @@ struct ItemListView: View {
             Menu {
                 Picker("Assistant", selection: $model.assistantFilter) {
                     Text("Any").tag(AssistantFilter.any)
+                        .help("Show skills regardless of which assistants load them")
                     Text("In more than one").tag(AssistantFilter.multiple)
+                        .help("Show only skills loaded by more than one assistant")
                     Divider()
                     ForEach(model.visibleAssistants) { assistant in
                         Text(assistant.label).tag(AssistantFilter.one(assistant.id))
+                            .help("Show only skills that \(assistant.label) loads")
                     }
                 }
                 .pickerStyle(.inline)
@@ -118,6 +124,7 @@ struct ItemListView: View {
             .menuStyle(.borderlessButton)
             .fixedSize()
             .help("Only show skills a particular assistant loads")
+            .pointingHand()
         }
     }
 
@@ -273,6 +280,7 @@ private struct FilterChip: View {
         .buttonStyle(.borderless)
         // The short label is deliberately terse; the hover tooltip says the whole sentence.
         .help(hint)
+        .pointingHand()
     }
 }
 
@@ -333,9 +341,17 @@ struct PluginManagerRow: View {
             ))
             .toggleStyle(.switch)
             .labelsHidden()
-            .help(plugin.enabled ? "Disable the \(plugin.name) plugin" : "Enable the \(plugin.name) plugin")
+            .help(
+                plugin.enabled
+                    ? "Turn off the \(plugin.name) plugin so Claude stops loading what it ships"
+                    : "Turn on the \(plugin.name) plugin so Claude loads what it ships"
+            )
+            .pointingHand()
         }
         .padding(.vertical, Metrics.xs)
+        .contentShape(Rectangle())
+        .help("\(plugin.name) — v\(plugin.version), \(itemCount) \(itemCount == 1 ? "item" : "items")")
+        .pointingHand()
     }
 }
 
@@ -393,6 +409,16 @@ struct ItemRow: View {
         }
         .padding(.vertical, Metrics.xs)
         .opacity(item.enabled ? 1 : 0.5)
+        .contentShape(Rectangle())
+        .help(rowHint)
+        .pointingHand()
+    }
+
+    /// The row is truncated on both the name and, for skills and commands, the path — this is
+    /// the only place either is guaranteed to be readable in full.
+    private var rowHint: String {
+        let path = (item.path ?? item.directory)?.path
+        return path.map { "\(item.name) — \($0)" } ?? item.name
     }
 
     /// Origin used to be spelled out in a badge on every row. The bar says it instead — one
@@ -485,6 +511,7 @@ struct AssistantDots: View {
             ForEach(present) { assistant in
                 AssistantMark(assistant: assistant, present: true)
                     .help("\(assistant.label) loads this skill")
+                    .pointingHand()
             }
         }
     }
@@ -551,6 +578,7 @@ struct AssistantPanel: View {
                     }
                     .buttonStyle(.plain)
                     .help(help(assistant, has: has))
+                    .pointingHand()
                 }
             }
             .padding(.top, Metrics.xs)
@@ -558,10 +586,14 @@ struct AssistantPanel: View {
             HStack(spacing: Metrics.xs) {
                 ForEach(present) { assistant in
                     AssistantMark(assistant: assistant, present: true)
+                        .pointingHand()
                 }
                 Text("\(present.count) of \(model.visibleAssistants.count) assistants")
                     .foregroundStyle(.secondary)
             }
+            .contentShape(Rectangle())
+            .help("Show every assistant on this machine, and which of them load this skill")
+            .pointingHand()
         }
     }
 }

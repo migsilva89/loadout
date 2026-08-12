@@ -48,6 +48,9 @@ struct SidebarView: View {
                 .foregroundStyle(.secondary)
         }
         .padding(.vertical, 3)
+        .contentShape(Rectangle())
+        .help(selection.rowHint)
+        .pointingHand()
         .tag(selection)
     }
 }
@@ -77,6 +80,17 @@ extension Selection: Identifiable {
         case .agents: return .purple
         case .mcp: return .orange
         case .plugins: return Color(nsColor: .systemYellow)
+        }
+    }
+
+    /// What clicking this row switches the list to, said as a sentence for the hover tooltip.
+    var rowHint: String {
+        switch self {
+        case .skills: return "Skills Claude and other assistants load automatically when they're relevant"
+        case .commands: return "Slash commands available to Claude in every project"
+        case .agents: return "Subagents Claude can delegate a task to"
+        case .mcp: return "MCP servers configured for Claude"
+        case .plugins: return "Plugins installed through Claude Code, and their enabled state"
         }
     }
 

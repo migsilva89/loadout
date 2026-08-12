@@ -40,6 +40,7 @@ private struct AppearanceTab: View {
             .onChange(of: appearance) { _, newValue in
                 (AppAppearance(rawValue: newValue) ?? .system).apply()
             }
+            .help("Sets the window's light or dark appearance immediately, and remembers it for next launch")
             Text("System follows the Mac's own setting. LOADOUT_APPEARANCE, when set, overrides this at launch.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -78,6 +79,7 @@ private struct UsageTab: View {
                 }
             }
             .onChange(of: windowRaw) { _, _ in model.reindexUsage(windowDays: windowDays) }
+            .help("How far back to scan Claude Code transcripts for usage counts; stored in this Mac's preferences")
 
             LabeledContent("Indexed transcripts", value: "\(model.indexedFileCount)")
             LabeledContent("Indexed events", value: "\(model.indexedEventCount)")
@@ -92,6 +94,8 @@ private struct UsageTab: View {
                 Spacer()
                 Button("Reindex now") { model.reindexUsage(windowDays: windowDays) }
                     .disabled(model.indexProgress != nil)
+                    .help("Rescan transcripts now, using the window chosen above")
+                    .pointingHand()
             }
         }
         .padding(20)
@@ -154,6 +158,10 @@ private struct AssistantSettingsRow: View {
             ))
             .toggleStyle(.checkbox)
             .labelsHidden()
+            .help(
+                "Show or hide \(assistant.label) in the list rows and detail panel. "
+                    + "Sharing and syncing keep working either way."
+            )
         }
         .padding(.vertical, 3)
     }
@@ -191,9 +199,13 @@ private struct BackupsTab: View {
 
             HStack {
                 Button("Show in Finder") { model.revealBackups() }
+                    .help("Reveal \(model.paths.backups.path) in Finder")
+                    .pointingHand()
                 Spacer()
                 Button("Delete snapshots older than 30 days") { confirmingDelete = true }
                     .disabled(isDeleting || isCounting)
+                    .help("Permanently remove backup snapshots older than 30 days, after confirming")
+                    .pointingHand()
             }
 
             if let resultMessage {

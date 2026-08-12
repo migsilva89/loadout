@@ -34,12 +34,16 @@ struct NewSkillSheet: View {
                 Spacer()
                 Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
+                    .help("Close without creating a skill")
+                    .pointingHand()
                 Button("Create") {
                     model.createSkill(name: name, description: description)
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(!isNameValid)
+                .help("Create the skill folder and open it for editing")
+                .pointingHand()
             }
         }
         .padding(20)
@@ -101,18 +105,26 @@ struct CopilotSheet: View {
                     model.copilot.cancel()
                     dismiss()
                 }
+                .help("Close without saving anything")
+                .pointingHand()
                 if running {
                     Button("Cancel") { model.copilot.cancel() }
+                        .help("Stop the running request to Claude")
+                        .pointingHand()
                 } else {
                     Button("Ask") { ask() }
                         .keyboardShortcut(.defaultAction)
                         .disabled(prompt.trimmingCharacters(in: .whitespaces).isEmpty)
+                        .help("Run claude -p with this prompt in the skill's folder (⌘↵)")
+                        .pointingHand()
                 }
                 Button("Copy answer") {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(answer, forType: .string)
                 }
                 .disabled(answer.isEmpty)
+                .help("Copy Claude's answer to the clipboard")
+                .pointingHand()
             }
         }
         .padding(20)

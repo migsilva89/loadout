@@ -29,7 +29,8 @@ struct ContentView: View {
                     Label("New skill", systemImage: "plus")
                 }
                 .controlSize(.regular)
-                .help("New skill (⌘N)")
+                .help("Create a new personal skill (⌘N)")
+                .pointingHand()
             }
         }
         .background(WindowPlacement())
@@ -85,7 +86,8 @@ struct ContextPicker: View {
         .menuStyle(.button)
         .buttonStyle(.bordered)
         .fixedSize()
-        .help("What Claude sees in this folder")
+        .help("Switch which project's files Claude sees, or go back to Global")
+        .pointingHand()
     }
 }
 

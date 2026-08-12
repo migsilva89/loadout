@@ -116,7 +116,12 @@ struct DetailView: View {
                 .toggleStyle(.switch)
                 .tint(.green)
                 .labelsHidden()
-                .help(item.enabled ? "Disable" : "Enable")
+                .help(
+                    item.enabled
+                        ? "Move this skill to skills-off so Claude stops loading it"
+                        : "Move this skill back to skills so Claude loads it again"
+                )
+                .pointingHand()
             }
         }
     }
@@ -255,6 +260,7 @@ struct DetailView: View {
             .labelsHidden()
             .fixedSize()
             .help(model.showsPreview ? "View raw file" : "View as Markdown")
+            .pointingHand()
 
             Button { model.openInEditor() } label: {
                 Label {
@@ -265,6 +271,7 @@ struct DetailView: View {
             }
             .buttonStyle(.bordered)
             .help(editorHelp(item))
+            .pointingHand()
 
             Button { model.revealInFinder() } label: {
                 Label {
@@ -274,6 +281,8 @@ struct DetailView: View {
                 }
             }
             .buttonStyle(.bordered)
+            .help(revealHelp(item))
+            .pointingHand()
 
             if item.isEditable {
                 Button { model.isAskingClaude = true } label: {
@@ -284,6 +293,8 @@ struct DetailView: View {
                     }
                 }
                 .buttonStyle(.bordered)
+                .help("Ask Claude for help with this skill, in a sheet that writes nothing until you decide")
+                .pointingHand()
             }
 
             Spacer()
@@ -292,6 +303,8 @@ struct DetailView: View {
                     .buttonStyle(.borderedProminent)
                     .disabled(!model.isDirty)
                     .keyboardShortcut("s", modifiers: .command)
+                    .help("Write your changes to the file on disk (⌘S)")
+                    .pointingHand()
             }
         }
         .controlSize(.small)
@@ -336,6 +349,13 @@ struct DetailView: View {
     private func editorHelp(_ item: Item) -> String {
         guard let path = AppIconCache.editor(for: item.path) else { return "Open in the default app" }
         return "Open in \(URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent)"
+    }
+
+    /// Names the folder Finder will reveal, since neither the icon nor the label says where
+    /// that actually is.
+    private func revealHelp(_ item: Item) -> String {
+        guard let location = item.directory ?? item.path else { return "Reveal this item in Finder" }
+        return "Reveal \(displayPath(location)) in Finder"
     }
 
     private func icon(for kind: ItemKind) -> String {
