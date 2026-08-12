@@ -57,7 +57,6 @@ public enum ItemFilter: String, Equatable, Hashable, Sendable, CaseIterable {
     case mine
     case thisProject
     case fromPlugins
-    case shared
     case neverUsed
     case disabled
 
@@ -69,11 +68,40 @@ public enum ItemFilter: String, Equatable, Hashable, Sendable, CaseIterable {
         case .mine: return "Personal"
         case .thisProject: return "This project"
         case .fromPlugins: return "From plugins"
-        case .shared: return "In 2+ assistants"
         case .neverUsed: return "Never used"
         case .disabled: return "Off"
         }
     }
+
+    /// The same choice, said in as few words as possible. "In 2+ assistants" used to live here
+    /// too, but a chip that reads "2+" to a first-time visitor answers nothing — it moved out
+    /// to its own assistant menu, and the five that remain fit one line at the column's normal
+    /// width on their full names, so there is no longer a reason to shorten them.
+    public var shortTitle: String { title }
+
+    /// The full sentence a short chip label can't carry on its own, shown on hover.
+    public var hint: String {
+        switch self {
+        case .all: return "Everything in this list"
+        case .mine: return "Created and kept locally, not from a project or plugin"
+        case .thisProject: return "Specific to the project that's currently open"
+        case .fromPlugins: return "Comes from an installed plugin"
+        case .neverUsed: return "Never used in the last 90 days"
+        case .disabled: return "Currently turned off"
+        }
+    }
+}
+
+/// The assistant menu next to sort: independent of the origin/state chip above the list, and
+/// combined with it rather than replacing it — "Personal" plus "Codex" means personal skills
+/// Codex loads, not one or the other. Only skills carry assistants, so this only has an effect
+/// (and is only shown) while the sidebar is on `.skills`.
+public enum AssistantFilter: Hashable, Sendable {
+    case any
+    /// What the old `.shared` chip did: skills more than one assistant loads.
+    case multiple
+    /// One specific assistant, by id.
+    case one(String)
 }
 
 public enum Filtering {
@@ -113,12 +141,22 @@ public enum Filtering {
                 if case .plugin = $0.origin { return true }
                 return false
             }
-        case .shared:
-            return items.filter { $0.assistants.count > 1 }
         case .neverUsed:
             return items.filter { $0.usage.neverUsed }
         case .disabled:
             return items.filter { !$0.enabled }
+        }
+    }
+
+    /// The assistant menu, applied independently of the chip.
+    public static func filter(_ items: [Item], by assistant: AssistantFilter) -> [Item] {
+        switch assistant {
+        case .any:
+            return items
+        case .multiple:
+            return items.filter { $0.assistants.count > 1 }
+        case .one(let id):
+            return items.filter { $0.assistants.contains(id) }
         }
     }
 
@@ -136,10 +174,15 @@ public enum Filtering {
     }
 
     public static func apply(
-        _ items: [Item], selection: Selection, filter chip: ItemFilter, query: String, order: ItemSort
+        _ items: [Item], selection: Selection, filter chip: ItemFilter,
+        assistant: AssistantFilter = .any, query: String, order: ItemSort
     ) -> [Item] {
         sort(
-            filter(slice(items, for: selection), by: chip).filter { matches($0, query: query) },
+            filter(
+                filter(slice(items, for: selection), by: chip),
+                by: assistant
+            )
+            .filter { matches($0, query: query) },
             by: order
         )
     }

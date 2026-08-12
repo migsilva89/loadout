@@ -18,6 +18,9 @@ final class AppModel {
     /// The origin/state chip above the list. Resets to `.all` whenever the sidebar row
     /// changes, so a stale "Disabled" chip never silently hides everything in a new kind.
     var filter: ItemFilter = .all
+    /// The assistant menu next to sort. Independent of `filter`, and only meaningful for
+    /// skills — resets to `.any` alongside `filter` whenever the sidebar row changes.
+    var assistantFilter: AssistantFilter = .any
     var selectedID: String?
     var query: String = ""
     var order: ItemSort = .usage
@@ -91,7 +94,10 @@ final class AppModel {
     }
 
     var visibleItems: [Item] {
-        Filtering.apply(items, selection: selection, filter: filter, query: query, order: order)
+        Filtering.apply(
+            items, selection: selection, filter: filter,
+            assistant: assistantFilter, query: query, order: order
+        )
     }
 
     var selected: Item? {

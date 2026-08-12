@@ -17,7 +17,13 @@ struct DetailView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
                     }
-                    section(header: { Text("Details") }) {
+                    // No outer boxed section here: the grid's own tiles are the cards, and
+                    // wrapping them in another same-colour box just merged the two into one
+                    // undifferentiated slab.
+                    VStack(alignment: .leading, spacing: Metrics.xs) {
+                        Text("Details")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.secondary)
                         detailRows(item)
                     }
                     if item.kind == .skill, item.origin == .personal, item.enabled {
@@ -25,11 +31,17 @@ struct DetailView: View {
                             AssistantPanel(item: item, model: model)
                         }
                     }
-                    section(header: { documentHeader(item) }) {
-                        VStack(alignment: .leading, spacing: Metrics.sm) {
-                            actions(item)
+                    // The toolbar — file name, size, and every button that acts on the file —
+                    // sits above the box now, not inside it: the box holds the document, the
+                    // way a toolbar sits above the document it controls rather than inside it.
+                    VStack(alignment: .leading, spacing: Metrics.xs) {
+                        documentToolbar(item)
+                        VStack(alignment: .leading, spacing: 0) {
                             editor(item)
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(Metrics.sm)
+                        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
                     }
                 }
                 // A fixed inset on both edges instead of a centred, capped column: the
@@ -108,44 +120,79 @@ struct DetailView: View {
         }
     }
 
-    /// The frontmatter section: what the old header's second line and footer used to say,
-    /// now as a stock, labelled list of fields instead of a caption to be parsed.
+    /// The frontmatter section: what the old header's second line and footer used to say, now
+    /// as a reflowing grid of small cards instead of label/value rows. A grid scans the way a
+    /// glance actually works — several facts at once, not one column read top to bottom — and
+    /// it uses a wide pane's width instead of leaving it as dead margin either side of a list.
+    private var detailColumns: [GridItem] {
+        [GridItem(.adaptive(minimum: 150), spacing: Metrics.xs)]
+    }
+
+    // `LazyVGrid`, unlike `Grid`, has no cell-spanning modifier — a tile inside it can't be
+    // told to stretch across the row's other columns. Location is rendered as its own
+    // full-width tile below the grid instead, which reads the same either way: a block of
+    // small cards, with the one long value sitting underneath at the pane's own width.
     @ViewBuilder
     private func detailRows(_ item: Item) -> some View {
-        detailRow("Type", item.kind.label)
-        Divider()
-        detailRow("Source", originText(item))
-        Divider()
-        detailRow("State", item.enabled ? "Enabled" : "Disabled")
-        if let modified = item.modified {
-            Divider()
-            detailRow("Modified", Usage.relative(modified))
-        }
-        Divider()
-        detailRow("Usage", item.usage.summary())
-        if let location = item.path ?? item.directory {
-            Divider()
-            detailRow("Location", displayPath(location), selectable: true)
+        VStack(alignment: .leading, spacing: Metrics.xs) {
+            LazyVGrid(columns: detailColumns, alignment: .leading, spacing: Metrics.xs) {
+                detailTile("Type", item.kind.label)
+                detailTile("Source", originText(item))
+                detailTile("State", item.enabled ? "Enabled" : "Disabled")
+                if let modified = item.modified {
+                    detailTile("Modified", Usage.relative(modified))
+                }
+                // What used to be one "Usage" row, split into the three facts it was
+                // summarising — each is its own small answer, not a sentence to parse.
+                detailTile("Uses", item.usage.count == 1 ? "1 use" : "\(item.usage.count) uses")
+                detailTile("Last used", item.usage.lastUsed.map { Usage.relative($0) } ?? "Never")
+                detailTile("Projects", "\(item.usage.projectCount)")
+            }
+            if let location = item.path ?? item.directory {
+                locationTile(location)
+            }
         }
     }
 
-    @ViewBuilder
-    private func detailRow(_ label: String, _ value: String, selectable: Bool = false) -> some View {
-        HStack(alignment: .top) {
-            Text(label)
-            Spacer(minLength: Metrics.md)
-            if selectable {
-                Text(value)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.trailing)
-                    .textSelection(.enabled)
-            } else {
-                Text(value)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.trailing)
-            }
+    private func detailTile(_ caption: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(caption.uppercased())
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.primary.opacity(0.75))
+            Text(value)
+                .font(.body.weight(.medium))
+                .lineLimit(2)
         }
-        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 9)
+        .padding(.horizontal, 11)
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 9))
+        // A hairline border, not just a fill: a `.controlBackgroundColor` tile can sit on
+        // almost the same tone as the pane behind it in light mode, and the fill alone stops
+        // being enough to read as its own card. The border guarantees the edge either way.
+        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Color(nsColor: .separatorColor)))
+    }
+
+    /// The path gets its own full-width tile — a monospaced, truncate-from-the-middle string
+    /// doesn't sit well next to short values in a two- or four-column grid, and it is the one
+    /// value worth selecting and copying.
+    private func locationTile(_ location: URL) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("LOCATION")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.primary.opacity(0.75))
+            Text(displayPath(location))
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 9)
+        .padding(.horizontal, 11)
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 9))
+        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Color(nsColor: .separatorColor)))
     }
 
     /// "Personal", not "Personal skill": the section header already reads "Details", and the
@@ -164,15 +211,22 @@ struct DetailView: View {
         )
     }
 
-    /// The document section's header: the one place the file's name and size live, so it is
-    /// obvious where the document itself begins, below the details above it.
-    private func documentHeader(_ item: Item) -> some View {
-        HStack {
-            Text(item.path?.lastPathComponent ?? (item.kind == .mcp ? "Configuration" : "Document"))
-            Spacer()
-            if let size = fileSize(item) {
-                Text(size)
+    /// The file's name and size, and every control that acts on it, in one band above the
+    /// document box — the way a toolbar relates to the document it controls. They share a
+    /// line at the pane's normal width; only a narrower pane would force them apart.
+    private func documentToolbar(_ item: Item) -> some View {
+        HStack(spacing: Metrics.md) {
+            HStack(spacing: Metrics.xs) {
+                Text(item.path?.lastPathComponent ?? (item.kind == .mcp ? "Configuration" : "Document"))
+                if let size = fileSize(item) {
+                    Text(size)
+                }
             }
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.secondary)
+
+            Spacer(minLength: Metrics.sm)
+            actions(item)
         }
     }
 

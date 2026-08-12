@@ -35,6 +35,7 @@ struct ItemListView: View {
     private var listHeader: some View {
         HStack(spacing: Metrics.xs) {
             searchField
+            assistantMenu
             sortMenu
         }
         .padding(.horizontal, Metrics.sm)
@@ -86,6 +87,48 @@ struct ItemListView: View {
         .menuStyle(.borderlessButton)
         .fixedSize()
         .help("Sort the list")
+    }
+
+    /// Only skills carry assistants, so this only appears while the sidebar is on Skills —
+    /// showing it elsewhere would be a control with nothing to act on. What used to be a
+    /// "2+" chip nobody could decode now reads as a real sentence, and picking one assistant
+    /// by name is new: the old chip could only ever say "more than one".
+    @ViewBuilder
+    private var assistantMenu: some View {
+        if model.selection == .skills {
+            Menu {
+                Picker("Assistant", selection: $model.assistantFilter) {
+                    Text("Any").tag(AssistantFilter.any)
+                    Text("In more than one").tag(AssistantFilter.multiple)
+                    Divider()
+                    ForEach(model.visibleAssistants) { assistant in
+                        Text(assistant.label).tag(AssistantFilter.one(assistant.id))
+                    }
+                }
+                .pickerStyle(.inline)
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "person.crop.circle")
+                    Text(assistantMenuLabel)
+                    Image(systemName: "chevron.down")
+                        .font(.caption2)
+                }
+                .foregroundStyle(.secondary)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("Only show skills a particular assistant loads")
+        }
+    }
+
+    private var assistantMenuLabel: String {
+        switch model.assistantFilter {
+        case .any: return "Assistant: Any"
+        case .multiple: return "Assistant: In more than one"
+        case .one(let id):
+            let label = model.visibleAssistants.first { $0.id == id }?.label ?? id
+            return "Assistant: \(label)"
+        }
     }
 
     private var pluginHeader: some View {
@@ -153,23 +196,28 @@ struct ItemListView: View {
 struct FilterChipsView: View {
     @Bindable var model: AppModel
 
-    /// All · Personal · From plugins · Never used · Off · In 2+ assistants — origin chips lead,
-    /// state chips trail, and "In 2+ assistants" sits last because it is the one a person
-    /// reaches for least often.
+    /// All · Personal · From plugins · Never used · Off — origin chips lead, state chips
+    /// trail. "In 2+ assistants" used to close the row here; it's the assistant menu next to
+    /// sort now, since a "2+" chip explained nothing on its own and still wrapped to a second
+    /// line at the column's normal width.
     private var chips: [ItemFilter] {
         var base: [ItemFilter] = [.all, .mine]
         if model.context != nil { base.append(.thisProject) }
-        base.append(contentsOf: [.fromPlugins, .neverUsed, .disabled, .shared])
+        base.append(contentsOf: [.fromPlugins, .neverUsed, .disabled])
         return base
     }
 
     var body: some View {
         // Wrapping, not scrolling: a filter you have to scroll sideways to discover is a
         // filter nobody uses, and the last chip was falling off the edge of the column.
-        ChipFlow(spacing: 6, lineSpacing: 6) {
+        // Now that "2+" moved out to the assistant menu, the five that remain on their full
+        // names still need a tighter chip to clear the list column at its normal width —
+        // ChipFlow is still there as the fallback for anything narrower.
+        ChipFlow(spacing: 4, lineSpacing: 5) {
             ForEach(chips, id: \.self) { chip in
                 FilterChip(
-                    title: chip.title,
+                    title: chip.shortTitle,
+                    hint: chip.hint,
                     count: model.count(for: chip),
                     isActive: model.filter == chip
                 ) {
@@ -177,7 +225,7 @@ struct FilterChipsView: View {
                 }
             }
         }
-        .padding(.horizontal, Metrics.sm)
+        .padding(.horizontal, 8)
         .padding(.top, 10)
         .padding(.bottom, 12)
     }
@@ -185,6 +233,7 @@ struct FilterChipsView: View {
 
 private struct FilterChip: View {
     let title: String
+    let hint: String
     let count: Int
     let isActive: Bool
     let action: () -> Void
@@ -201,17 +250,29 @@ private struct FilterChip: View {
                     .monospacedDigit()
                     .foregroundStyle(isActive ? Color.white.opacity(0.8) : .secondary)
             }
-            .font(.system(size: 12))
-            .padding(.horizontal, 11)
-            .padding(.vertical, 5)
+            .font(.system(size: 11))
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3.5)
             .background(
-                isActive ? Color.accentColor : Color(nsColor: .quaternaryLabelColor),
+                // `.quaternaryLabelColor`, and later `.controlColor`, both turned out close
+                // to invisible against a white pane in light mode — barely a chip at all. A
+                // tint of `.primary` itself always has some presence against the surface
+                // behind it, in either appearance; the hairline border below is the part
+                // that actually guarantees the edge is visible.
+                isActive ? Color.accentColor : Color.primary.opacity(0.07),
                 in: Capsule()
             )
+            .overlay {
+                if !isActive {
+                    Capsule().strokeBorder(Color(nsColor: .separatorColor))
+                }
+            }
             .foregroundStyle(isActive ? Color.white : Color.primary)
             .opacity(isEmpty ? 0.45 : 1)
         }
         .buttonStyle(.borderless)
+        // The short label is deliberately terse; the hover tooltip says the whole sentence.
+        .help(hint)
     }
 }
 

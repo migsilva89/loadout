@@ -9,8 +9,16 @@ import LoadoutCore
 struct MarkdownView: View {
     let text: String
 
+    /// A comfortable reading measure — roughly 74 characters at the body size below — so a
+    /// paragraph in a wide window still reads as a column of text, not a line stretched edge
+    /// to edge. Only text content is capped; the section it sits in still fills the pane.
+    private static let measure: CGFloat = 560
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        // Spacing between blocks now lives on each block itself (headings need generous room
+        // above and little below; list items want a tight, even rhythm) rather than one
+        // uniform gap that made every heading read like the paragraph before it.
+        VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(Self.blocks(in: text).enumerated()), id: \.offset) { _, block in
                 view(for: block)
             }
@@ -56,60 +64,106 @@ struct MarkdownView: View {
             .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 9))
 
         case .heading(let level, let text):
+            let style = headingStyle(level)
             Text(inline(text))
-                .font(.system(size: [0: 20, 1: 20, 2: 17, 3: 15][level] ?? 13.5, weight: .semibold))
-                .padding(.top, level <= 2 ? 6 : 2)
+                .font(.system(size: style.size, weight: .semibold))
+                .foregroundStyle(.primary)
+                .padding(.top, style.spaceAbove)
+                .padding(.bottom, style.spaceBelow)
 
         case .paragraph(let text):
+            // Body copy reads as `.primary`, not `.secondary` — secondary reads fine on
+            // dark surfaces but washes out for long-form text on a light one. `.secondary`
+            // stays reserved for captions and metadata, not the words being read.
             Text(inline(text))
-                .font(.system(size: 13))
-                .lineSpacing(3)
+                .font(.system(size: 14))
+                .lineSpacing(5.5)
+                .foregroundStyle(.primary)
+                .frame(maxWidth: Self.measure, alignment: .leading)
+                .padding(.bottom, 6)
 
         case .bullet(let text):
+            // A hanging indent, not a first-line one: the bullet sits in its own column, and
+            // wrapped lines fall under the text rather than back under the dot.
             HStack(alignment: .top, spacing: 8) {
-                Text("•").foregroundStyle(.secondary)
-                Text(inline(text)).font(.system(size: 13)).lineSpacing(3)
+                Text("•")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+                Text(inline(text))
+                    .font(.system(size: 14))
+                    .lineSpacing(5.5)
+                    .foregroundStyle(.primary)
             }
+            .frame(maxWidth: Self.measure, alignment: .leading)
             .padding(.leading, 4)
+            .padding(.bottom, 6)
 
         case .numbered(let marker, let text):
             HStack(alignment: .top, spacing: 8) {
                 Text(marker)
                     .font(.system(size: 13, design: .monospaced))
                     .foregroundStyle(.secondary)
-                Text(inline(text)).font(.system(size: 13)).lineSpacing(3)
+                Text(inline(text))
+                    .font(.system(size: 14))
+                    .lineSpacing(5.5)
+                    .foregroundStyle(.primary)
             }
+            .frame(maxWidth: Self.measure, alignment: .leading)
             .padding(.leading, 4)
+            .padding(.bottom, 6)
 
         case .quote(let text):
             HStack(spacing: 10) {
                 Rectangle().fill(Color.accentColor.opacity(0.5)).frame(width: 3)
                 Text(inline(text))
-                    .font(.system(size: 13))
+                    .font(.system(size: 14))
+                    .lineSpacing(5.5)
                     .italic()
                     .foregroundStyle(.secondary)
             }
+            .frame(maxWidth: Self.measure, alignment: .leading)
+            .padding(.bottom, 6)
 
         case .code(let code):
             ScrollView(.horizontal, showsIndicators: false) {
                 Text(code)
-                    .font(.system(size: 11.5, design: .monospaced))
+                    .font(.system(size: 12, design: .monospaced))
                     .padding(10)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+            .padding(.bottom, 9)
 
         case .rule:
-            Divider().padding(.vertical, 2)
+            Divider().padding(.vertical, 8)
         }
     }
 
-    /// Bold, italics, links and inline code, via Foundation's own markdown reader.
+    /// Font size and the space above/below a heading. h2 gets the most contrast with the body
+    /// text around it — a clear gap above, almost none below — because that's the level doing
+    /// the actual work of breaking a document into sections; h1 only ever appears once, and h3
+    /// is closer in weight to the paragraphs it introduces.
+    private func headingStyle(_ level: Int) -> (size: CGFloat, spaceAbove: CGFloat, spaceBelow: CGFloat) {
+        switch level {
+        case 1: return (19, 20, 8)
+        case 2: return (14.5, 20, 6)
+        default: return (13, 14, 4)
+        }
+    }
+
+    /// Bold, italics, links and inline code, via Foundation's own markdown reader. Inline code
+    /// spans get a subtle background here too — the reader marks up `inline code` the same way
+    /// whether it's read as a run of an `AttributedString` or a full fenced block.
     private func inline(_ text: String) -> AttributedString {
-        (try? AttributedString(
+        var attributed = (try? AttributedString(
             markdown: text,
             options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
         )) ?? AttributedString(text)
+        for run in attributed.runs where run.inlinePresentationIntent?.contains(.code) == true {
+            attributed[run.range].backgroundColor = Color(nsColor: .quaternaryLabelColor)
+            attributed[run.range].font = .system(size: 13, design: .monospaced)
+        }
+        return attributed
     }
 
     // MARK: - Parsing

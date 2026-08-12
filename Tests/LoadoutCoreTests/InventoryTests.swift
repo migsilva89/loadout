@@ -328,12 +328,42 @@ final class InventoryTests: XCTestCase {
         XCTAssertEqual(Filtering.filter(items, by: .thisProject).map(\.name), ["projeto"])
     }
 
-    func testSharedChipIsSkillsLoadedByMoreThanOneAssistant() {
+    /// What used to be the ".shared" chip is now the assistant menu's "In more than one" entry.
+    func testAssistantFilterMultipleIsSkillsLoadedByMoreThanOneAssistant() {
         let items = [
             Item(id: "1", name: "so-claude", kind: .skill, origin: .personal, assistants: ["claude"]),
             Item(id: "2", name: "partilhada", kind: .skill, origin: .personal, assistants: ["claude", "codex"]),
         ]
-        XCTAssertEqual(Filtering.filter(items, by: .shared).map(\.name), ["partilhada"])
+        XCTAssertEqual(Filtering.filter(items, by: AssistantFilter.multiple).map(\.name), ["partilhada"])
+    }
+
+    /// Picking one assistant by name keeps only what that assistant actually loads.
+    func testAssistantFilterOneIsSkillsThatAssistantLoads() {
+        let items = [
+            Item(id: "1", name: "so-claude", kind: .skill, origin: .personal, assistants: ["claude"]),
+            Item(id: "2", name: "partilhada", kind: .skill, origin: .personal, assistants: ["claude", "codex"]),
+            Item(id: "3", name: "so-codex", kind: .skill, origin: .personal, assistants: ["codex"]),
+        ]
+        XCTAssertEqual(
+            Filtering.filter(items, by: AssistantFilter.one("codex")).map(\.name).sorted(),
+            ["partilhada", "so-codex"]
+        )
+    }
+
+    /// The chip and the assistant menu are independent choices that combine — "Personal" plus
+    /// "Codex" means personal skills Codex loads, not a switch from one filter to the other.
+    func testAssistantFilterComposesWithChipFilter() {
+        let items = [
+            Item(id: "1", name: "pessoal-codex", kind: .skill, origin: .personal, assistants: ["codex"]),
+            Item(id: "2", name: "plugin-codex", kind: .skill, origin: .plugin("vercel"), assistants: ["codex"]),
+            Item(id: "3", name: "pessoal-claude", kind: .skill, origin: .personal, assistants: ["claude"]),
+        ]
+        XCTAssertEqual(
+            Filtering.apply(
+                items, selection: .skills, filter: .mine, assistant: .one("codex"), query: "", order: .name
+            ).map(\.name),
+            ["pessoal-codex"]
+        )
     }
 
     func testNeverUsedChipIsZeroUsageCount() {

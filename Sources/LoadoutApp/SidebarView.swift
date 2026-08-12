@@ -16,6 +16,7 @@ struct SidebarView: View {
                 if let newValue {
                     model.selection = newValue
                     model.filter = .all
+                    model.assistantFilter = .any
                     if newValue != .plugins {
                         model.select(model.visibleItems.first?.id)
                     }
@@ -30,11 +31,13 @@ struct SidebarView: View {
     }
 
     private func row(_ selection: Selection) -> some View {
-        HStack(spacing: Metrics.xs) {
-            // Monochrome, like Finder's own sidebar: the list-style selection highlight is
-            // what marks the current row, not a different colour per symbol.
+        // The symbol carries colour again — one tint per kind, so a glance down the column
+        // tells kinds apart without reading the label. The text and row background stay
+        // untouched by it: colour marks the icon only, selection still marks the row.
+        let isSelected = model.selection == selection
+        return HStack(spacing: Metrics.xs) {
             Image(systemName: selection.symbol)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(isSelected ? Color.white : selection.tint)
                 .frame(width: 18)
             Text(selection.title)
                 .font(.system(size: 14))
@@ -60,6 +63,20 @@ extension Selection: Identifiable {
         case .agents: return "person.2"
         case .mcp: return "network"
         case .plugins: return "puzzlepiece.extension"
+        }
+    }
+
+    /// One system colour per kind — the mockup's palette, restored after a pass that took all
+    /// colour out of the sidebar. Skills stays close to the window's own accent (Graphite is
+    /// neutral, so blue is what actually reads as "tinted" next to it); the rest are spaced
+    /// around the wheel so no two neighbours are easy to confuse.
+    var tint: Color {
+        switch self {
+        case .skills: return .blue
+        case .commands: return .green
+        case .agents: return .purple
+        case .mcp: return .orange
+        case .plugins: return Color(nsColor: .systemYellow)
         }
     }
 
