@@ -27,6 +27,22 @@ struct DetailView: View {
                             .foregroundStyle(.secondary)
                         detailRows(item)
                     }
+                    if item.budget.descriptionCharacters > 0 || item.budget.bodyCharacters > 0 {
+                        VStack(alignment: .leading, spacing: Metrics.xs) {
+                            Text("Token budget")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            budgetRows(item)
+                        }
+                    }
+                    if let folder = item.directory ?? item.path?.deletingLastPathComponent() {
+                        VStack(alignment: .leading, spacing: Metrics.xs) {
+                            Text("Files")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            filesBox(item, folder: folder)
+                        }
+                    }
                     if item.kind == .skill, item.origin == .personal, item.enabled {
                         section {
                             AssistantPanel(item: item, model: model)
@@ -147,25 +163,18 @@ struct DetailView: View {
     /// Xcode inspector, the Finder's own panes. The boxed mini-cards this replaces were
     /// dashboard vocabulary: nine bordered tiles with uppercase captions, each drawing a frame
     /// around four characters. A calm pair of columns says the same in a third of the space.
+    /// Three rows, down from eight: the kind and the state were already said by the header and
+    /// the switch beside it, and the file's size is a detail of when it was last touched, not
+    /// a fact of its own.
     @ViewBuilder
     private func detailRows(_ item: Item) -> some View {
         Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: Metrics.md, verticalSpacing: 7) {
-            field("Type", item.kind.label)
-            field("Source", originText(item))
-            field("State", item.enabled ? "Enabled" : "Disabled")
+            field("Source", sourceText(item))
             if let modified = item.modified {
-                field("Modified", Usage.relative(modified))
-            }
-            if let size = fileSize(item) {
-                field("Size", size)
+                let size = fileSize(item).map { " · \($0)" } ?? ""
+                field("Modified", Usage.relative(modified) + size)
             }
             usageField(item)
-            if item.budget.descriptionCharacters > 0 || item.budget.bodyCharacters > 0 {
-                tokensField(item)
-            }
-            if let folder = item.directory ?? item.path?.deletingLastPathComponent() {
-                filesField(item, folder: folder)
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -195,82 +204,103 @@ struct DetailView: View {
     private func usageSentence(_ item: Item) -> String {
         guard item.usage.count > 0 else { return "Never used in the last 90 days" }
         let uses = item.usage.count == 1 ? "1 use" : "\(item.usage.count) uses"
-        let last = item.usage.lastUsed.map { Usage.relative($0) } ?? "unknown"
         let projects = item.usage.projectCount == 1 ? "1 project" : "\(item.usage.projectCount) projects"
-        return "\(uses) · last \(last) · \(projects)"
+        let last = item.usage.lastUsed.map { " · last used \(Usage.relative($0))" } ?? ""
+        return "\(uses) in \(projects)\(last)"
     }
 
     /// The description is loaded in every session whether the skill fires or not; the body only
-    /// on trigger. Two costs, never summed, and orange the moment one breaks a documented limit.
-    private func tokensField(_ item: Item) -> some View {
+    /// on trigger. Each cost drawn as a bar against the documented limit — every track the same
+    /// width, so the fill is the only thing that varies — green while inside, orange past it.
+    private func budgetRows(_ item: Item) -> some View {
+        Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: Metrics.md, verticalSpacing: 8) {
+            gaugeRow(
+                label: "Description",
+                fraction: Double(item.budget.descriptionCharacters) / Double(Budget.maxDescriptionCharacters),
+                over: item.budget.descriptionCharacters > Budget.maxDescriptionCharacters,
+                text: "~\(item.budget.descriptionTokens) / ~\(Budget.estimatedTokens(characters: Budget.maxDescriptionCharacters)) tokens"
+            )
+            gaugeRow(
+                label: "Body",
+                fraction: Double(item.budget.bodyLines) / Double(Budget.maxBodyLines),
+                over: item.budget.bodyLines > Budget.maxBodyLines,
+                text: "\(item.budget.bodyLines) / \(Budget.maxBodyLines) lines"
+            )
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .help(budgetHelp(item))
+    }
+
+    private func gaugeRow(label: String, fraction: Double, over: Bool, text: String) -> some View {
         GridRow {
-            Text("Tokens")
+            Text(label)
                 .foregroundStyle(.secondary)
                 .gridColumnAlignment(.trailing)
-            HStack(spacing: 6) {
-                Text("~\(item.budget.descriptionTokens) description")
-                    .foregroundStyle(item.budget.descriptionCharacters > Budget.maxDescriptionCharacters ? Color.orange : Color.primary)
-                Text("·").foregroundStyle(.tertiary)
-                Text("~\(item.budget.bodyTokens) body")
-                    .foregroundStyle(item.budget.bodyLines > Budget.maxBodyLines ? Color.orange : Color.primary)
-                if item.budget.isOverBudget {
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.primary.opacity(0.12))
+                Capsule()
+                    .fill(over ? Color.orange : Color.green)
+                    .frame(width: gaugeWidth * min(1, max(0.02, fraction)))
+            }
+            .frame(width: gaugeWidth, height: 6)
+            HStack(spacing: 5) {
+                Text(text)
+                    .foregroundStyle(over ? Color.orange : Color.secondary)
+                    .monospacedDigit()
+                if over {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
-                        .help(item.budget.breaches.joined(separator: "\n"))
                 }
             }
         }
         .font(.callout)
-        .help("The description is in context in every session, used or not. The body only when the skill triggers. Estimated at four characters per token.")
     }
 
-    /// The folder, what travels with it, and the two actions that act on it — all in the same
-    /// row, because a button that opens this folder belongs beside the folder's own name.
-    private func filesField(_ item: Item, folder: URL) -> some View {
-        GridRow {
-            Text("Files")
-                .foregroundStyle(.secondary)
-                .gridColumnAlignment(.trailing)
-            VStack(alignment: .leading, spacing: 5) {
+    private let gaugeWidth: CGFloat = 200
+
+    private func budgetHelp(_ item: Item) -> String {
+        let base = "The description is in context in every session, used or not. The body only when the skill triggers. Estimated at four characters per token."
+        guard item.budget.isOverBudget else { return base }
+        return (item.budget.breaches + [base]).joined(separator: "\n")
+    }
+
+    /// The folder, what travels with it beyond the markdown itself, and Finder — the one
+    /// action left, since the folder is where you'd go to touch scripts and references.
+    private func filesBox(_ item: Item, folder: URL) -> some View {
+        HStack(alignment: .center, spacing: Metrics.md) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(displayPath(folder))
                     .font(.system(size: 12, design: .monospaced))
                     .textSelection(.enabled)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                let entries = folderContents(folder)
-                if !entries.isEmpty {
-                    Text(entries.joined(separator: "   "))
+                // Only what travels with the document, never the document itself: every
+                // skill has its SKILL.md, so listing it says nothing.
+                let extras = folderContents(folder).filter { $0 != item.path?.lastPathComponent }
+                if !extras.isEmpty {
+                    Text(extras.joined(separator: "   "))
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                 }
-                HStack(spacing: Metrics.xs) {
-                    Button { model.openInEditor() } label: {
-                        Label {
-                            Text("Open")
-                        } icon: {
-                            AppIconView(path: AppIconCache.editor(for: item.directory ?? item.path))
-                        }
-                    }
-                    .help(editorHelp(item))
-                    .pointingHand()
-
-                    Button { model.revealInFinder() } label: {
-                        Label {
-                            Text("Finder")
-                        } icon: {
-                            AppIconView(path: AppIconCache.finder)
-                        }
-                    }
-                    .help(revealHelp(item))
-                    .pointingHand()
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .padding(.top, 1)
             }
+            Spacer(minLength: Metrics.sm)
+            Button { model.revealInFinder() } label: {
+                Label {
+                    Text("Finder")
+                } icon: {
+                    AppIconView(path: AppIconCache.finder)
+                }
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .help(revealHelp(item))
+            .pointingHand()
         }
-        .font(.callout)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Metrics.sm)
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
     }
 
 
@@ -293,13 +323,14 @@ struct DetailView: View {
             .sorted()
     }
 
-    /// "Personal", not "Personal skill": the section header already reads "Details", and the
-    /// row above already says "Type" — repeating the kind here would say it a third time.
-    private func originText(_ item: Item) -> String {
+    /// Origin and kind in one breath — "Personal skill", "Command from nikus" — now that the
+    /// separate Type row is gone.
+    private func sourceText(_ item: Item) -> String {
+        let kind = item.kind.label
         switch item.origin {
-        case .personal: return "Personal"
-        case .project(let name): return name
-        case .plugin(let name): return name
+        case .personal: return "Personal \(kind.lowercased())"
+        case .project(let name): return "\(kind) in \(name)"
+        case .plugin(let name): return "\(kind) from \(name)"
         }
     }
 
@@ -453,18 +484,6 @@ struct DetailView: View {
                 .frame(minHeight: 300)
             }
         }
-    }
-
-    /// Names both the app and the folder, since the icon only hints at the first and the label
-    /// says nothing about the second.
-    private func editorHelp(_ item: Item) -> String {
-        let folder = item.directory ?? item.path?.deletingLastPathComponent()
-        let where_ = folder.map { displayPath($0) } ?? "this item"
-        guard let app = AppIconCache.editor(for: folder ?? item.path) else {
-            return "Open \(where_) in the default app"
-        }
-        let name = URL(fileURLWithPath: app).deletingPathExtension().lastPathComponent
-        return "Open \(where_) in \(name) — scripts and references included"
     }
 
     /// Names the folder Finder will reveal, since neither the icon nor the label says where
