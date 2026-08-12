@@ -53,6 +53,100 @@ public struct Mutations: Sendable {
         return destination
     }
 
+    // MARK: - Sharing between assistants
+
+    /// Makes a skill load in `assistant` too.
+    ///
+    /// The skill is promoted to `~/.agents/skills` and each assistant gets a symlink to it,
+    /// which is the pattern already in use here: one copy, one edit, both sides current.
+    @discardableResult
+    public func share(_ item: Item, with assistant: Assistant) throws -> URL {
+        guard item.kind == .skill, case .personal = item.origin else {
+            throw LoadoutError.notEditable(item.name)
+        }
+        let canonical = try promoteToShared(named: item.name)
+        let link = paths.skillsRoot(for: assistant).appendingPathComponent(item.name)
+
+        if let existing = try? fm.destinationOfSymbolicLink(atPath: link.path) {
+            // Already linked somewhere. Only repoint it if it is pointing at the wrong place.
+            let resolved = URL(fileURLWithPath: existing, relativeTo: link.deletingLastPathComponent())
+            if resolved.standardizedFileURL.path == canonical.standardizedFileURL.path { return link }
+            try backups.snapshot(link)
+            try? fm.removeItem(at: link)
+        } else if fm.fileExists(atPath: link.path) {
+            throw LoadoutError.alreadyExists(link)
+        }
+
+        do {
+            try fm.createDirectory(
+                at: link.deletingLastPathComponent(), withIntermediateDirectories: true
+            )
+            try fm.createSymbolicLink(at: link, withDestinationURL: canonical)
+        } catch {
+            throw LoadoutError.io("Não consegui ligar \(item.name) ao \(assistant.label): \(error.localizedDescription)")
+        }
+        return link
+    }
+
+    /// Stops an assistant from loading a skill, by removing its link.
+    ///
+    /// Only ever removes a symlink. If that assistant's folder holds the only real copy, the
+    /// operation is refused — the point is to unlink, never to lose the skill.
+    public func unshare(_ item: Item, from assistant: Assistant) throws {
+        guard item.assistants.count > 1 else {
+            throw LoadoutError.io(
+                "\(item.name) só existe no \(assistant.label). Desligá-la aí era perdê-la — usa Desativar."
+            )
+        }
+        let link = paths.skillsRoot(for: assistant).appendingPathComponent(item.name)
+        guard isSymlink(link) else {
+            throw LoadoutError.io(
+                "A pasta em \(assistant.label) é a cópia verdadeira de \(item.name), não uma ligação. Não lhe toco."
+            )
+        }
+        try backups.snapshot(link)
+        do {
+            try fm.removeItem(at: link)
+        } catch {
+            throw LoadoutError.io("Não consegui remover a ligação: \(error.localizedDescription)")
+        }
+    }
+
+    /// Moves the real folder to `~/.agents/skills` and leaves a symlink where it was.
+    /// Already-shared skills are returned untouched.
+    @discardableResult
+    public func promoteToShared(named name: String) throws -> URL {
+        let canonical = paths.sharedSkills.appendingPathComponent(name)
+        if fm.fileExists(atPath: canonical.path) { return canonical }
+
+        // The real folder is whichever assistant holds a directory rather than a link.
+        let realCopies = Assistant.allCases
+            .map { paths.skillsRoot(for: $0).appendingPathComponent(name) }
+            .filter { fm.fileExists(atPath: $0.path) && !isSymlink($0) }
+
+        guard let source = realCopies.first else { throw LoadoutError.notFound(name) }
+        guard realCopies.count == 1 else {
+            throw LoadoutError.io(
+                "\(name) tem cópias próprias em mais do que um assistente e podem ser diferentes. Junta-as à mão primeiro."
+            )
+        }
+
+        try backups.snapshot(source)
+        do {
+            try fm.createDirectory(at: paths.sharedSkills, withIntermediateDirectories: true)
+            try fm.moveItem(at: source, to: canonical)
+            try fm.createSymbolicLink(at: source, withDestinationURL: canonical)
+        } catch {
+            throw LoadoutError.io("Não consegui partilhar \(name): \(error.localizedDescription)")
+        }
+        return canonical
+    }
+
+    func isSymlink(_ url: URL) -> Bool {
+        let attributes = try? fm.attributesOfItem(atPath: url.path)
+        return (attributes?[.type] as? FileAttributeType) == .typeSymbolicLink
+    }
+
     /// Writes `enabledPlugins["<plugin>@<marketplace>"]` into `settings.local.json`,
     /// leaving every other key exactly as it was (AC3.4).
     public func setPlugin(_ plugin: PluginInfo, enabled: Bool) throws {

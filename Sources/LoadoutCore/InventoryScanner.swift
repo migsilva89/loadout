@@ -35,8 +35,27 @@ public struct InventoryScanner: Sendable {
 
     // MARK: - Skills
 
+    /// Personal skills, merged across assistants: one row per skill, carrying the set of
+    /// assistants that load it. A skill only Codex has still shows up — with the Claude dot
+    /// dark — because seeing the gap is the whole point.
     func personalSkills() -> [Item] {
-        skillFolders(in: paths.skills).map { skill(at: $0, origin: .personal, enabled: true) }
+        var byName: [String: Item] = [:]
+
+        for assistant in Assistant.allCases {
+            for folder in skillFolders(in: paths.skillsRoot(for: assistant)) {
+                let name = folder.lastPathComponent
+                if var existing = byName[name] {
+                    existing.assistants.insert(assistant)
+                    byName[name] = existing
+                } else {
+                    var item = skill(at: folder, origin: .personal, enabled: true)
+                    item.assistants = [assistant]
+                    byName[name] = item
+                }
+            }
+        }
+
+        return byName.values.sorted { $0.name < $1.name }
     }
 
     func disabledSkills() -> [Item] {

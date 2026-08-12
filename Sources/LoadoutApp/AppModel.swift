@@ -129,6 +129,52 @@ final class AppModel {
         }
     }
 
+    /// Fills or removes a gap in the assistant dots.
+    func setAssistant(_ assistant: Assistant, on item: Item, present: Bool) {
+        let done = present
+            ? "\(item.name) passa a valer no \(assistant.label)."
+            : "\(item.name) deixa de ser carregada pelo \(assistant.label)."
+        perform(done) {
+            if present {
+                try mutations.share(item, with: assistant)
+            } else {
+                try mutations.unshare(item, from: assistant)
+            }
+        }
+    }
+
+    /// Everything one assistant has and the other does not.
+    func gaps(for assistant: Assistant) -> [Item] {
+        items.filter {
+            $0.kind == .skill && $0.origin == .personal && $0.enabled
+                && !$0.assistants.contains(assistant) && !$0.assistants.isEmpty
+        }
+    }
+
+    /// Gives an assistant every skill it is missing, in one go.
+    func syncAll(to assistant: Assistant) {
+        let missing = gaps(for: assistant)
+        guard !missing.isEmpty else {
+            statusMessage = "O \(assistant.label) já tem tudo."
+            return
+        }
+        var failures: [String] = []
+        for item in missing {
+            do {
+                try mutations.share(item, with: assistant)
+            } catch {
+                failures.append(item.name)
+            }
+        }
+        reload()
+        if failures.isEmpty {
+            statusMessage = "\(missing.count) skills passaram a valer no \(assistant.label)."
+            errorMessage = nil
+        } else {
+            errorMessage = "Ficaram de fora: \(failures.joined(separator: ", "))."
+        }
+    }
+
     func togglePlugin(_ plugin: PluginInfo) {
         perform(plugin.enabled ? "Plugin \(plugin.name) desativado." : "Plugin \(plugin.name) ativado.") {
             try mutations.setPlugin(plugin, enabled: !plugin.enabled)

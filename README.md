@@ -70,3 +70,13 @@ A especificação, com os critérios de aceitação um a um, está em [docs/SPEC
 ## Estado
 
 Corre localmente, assinada ad hoc. Sem Developer ID, sem notarização.
+
+## Assistentes
+
+O Claude Code lê `~/.claude/skills`; o Codex lê `~/.codex/skills`. A mesma skill pode existir num e não no outro, e o Loadout mostra isso por linha: dois pontos, `C` e `X`, aceso onde a skill existe.
+
+Clicar num ponto apagado põe a skill nesse assistente. O que acontece no disco: a pasta é promovida a `~/.agents/skills/<nome>` e cada assistente fica com um symlink para lá — uma cópia, uma edição, os dois lados sempre iguais. Clicar num ponto aceso remove apenas essa ligação, nunca a única cópia real.
+
+O menu Loadout tem "Sincronizar tudo com o …" para fechar as falhas de uma vez.
+
+Se os dois assistentes tiverem cópias próprias e possivelmente diferentes da mesma skill, a app recusa-se a juntá-las sozinha e diz porquê.

@@ -39,7 +39,7 @@ struct ItemListView: View {
             set: { model.select($0) }
         )) {
             ForEach(model.visibleItems) { item in
-                ItemRow(item: item)
+                ItemRow(item: item, model: model)
                     .tag(item.id)
                     .contextMenu {
                         if item.kind == .skill, item.origin == .personal {
@@ -81,6 +81,7 @@ struct ItemListView: View {
 
 struct ItemRow: View {
     let item: Item
+    let model: AppModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -95,6 +96,9 @@ struct ItemRow: View {
                         .help(item.warning ?? "")
                 }
                 Spacer(minLength: 4)
+                if item.kind == .skill, item.origin == .personal, item.enabled {
+                    AssistantDots(item: item, model: model)
+                }
                 // Usage sits on its own, right-aligned: appended to the description it was
                 // the first thing to be cut off, which is backwards.
                 Text(usageBadge)
@@ -163,6 +167,37 @@ struct Badge: View {
         case .own: return .green
         case .accent: return .accentColor
         case .muted: return .secondary
+        }
+    }
+}
+
+/// Which assistants load this skill. A dark dot is a gap — clicking it fills the gap,
+/// whichever side is missing.
+struct AssistantDots: View {
+    let item: Item
+    @Bindable var model: AppModel
+
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(Assistant.allCases, id: \.self) { assistant in
+                let present = item.assistants.contains(assistant)
+                Button {
+                    model.setAssistant(assistant, on: item, present: !present)
+                } label: {
+                    Text(assistant.initial)
+                        .font(.system(size: 9, weight: .semibold, design: .rounded))
+                        .frame(width: 15, height: 15)
+                        .background(
+                            present ? Color.accentColor : Color.secondary.opacity(0.16),
+                            in: Circle()
+                        )
+                        .foregroundStyle(present ? Color.white : Color.secondary)
+                }
+                .buttonStyle(.plain)
+                .help(present
+                      ? "Está no \(assistant.label) — clica para deixar de estar"
+                      : "Não está no \(assistant.label) — clica para pôr")
+            }
         }
     }
 }

@@ -25,6 +25,20 @@ public struct Paths: Sendable {
 
     public var skills: URL { claude.appendingPathComponent("skills") }
     public var skillsOff: URL { claude.appendingPathComponent("skills-off") }
+
+    /// Codex keeps its own skills next to its own config.
+    public var codexSkills: URL { home.appendingPathComponent(".codex/skills") }
+
+    /// The tree both assistants can point at, so a shared skill has one copy and one edit.
+    public var sharedSkills: URL { home.appendingPathComponent(".agents/skills") }
+
+    public func skillsRoot(for assistant: Assistant) -> URL {
+        switch assistant {
+        case .claudeCode: return skills
+        case .codex: return codexSkills
+        }
+    }
+
     public var commands: URL { claude.appendingPathComponent("commands") }
     public var agents: URL { claude.appendingPathComponent("agents") }
 

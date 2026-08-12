@@ -36,6 +36,13 @@ struct LoadoutApp: App {
                     .disabled(!model.isDirty)
             }
             CommandMenu("Loadout") {
+                ForEach(Assistant.allCases, id: \.self) { assistant in
+                    Button("Sincronizar tudo com o \(assistant.label) (\(model.gaps(for: assistant).count))") {
+                        model.syncAll(to: assistant)
+                    }
+                    .disabled(model.gaps(for: assistant).isEmpty)
+                }
+                Divider()
                 Button("Recarregar do disco") { model.reload() }
                     .keyboardShortcut("r", modifiers: .command)
                 Button("Indexar histórico completo") { model.refreshUsage(fullHistory: true) }
