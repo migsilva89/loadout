@@ -103,6 +103,26 @@ final class AppModel {
         reload()
         startWatching()
         refreshUsage()
+        // A launch-time hook for exercising real scenarios from the outside — screenshots of
+        // the project scope, a given tab or an assistant filter — without synthetic clicks
+        // on a live window. Harmless in normal use: the variables are simply absent.
+        applyScenarioEnvironment()
+    }
+
+    /// `LOADOUT_SCOPE=<project name>`, `LOADOUT_TAB=<skills|commands|agents|mcp|plugins>`,
+    /// `LOADOUT_ASSISTANT=<assistant id>` — each applied only when present and valid.
+    private func applyScenarioEnvironment() {
+        let env = ProcessInfo.processInfo.environment
+        if let name = env["LOADOUT_SCOPE"],
+           let project = projects.first(where: { $0.name == name }) {
+            changeContext(to: project)
+        }
+        if let tab = env["LOADOUT_TAB"], let selection = Selection(rawValue: tab) {
+            self.selection = selection
+        }
+        if let id = env["LOADOUT_ASSISTANT"] {
+            assistantFilter = .one(id)
+        }
     }
 
     // MARK: - Reading
@@ -137,10 +157,15 @@ final class AppModel {
         selection == .plugins ? plugins.count : Filtering.slice(items, for: selection).count
     }
 
-    /// The chip's count within the current sidebar row, so the numbers on the chips always
-    /// match what picking them would show.
+    /// The chip's count within the current sidebar row AND the current assistant filter and
+    /// search, so the numbers on the chips always match what picking them would show. They
+    /// used to ignore the assistant menu, which left "All 56" on screen while an assistant
+    /// with nothing loaded showed an empty list.
     func count(for chip: ItemFilter) -> Int {
-        Filtering.filter(Filtering.slice(items, for: selection), by: chip).count
+        Filtering.apply(
+            items, selection: selection, filter: chip,
+            assistant: assistantFilter, query: query, order: order
+        ).count
     }
 
     /// Plugins that actually ship something, so the plugin manager does not list empty rows.

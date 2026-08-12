@@ -129,3 +129,17 @@ extension Selection: Identifiable {
         }
     }
 }
+
+/// The same palette from the item's side: a row or a detail header asks its kind directly,
+/// without a detour through the sidebar `Selection` that happens to be showing it.
+extension ItemKind {
+    var tint: Color {
+        switch self {
+        case .skill: return Selection.skills.tint
+        case .command: return Selection.commands.tint
+        case .agent: return Selection.agents.tint
+        case .mcp: return Selection.mcp.tint
+        case .plugin: return Selection.plugins.tint
+        }
+    }
+}

@@ -14,12 +14,8 @@ struct ContentView: View {
             DetailView(model: model)
         }
         .toolbar {
-            // The context picker is what actually changes across a session; search and sort
-            // moved into the list column itself, next to what they act on.
-            ToolbarItem(placement: .navigation) {
-                ContextPicker(model: model)
-                    .controlSize(.regular)
-            }
+            // Only the New-skill button remains up here — the context picker moved into the
+            // list header, next to the search and filters it scopes.
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     model.isCreating = true
@@ -80,7 +76,13 @@ struct ContextPicker: View {
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: model.context == nil ? "globe" : "folder")
+                // Truncated in the middle at a fixed cap: a project can be called anything,
+                // and one long name must not shove the whole header row off the pane.
                 Text(model.context?.name ?? "Global")
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .frame(maxWidth: 140)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .menuStyle(.button)

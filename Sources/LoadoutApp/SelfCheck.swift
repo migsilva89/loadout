@@ -84,6 +84,17 @@ enum SelfCheck {
         check("filters out nonmatches", model.visibleItems.isEmpty)
         model.query = ""
 
+        // Chip counts follow every narrowing the list itself follows — the "All 56 over an
+        // empty list" bug was the counts ignoring the assistant menu.
+        model.assistantFilter = .one("no-such-assistant")
+        check("empty assistant empties the list", model.visibleItems.isEmpty)
+        check("chip counts follow the assistant filter", model.count(for: .all) == 0)
+        model.assistantFilter = .any
+        model.query = "this doesn't exist"
+        check("chip counts follow the search too", model.count(for: .all) == 0)
+        model.query = ""
+        check("chip counts recover with the filters cleared", model.count(for: .all) == model.visibleItems.count)
+
         // Delete
         model.select(model.items.first { $0.name == "auto-teste" }?.id)
         model.deleteSelected()

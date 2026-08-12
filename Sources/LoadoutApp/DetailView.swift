@@ -26,9 +26,13 @@ struct DetailView: View {
                     // sit empty on a wide pane. On a narrow pane the same two blocks stack,
                     // which is exactly the old layout.
                     ViewThatFits(in: .horizontal) {
-                        // Top-aligned with the tiles, breathing room underneath.
+                        // Top-aligned with the tiles, breathing room underneath. The budget
+                        // block stretches to the band's full height (set by the taller tiles)
+                        // so its title can stay pinned at the top while the gauges float
+                        // centred in whatever space is left below it.
                         HStack(alignment: .top, spacing: Metrics.lg) {
-                            budgetSection(item)
+                            budgetSectionCentered(item)
+                                .frame(maxHeight: .infinity, alignment: .topLeading)
                             Spacer(minLength: Metrics.md)
                             // Capped so the flexible tiles don't swallow the spacer: the grid
                             // hangs off the trailing edge at a steady width instead.
@@ -121,12 +125,12 @@ struct DetailView: View {
     private func header(_ item: Item) -> some View {
         HStack(alignment: .center, spacing: Metrics.md) {
             RoundedRectangle(cornerRadius: 11)
-                .fill(item.enabled ? Color.accentColor.opacity(0.15) : Color(nsColor: .quaternaryLabelColor))
+                .fill(item.enabled ? kindTint(item.kind).opacity(0.15) : Color(nsColor: .quaternaryLabelColor))
                 .frame(width: 42, height: 42)
                 .overlay {
                     Image(systemName: icon(for: item.kind))
                         .font(.system(size: 19))
-                        .foregroundStyle(item.enabled ? Color.accentColor : .secondary)
+                        .foregroundStyle(item.enabled ? kindTint(item.kind) : .secondary)
                 }
             Text(item.name)
                 .font(.system(size: 19, weight: .semibold))
@@ -253,6 +257,24 @@ struct DetailView: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
                 budgetRows(item)
+            }
+        }
+    }
+
+    /// Wide-band variant only: the title is pinned to the top edge, matching the tiles, while
+    /// the gauge rows are free to float vertically centred in whatever height the tiles leave
+    /// underneath it. The narrow stacked fallback keeps using `budgetSection` unchanged, since
+    /// there the block sizes itself and centring has nothing to centre within.
+    @ViewBuilder
+    private func budgetSectionCentered(_ item: Item) -> some View {
+        if item.budget.descriptionCharacters > 0 || item.budget.bodyCharacters > 0 {
+            VStack(alignment: .leading, spacing: Metrics.xs) {
+                Text("Token budget")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                budgetRows(item)
+                Spacer(minLength: 0)
             }
         }
     }
@@ -539,6 +561,10 @@ struct DetailView: View {
         guard let location = item.directory ?? item.path else { return "Reveal this item in Finder" }
         return "Reveal \(displayPath(location)) in Finder"
     }
+
+    /// The same hue the kind bar paints this kind with, so the header tile and the bar agree
+    /// on what colour a skill or a command is.
+    private func kindTint(_ kind: ItemKind) -> Color { kind.tint }
 
     private func icon(for kind: ItemKind) -> String {
         switch kind {

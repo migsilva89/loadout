@@ -31,15 +31,22 @@ struct ItemListView: View {
         }
     }
 
-    /// The scope and count used to live in a "56 items" label; now they live in the search
-    /// field's own placeholder, so the field is the first thing read rather than a caption
-    /// above it. The sort menu sits at the same row's trailing end, quiet on purpose — it is
-    /// a secondary control, not a peer of search.
+    /// The menus lead, spread edge to edge — scope on the left margin, order on the right,
+    /// the assistant filter between them — then the search field on its own full-width line,
+    /// and the chips after. Scope first because it narrows what everything below acts on.
+    /// The scope picker used to live in the window toolbar, but it filters this list, and a
+    /// control reads best next to what it changes.
     private var listHeader: some View {
-        HStack(spacing: Metrics.xs) {
+        VStack(alignment: .leading, spacing: Metrics.xs) {
+            HStack(spacing: Metrics.sm) {
+                ContextPicker(model: model)
+                    .controlSize(.small)
+                Spacer(minLength: Metrics.sm)
+                assistantMenu
+                Spacer(minLength: Metrics.sm)
+                sortMenu
+            }
             searchField
-            assistantMenu
-            sortMenu
         }
         .padding(.horizontal, Metrics.sm)
         .padding(.top, Metrics.xs)
@@ -95,12 +102,12 @@ struct ItemListView: View {
             HStack(spacing: 4) {
                 Image(systemName: "arrow.up.arrow.down")
                 Text(model.order.label)
-                Image(systemName: "chevron.down")
-                    .font(.caption2)
             }
-            .foregroundStyle(.secondary)
         }
-        .menuStyle(.borderlessButton)
+        // The same bordered pill as the scope picker: three menus on one line in three
+        // different styles read as clutter, in one style they read as a toolbar.
+        .menuStyle(.button)
+        .buttonStyle(.bordered)
         .fixedSize()
         .help("Change the order the list is sorted in")
         .pointingHand()
@@ -130,12 +137,10 @@ struct ItemListView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "person.crop.circle")
                     Text(assistantMenuLabel)
-                    Image(systemName: "chevron.down")
-                        .font(.caption2)
                 }
-                .foregroundStyle(.secondary)
             }
-            .menuStyle(.borderlessButton)
+            .menuStyle(.button)
+            .buttonStyle(.bordered)
             .fixedSize()
             .help("Only show skills a particular assistant loads")
             .pointingHand()
@@ -196,15 +201,28 @@ struct ItemListView: View {
         }
         .overlay {
             if model.visibleItems.isEmpty {
-                ContentUnavailableView(
-                    model.query.isEmpty ? "Nothing here" : "No results",
-                    systemImage: model.query.isEmpty ? "tray" : "magnifyingglass",
-                    description: Text(
-                        model.query.isEmpty
-                            ? "This source is empty. Create a skill with ⌘N."
-                            : "Nothing matches \"\(model.query)\"."
+                // Three different truths, three different sentences: a search with no hits,
+                // a filter that excludes everything, and a source that is genuinely empty.
+                // Telling someone to create a skill when a filter is hiding fifty-six of
+                // them would be a lie.
+                // Trimmed like the filter itself trims: a stray space in the field must not
+                // switch the message to blaming a search that is matching everything.
+                if !model.query.trimmingCharacters(in: .whitespaces).isEmpty {
+                    ContentUnavailableView(
+                        "No results", systemImage: "magnifyingglass",
+                        description: Text("Nothing matches \"\(model.query)\".")
                     )
-                )
+                } else if model.filter != .all || model.assistantFilter != .any {
+                    ContentUnavailableView(
+                        "No matches", systemImage: "line.3.horizontal.decrease.circle",
+                        description: Text("Nothing passes the active filters. Clear them to see everything again.")
+                    )
+                } else {
+                    ContentUnavailableView(
+                        "Nothing here", systemImage: "tray",
+                        description: Text("This source is empty. Create a skill with ⌘N.")
+                    )
+                }
             }
         }
         // Rebuilds the List's own identity whenever the kind bar switches rows, instead of
@@ -240,25 +258,39 @@ struct FilterChipsView: View {
         return base
     }
 
+    private func chipView(_ chip: ItemFilter) -> some View {
+        FilterChip(
+            title: chip.shortTitle,
+            hint: chip.hint,
+            count: model.count(for: chip),
+            isActive: model.filter == chip
+        ) {
+            model.filter = chip
+        }
+    }
+
     var body: some View {
-        // Wrapping, not scrolling: a filter you have to scroll sideways to discover is a
-        // filter nobody uses, and the last chip was falling off the edge of the column.
-        // Now that "2+" moved out to the assistant menu, the five that remain on their full
-        // names still need a tighter chip to clear the list column at its normal width —
-        // ChipFlow is still there as the fallback for anything narrower.
-        ChipFlow(spacing: 4, lineSpacing: 5) {
-            ForEach(chips, id: \.self) { chip in
-                FilterChip(
-                    title: chip.shortTitle,
-                    hint: chip.hint,
-                    count: model.count(for: chip),
-                    isActive: model.filter == chip
-                ) {
-                    model.filter = chip
+        // One row, edge to edge, while it fits: the pills keep their natural width — a label
+        // never breaks in two — and the leftover space becomes even gaps between them. When
+        // the row genuinely doesn't fit (a project scope adds a seventh chip), it falls back
+        // to wrapping instead of running off the pane.
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 0) {
+                ForEach(Array(chips.enumerated()), id: \.element) { index, chip in
+                    if index > 0 { Spacer(minLength: 4) }
+                    chipView(chips[index])
+                }
+            }
+            ChipFlow(spacing: 4, lineSpacing: 5) {
+                ForEach(chips, id: \.self) { chip in
+                    chipView(chip)
                 }
             }
         }
-        .padding(.horizontal, 8)
+        // Same horizontal inset as the list header above, so the chips' left edge lines up
+        // with the search field instead of sitting on its own grid.
+        .padding(.horizontal, Metrics.sm)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, 10)
         .padding(.bottom, 12)
     }
@@ -302,7 +334,9 @@ private struct FilterChip: View {
                     .foregroundStyle(countColor)
             }
             .font(.system(size: 11))
-            .padding(.horizontal, 7)
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.horizontal, 8)
             .padding(.vertical, 3.5)
             .background(fill, in: Capsule())
             .overlay {
@@ -422,13 +456,16 @@ struct ItemRow: View {
                     if let stateBadge {
                         Badge(text: stateBadge.text, tone: stateBadge.tone)
                     }
+                    // Orange, not the old plugins-yellow: the chip names the item's origin,
+                    // and orange is what "came from a plugin" looks like everywhere else —
+                    // the dot on this same row says it in the same hue.
                     if case .plugin(let pluginName) = item.origin {
                         Text(pluginName)
                             .font(.system(size: 10))
                             .padding(.horizontal, 6)
                             .padding(.vertical, 1.5)
-                            .background(Color(nsColor: .systemYellow).opacity(0.18), in: RoundedRectangle(cornerRadius: 5))
-                            .foregroundStyle(Color(nsColor: .systemYellow))
+                            .background(Color.orange.opacity(0.18), in: RoundedRectangle(cornerRadius: 5))
+                            .foregroundStyle(Color.orange)
                     }
                     if item.warning != nil {
                         Image(systemName: "exclamationmark.triangle.fill")
@@ -501,13 +538,11 @@ struct ItemRow: View {
         }
     }
 
+    /// The dot wears the kind's own colour — the same hue as the bar tab the row lives under —
+    /// and goes gray when the item is disabled. Origin stayed in the tooltip and the chips;
+    /// as a second colour code on the same dot it fought the topic palette above.
     private var originColor: Color {
-        guard item.enabled else { return .secondary }
-        switch item.origin {
-        case .personal: return .green
-        case .project: return .blue
-        case .plugin: return .orange
-        }
+        item.enabled ? item.kind.tint : .secondary
     }
 
     /// The kind icon: the same symbol the sidebar uses for this row's category, so a glance at
