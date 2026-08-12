@@ -26,11 +26,8 @@ struct DetailView: View {
                     // sit empty on a wide pane. On a narrow pane the same two blocks stack,
                     // which is exactly the old layout.
                     ViewThatFits(in: .horizontal) {
-                        // Centre-aligned, not top: the budget is two lines against the tiles'
-                        // four, and hugging the top left its own corner of dead space below.
-                        HStack(alignment: .center, spacing: Metrics.lg) {
-                            // The bottom padding leans the centred block upward, so its title
-                            // sits nearer the tiles' top edge than their bottom.
+                        // Top-aligned with the tiles, breathing room underneath.
+                        HStack(alignment: .top, spacing: Metrics.lg) {
                             budgetSection(item)
                                 .padding(.bottom, Metrics.md)
                             Spacer(minLength: Metrics.md)
@@ -188,7 +185,7 @@ struct DetailView: View {
                 }
             }
             GridRow {
-                detailCard("Usage", usageSentence(item))
+                detailCard("Usage", usageValue(item), subtitle: usageSubtitle(item))
                 detailCard(fourthCard(item).0, fourthCard(item).1)
             }
         }
@@ -204,7 +201,9 @@ struct DetailView: View {
         return ("Assistants", "\(has) of \(total)")
     }
 
-    private func detailCard(_ label: String, _ value: String) -> some View {
+    /// The subtitle is the deliberate second line — quiet, under the value — for the one card
+    /// whose fact doesn't fit a single breath. Everything else stays caption + value.
+    private func detailCard(_ label: String, _ value: String, subtitle: String? = nil) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label)
                 .font(.system(size: captionSize, weight: captionWeight))
@@ -212,9 +211,13 @@ struct DetailView: View {
             Text(value)
                 .font(.system(size: 12.5))
                 .textSelection(.enabled)
-                // Wrap rather than truncate: "last used 7 days ago" cut to "7 d…" said
-                // nothing, and these tiles have room to grow a line.
-                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(1)
+            if let subtitle {
+                Text(subtitle)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 10)
@@ -222,12 +225,16 @@ struct DetailView: View {
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
     }
 
-    private func usageSentence(_ item: Item) -> String {
-        guard item.usage.count > 0 else { return "Never used in the last 90 days" }
+    private func usageValue(_ item: Item) -> String {
+        guard item.usage.count > 0 else { return "Never used" }
         let uses = item.usage.count == 1 ? "1 use" : "\(item.usage.count) uses"
         let projects = item.usage.projectCount == 1 ? "1 project" : "\(item.usage.projectCount) projects"
-        let last = item.usage.lastUsed.map { " · last used \(Usage.relative($0))" } ?? ""
-        return "\(uses) in \(projects)\(last)"
+        return "\(uses) in \(projects)"
+    }
+
+    private func usageSubtitle(_ item: Item) -> String? {
+        guard item.usage.count > 0 else { return "in the last 90 days" }
+        return item.usage.lastUsed.map { "last used \(Usage.relative($0))" }
     }
 
     @ViewBuilder
