@@ -116,7 +116,8 @@ public struct InventoryScanner: Sendable {
             directory: folder,
             modified: modificationDate(file),
             enabled: enabled,
-            warning: warning
+            warning: warning,
+            budget: Budget.measure(document: text)
         )
     }
 
@@ -145,7 +146,8 @@ public struct InventoryScanner: Sendable {
                     modified: modificationDate(file),
                     enabled: true,
                     // A command file legitimately has no frontmatter; only flag skills for that.
-                    warning: front.fields.isEmpty ? nil : front.warning
+                    warning: front.fields.isEmpty ? nil : front.warning,
+                    budget: Budget.measure(document: text)
                 )
             }
     }

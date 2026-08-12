@@ -161,8 +161,16 @@ struct DetailView: View {
                 detailTile("Uses", item.usage.count == 1 ? "1 use" : "\(item.usage.count) uses")
                 detailTile("Last used", item.usage.lastUsed.map { Usage.relative($0) } ?? "Never")
                 detailTile("Projects", "\(item.usage.projectCount)")
+                if item.budget.descriptionCharacters > 0 || item.budget.bodyCharacters > 0 {
+                    tokensTile(item)
+                }
+                if let size = fileSize(item) {
+                    detailTile("Size", size)
+                }
             }
-            if let location = item.path ?? item.directory {
+            if let folder = item.directory ?? item.path?.deletingLastPathComponent() {
+                filesTile(item, folder: folder)
+            } else if let location = item.path {
                 locationTile(location)
             }
         }
@@ -190,6 +198,82 @@ struct DetailView: View {
     /// The path gets its own full-width tile — a monospaced, truncate-from-the-middle string
     /// doesn't sit well next to short values in a two- or four-column grid, and it is the one
     /// value worth selecting and copying.
+
+    /// The two costs, side by side and never added together: the description is loaded in every
+    /// session whether or not the skill fires, the body only when it does. Estimated at four
+    /// characters per token — there is no tokenizer on the machine, and the caption says so
+    /// rather than implying a precision this cannot have.
+    private func tokensTile(_ item: Item) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("TOKENS, ESTIMATED")
+                .font(.system(size: captionSize, weight: captionWeight))
+                .foregroundStyle(.primary.opacity(captionOpacity))
+            HStack(spacing: 10) {
+                Text("\(item.budget.descriptionTokens) desc")
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(item.budget.descriptionCharacters > Budget.maxDescriptionCharacters ? Color.orange : Color.primary)
+                Text("\(item.budget.bodyTokens) body")
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(item.budget.bodyLines > Budget.maxBodyLines ? Color.orange : Color.primary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 9)
+        .padding(.horizontal, 11)
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 9))
+        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Color(nsColor: .separatorColor)))
+        .help("The description is loaded in every session, used or not. The body only when the skill triggers. Roughly four characters per token.")
+    }
+
+    /// "Files", not "Location": the folder usually holds more than the markdown — scripts,
+    /// references, assets — and knowing what travels with a skill matters more than repeating
+    /// a path whose head is already the item's name.
+    private func filesTile(_ item: Item, folder: URL) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("FILES")
+                .font(.system(size: captionSize, weight: captionWeight))
+                .foregroundStyle(.primary.opacity(captionOpacity))
+            Text(displayPath(folder))
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+            let entries = folderContents(folder)
+            if !entries.isEmpty {
+                Text(entries.joined(separator: " · "))
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 9)
+        .padding(.horizontal, 11)
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 9))
+        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Color(nsColor: .separatorColor)))
+    }
+
+    /// Everything beside the markdown, folders marked with a trailing slash.
+    ///
+    /// Resolves symlinks first: six of the real skills are links into a shared `.agents/skills`
+    /// tree, and listing a link's contents without resolving it returns nothing at all.
+    private func folderContents(_ folder: URL) -> [String] {
+        let fm = FileManager.default
+        let target = folder.resolvingSymlinksInPath()
+        guard let entries = try? fm.contentsOfDirectory(
+            at: target, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+        ) else { return [] }
+        return entries
+            .map { url -> String in
+                var isDirectory: ObjCBool = false
+                _ = fm.fileExists(atPath: url.path, isDirectory: &isDirectory)
+                return url.lastPathComponent + (isDirectory.boolValue ? "/" : "")
+            }
+            .sorted()
+    }
+
+
     private func locationTile(_ location: URL) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text("LOCATION")
@@ -225,22 +309,13 @@ struct DetailView: View {
         )
     }
 
-    /// The file's name and size, and every control that acts on it, in one band above the
-    /// document box — the way a toolbar relates to the document it controls. They share a
-    /// line at the pane's normal width; only a narrower pane would force them apart.
+    /// Only the controls. The file's name said nothing a person could not already see — it is
+    /// `SKILL.md` for every skill, and the item's own name for a command or an agent — and its
+    /// size moved into the Details grid, where the other facts about the file live.
     private func documentToolbar(_ item: Item) -> some View {
         HStack(spacing: Metrics.md) {
-            HStack(spacing: Metrics.xs) {
-                Text(item.path?.lastPathComponent ?? (item.kind == .mcp ? "Configuration" : "Document"))
-                if let size = fileSize(item) {
-                    Text(size)
-                }
-            }
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.secondary)
-
-            Spacer(minLength: Metrics.sm)
             actions(item)
+            Spacer(minLength: Metrics.sm)
         }
     }
 
@@ -272,9 +347,9 @@ struct DetailView: View {
 
             Button { model.openInEditor() } label: {
                 Label {
-                    Text("Open in editor")
+                    Text("Open folder")
                 } icon: {
-                    AppIconView(path: AppIconCache.editor(for: item.path))
+                    AppIconView(path: AppIconCache.editor(for: item.directory ?? item.path))
                 }
             }
             .buttonStyle(.bordered)
@@ -283,7 +358,7 @@ struct DetailView: View {
 
             Button { model.revealInFinder() } label: {
                 Label {
-                    Text("Show in Finder")
+                    Text("Show folder")
                 } icon: {
                     AppIconView(path: AppIconCache.finder)
                 }
@@ -402,10 +477,16 @@ struct DetailView: View {
         }
     }
 
-    /// Names the app the button will actually use, since the icon alone only hints at it.
+    /// Names both the app and the folder, since the icon only hints at the first and the label
+    /// says nothing about the second.
     private func editorHelp(_ item: Item) -> String {
-        guard let path = AppIconCache.editor(for: item.path) else { return "Open in the default app" }
-        return "Open in \(URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent)"
+        let folder = item.directory ?? item.path?.deletingLastPathComponent()
+        let where_ = folder.map { displayPath($0) } ?? "this item"
+        guard let app = AppIconCache.editor(for: folder ?? item.path) else {
+            return "Open \(where_) in the default app"
+        }
+        let name = URL(fileURLWithPath: app).deletingPathExtension().lastPathComponent
+        return "Open \(where_) in \(name) — scripts and references included"
     }
 
     /// Names the folder Finder will reveal, since neither the icon nor the label says where

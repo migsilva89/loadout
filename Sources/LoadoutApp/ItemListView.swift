@@ -8,6 +8,8 @@ struct ItemListView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            KindBar(model: model)
+            Divider()
             if model.selection == .plugins {
                 pluginHeader
                 Divider()
@@ -205,6 +207,14 @@ struct ItemListView: View {
                 )
             }
         }
+        // Rebuilds the List's own identity whenever the kind bar switches rows, instead of
+        // diffing the old NSTableView-backed content in place. Without this, a kind whose
+        // items are all disabled can land the List on a stale internal layout from the
+        // previous kind — selection and counts update correctly, but the rows never draw and
+        // the empty-state overlay never appears either, since `visibleItems` genuinely isn't
+        // empty. Forcing a fresh List per kind is the same fix `.id()` gives any List/ForEach
+        // pairing that reuses identity across an unrelated content swap.
+        .id(model.selection)
     }
 }
 
@@ -223,6 +233,10 @@ struct FilterChipsView: View {
         var base: [ItemFilter] = [.all, .mine]
         if model.context != nil { base.append(.thisProject) }
         base.append(contentsOf: [.fromPlugins, .neverUsed, .disabled])
+        // Only offered where it can mean something: only documents have a budget to break.
+        if model.selection == .skills || model.selection == .commands || model.selection == .agents {
+            base.append(.overBudget)
+        }
         return base
     }
 
@@ -385,16 +399,16 @@ struct ItemRow: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        HStack(spacing: Metrics.xs) {
-            RoundedRectangle(cornerRadius: 1.5)
+        HStack(alignment: .top, spacing: Metrics.xs) {
+            // A dot, not a full-height bar, and set on the title's own line: a mark that runs
+            // past the description reads as a bracket around both lines instead of a status.
+            Circle()
                 .fill(originColor)
-                .frame(width: 3)
-                .padding(.vertical, 2)
+                .frame(width: 7, height: 7)
+                .padding(.top, 6)
+                .help(originHint)
             VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: Metrics.xs) {
-                    Image(systemName: kindSymbol)
-                        .font(.system(size: 14))
-                        .foregroundStyle(kindTint)
                     Text(item.name)
                         .fontWeight(.medium)
                         .lineLimit(1)
@@ -452,6 +466,16 @@ struct ItemRow: View {
     /// glance down the list, rather than a word to read on each one. System colours only,
     /// even here: green for what's yours, blue for what the project brought, orange for what
     /// a plugin shipped, secondary once it's off.
+    /// What the dot means, since a colour on its own is not self-explanatory.
+    private var originHint: String {
+        if !item.enabled { return "Disabled — not loaded by anything right now" }
+        switch item.origin {
+        case .personal: return "Your own, in ~/.claude"
+        case .project(let name): return "Lives in the \(name) repository"
+        case .plugin(let name): return "Comes from the \(name) plugin"
+        }
+    }
+
     private var originColor: Color {
         guard item.enabled else { return .secondary }
         switch item.origin {
@@ -463,28 +487,9 @@ struct ItemRow: View {
 
     /// The kind icon: the same symbol the sidebar uses for this row's category, so a glance at
     /// the leading edge of a row tells kind apart the same way the sidebar column does.
-    private var kindSymbol: String {
-        switch item.kind {
-        case .skill: return "sparkles"
-        case .command: return "terminal"
-        case .agent: return "person.2"
-        case .mcp: return "network"
-        case .plugin: return "puzzlepiece.extension"
-        }
-    }
 
     /// One system colour per kind, matching the sidebar's palette — off once the row is
     /// disabled, same as the origin bar.
-    private var kindTint: Color {
-        guard item.enabled else { return .secondary }
-        switch item.kind {
-        case .skill: return .blue
-        case .command: return .green
-        case .agent: return .purple
-        case .mcp: return .orange
-        case .plugin: return Color(nsColor: .systemYellow)
-        }
-    }
 
     /// The two facts the bar's color cannot carry on its own: that this is parked, and that
     /// nobody has ever used it.
@@ -571,6 +576,19 @@ struct AssistantPanel: View {
         return "\(assistant.label) doesn't have a skills folder yet. Click to create \(assistant.skillsRoot.path) and add this skill."
     }
 
+    /// "Used by Claude Code", "Used by Claude Code and Codex", and past three a count takes
+    /// over so the row cannot grow without bound.
+    private var loadedByLabel: String {
+        let names = present.map(\.label)
+        switch names.count {
+        case 0: return "No assistant loads this yet"
+        case 1: return "Used by \(names[0])"
+        case 2: return "Used by \(names[0]) and \(names[1])"
+        case 3: return "Used by \(names[0]), \(names[1]) and \(names[2])"
+        default: return "Used by \(names.count) of \(model.visibleAssistants.count) assistants"
+        }
+    }
+
     var body: some View {
         DisclosureGroup(isExpanded: $isExpanded) {
             LazyVGrid(
@@ -615,7 +633,9 @@ struct AssistantPanel: View {
                     AssistantMark(assistant: assistant, present: true)
                         .pointingHand()
                 }
-                Text("\(present.count) of \(model.visibleAssistants.count) assistants")
+                // Names, not a fraction: "1 of 12" says how many and hides which, and which
+                // is the only part a person is actually asking.
+                Text(loadedByLabel)
                     .foregroundStyle(.secondary)
             }
             .contentShape(Rectangle())

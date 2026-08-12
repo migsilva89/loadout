@@ -26,7 +26,7 @@ struct LoadoutApp: App {
     var body: some Scene {
         Window("Loadout", id: "main") {
             ContentView(model: model)
-                .frame(minWidth: 1000, minHeight: 640)
+                .frame(minWidth: 824, minHeight: 640)
         }
         .defaultSize(width: 1440, height: 920)
         // The unified toolbar prints the window title next to the leading items by default —

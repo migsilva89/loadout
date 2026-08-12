@@ -59,6 +59,7 @@ public enum ItemFilter: String, Equatable, Hashable, Sendable, CaseIterable {
     case fromPlugins
     case neverUsed
     case disabled
+    case overBudget
 
     /// "Personal", not "Mine": read next to a count on a chip, "Mine 12" reads like a
     /// possessive fragment, where "Personal 12" reads as a label.
@@ -70,6 +71,7 @@ public enum ItemFilter: String, Equatable, Hashable, Sendable, CaseIterable {
         case .fromPlugins: return "From plugins"
         case .neverUsed: return "Never used"
         case .disabled: return "Off"
+        case .overBudget: return "Over budget"
         }
     }
 
@@ -88,6 +90,8 @@ public enum ItemFilter: String, Equatable, Hashable, Sendable, CaseIterable {
         case .fromPlugins: return "Comes from an installed plugin"
         case .neverUsed: return "Never used in the last 90 days"
         case .disabled: return "Currently turned off"
+        case .overBudget:
+            return "Breaks a documented limit: body over \(Budget.maxBodyLines) lines or \(Budget.maxBodyWords) words, or a name or description over its maximum"
         }
     }
 }
@@ -145,6 +149,8 @@ public enum Filtering {
             return items.filter { $0.usage.neverUsed }
         case .disabled:
             return items.filter { !$0.enabled }
+        case .overBudget:
+            return items.filter { $0.budget.isOverBudget }
         }
     }
 

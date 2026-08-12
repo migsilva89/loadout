@@ -36,17 +36,10 @@ struct AssistantMark: View {
         .opacity(present ? 1 : 0.6)
     }
 
-    /// App icons are expensive to fetch and never change while we run.
-    private static var cache: [String: NSImage] = [:]
-
+    /// One lookup for both sources, shared with the Ask menu: a user-supplied file in
+    /// `~/.claude/.loadout/cli-icons/` wins, then the installed app, then nothing and the
+    /// caller draws initials. Five of the assistants here ship no Mac app at all.
     static func icon(for assistant: Assistant) -> NSImage? {
-        if let hit = cache[assistant.id] { return hit }
-        guard let path = assistant.appPath,
-              FileManager.default.fileExists(atPath: path)
-        else { return nil }
-        let icon = NSWorkspace.shared.icon(forFile: path)
-        icon.size = NSSize(width: 32, height: 32)
-        cache[assistant.id] = icon
-        return icon
+        AppIconCache.icon(forID: assistant.id, appPath: assistant.appPath)
     }
 }

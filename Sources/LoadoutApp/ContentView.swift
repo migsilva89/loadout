@@ -7,14 +7,11 @@ struct ContentView: View {
 
     var body: some View {
         NavigationSplitView {
-            SidebarView(model: model)
-                .navigationSplitViewColumnWidth(min: 176, ideal: 200, max: 260)
-        } content: {
             ItemListView(model: model)
-                .navigationSplitViewColumnWidth(min: 260, ideal: 320, max: 420)
+                .safeAreaInset(edge: .bottom, spacing: 0) { ListFooter(model: model) }
+                .navigationSplitViewColumnWidth(min: 340, ideal: 392, max: 520)
         } detail: {
             DetailView(model: model)
-                .safeAreaInset(edge: .bottom, spacing: 0) { StatusBar(model: model) }
         }
         .toolbar {
             // The context picker is what actually changes across a session; search and sort
@@ -94,17 +91,32 @@ struct ContextPicker: View {
     }
 }
 
-// MARK: - Status bar
+// MARK: - List footer
 
-struct StatusBar: View {
+/// The list column's bottom edge: Settings at the leading end — its home now that the sidebar
+/// that used to carry it is gone — and the status text at the trailing end, sharing one line
+/// the way they used to share one line split across two columns.
+struct ListFooter: View {
     @Bindable var model: AppModel
 
     var body: some View {
         HStack(spacing: Metrics.sm) {
+            SettingsLink {
+                HStack(spacing: 6) {
+                    Image(systemName: "gearshape")
+                    Text("Settings")
+                }
+            }
+            .buttonStyle(.plain)
+            .help("Appearance, usage indexing, assistants and backups (⌘,)")
+            .pointingHand()
+
+            Spacer()
+
             if let progress = model.indexProgress {
                 ProgressView(value: progress)
                     .progressViewStyle(.linear)
-                    .frame(width: 120)
+                    .frame(width: 100)
                 Text("Indexing usage…")
             } else if let status = model.statusMessage {
                 Image(systemName: "checkmark.circle")
@@ -112,7 +124,6 @@ struct StatusBar: View {
             } else {
                 Text("\(model.items.count) \(model.items.count == 1 ? "item" : "items") · \(model.plugins.count) \(model.plugins.count == 1 ? "plugin" : "plugins")")
             }
-            Spacer()
             if model.isDirty {
                 Text("unsaved")
                     .foregroundStyle(.orange)

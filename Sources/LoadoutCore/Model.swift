@@ -64,6 +64,9 @@ public struct Item: Identifiable, Equatable, Sendable {
     /// Ids of the assistants that load this skill. Empty for anything that is not a
     /// personal skill.
     public var assistants: Set<String>
+    /// What it costs to keep installed, and whether it breaks a documented limit. Only
+    /// meaningful for items that own a markdown document.
+    public var budget: Budget
 
     public init(
         id: String,
@@ -77,9 +80,11 @@ public struct Item: Identifiable, Equatable, Sendable {
         enabled: Bool = true,
         warning: String? = nil,
         usage: Usage = .none,
-        assistants: Set<String> = []
+        assistants: Set<String> = [],
+        budget: Budget = Budget()
     ) {
         self.assistants = assistants
+        self.budget = budget
         self.id = id
         self.name = name
         self.kind = kind

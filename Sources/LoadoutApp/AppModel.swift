@@ -309,14 +309,30 @@ final class AppModel {
         return base.isEmpty ? UUID().uuidString : base
     }
 
+    /// The folder, with its markdown selected inside it — a skill is a folder, and the scripts
+    /// and references beside the document are usually why you went looking.
     func revealInFinder() {
-        guard let path = selected?.directory ?? selected?.path else { return }
-        NSWorkspace.shared.activateFileViewerSelecting([path])
+        guard let item = selected else { return }
+        if let file = item.path {
+            NSWorkspace.shared.activateFileViewerSelecting([file])
+        } else if let folder = item.directory {
+            NSWorkspace.shared.activateFileViewerSelecting([folder])
+        }
     }
 
+    /// Opens the whole folder in the editor rather than the single file, so a script beside the
+    /// markdown is one click away instead of needing a second trip through the Finder.
     func openInEditor() {
-        guard let path = selected?.path else { return }
-        NSWorkspace.shared.open(path)
+        guard let item = selected else { return }
+        let target = item.directory ?? item.path?.deletingLastPathComponent() ?? item.path
+        guard let target else { return }
+        NSWorkspace.shared.open(target)
+    }
+
+    /// Which folder "Open folder" will hand over, for the tooltip.
+    var editorTarget: URL? {
+        guard let item = selected else { return nil }
+        return item.directory ?? item.path?.deletingLastPathComponent()
     }
 
     func revealBackups() {
