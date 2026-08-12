@@ -256,13 +256,34 @@ struct DetailView: View {
             .fixedSize()
             .help(model.showsPreview ? "View raw file" : "View as Markdown")
 
-            Button("Open in editor") { model.openInEditor() }
-                .buttonStyle(.bordered)
-            Button("Show in Finder") { model.revealInFinder() }
-                .buttonStyle(.bordered)
+            Button { model.openInEditor() } label: {
+                Label {
+                    Text("Open in editor")
+                } icon: {
+                    AppIconView(path: AppIconCache.editor(for: item.path))
+                }
+            }
+            .buttonStyle(.bordered)
+            .help(editorHelp(item))
+
+            Button { model.revealInFinder() } label: {
+                Label {
+                    Text("Show in Finder")
+                } icon: {
+                    AppIconView(path: AppIconCache.finder)
+                }
+            }
+            .buttonStyle(.bordered)
+
             if item.isEditable {
-                Button("Ask Claude") { model.isAskingClaude = true }
-                    .buttonStyle(.bordered)
+                Button { model.isAskingClaude = true } label: {
+                    Label {
+                        Text("Ask Claude")
+                    } icon: {
+                        AppIconView(path: AppIconCache.claude)
+                    }
+                }
+                .buttonStyle(.bordered)
             }
 
             Spacer()
@@ -309,6 +330,12 @@ struct DetailView: View {
                 .frame(minHeight: 300)
             }
         }
+    }
+
+    /// Names the app the button will actually use, since the icon alone only hints at it.
+    private func editorHelp(_ item: Item) -> String {
+        guard let path = AppIconCache.editor(for: item.path) else { return "Open in the default app" }
+        return "Open in \(URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent)"
     }
 
     private func icon(for kind: ItemKind) -> String {
