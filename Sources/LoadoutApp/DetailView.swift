@@ -27,13 +27,13 @@ struct DetailView: View {
                     // which is exactly the old layout.
                     ViewThatFits(in: .horizontal) {
                         HStack(alignment: .top, spacing: Metrics.lg) {
-                            detailCards(item)
-                            Spacer(minLength: Metrics.md)
                             budgetSection(item)
+                            Spacer(minLength: Metrics.md)
+                            detailCards(item)
                         }
                         VStack(alignment: .leading, spacing: Metrics.md) {
-                            detailCards(item)
                             budgetSection(item)
+                            detailCards(item)
                         }
                     }
                     if let folder = item.directory ?? item.path?.deletingLastPathComponent() {
