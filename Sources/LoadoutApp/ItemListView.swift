@@ -196,6 +196,18 @@ struct AssistantPanel: View {
     let item: Item
     @Bindable var model: AppModel
 
+    /// Three states, not two: has it, does not have it, or has nowhere to keep skills yet.
+    private func status(_ assistant: Assistant, has: Bool) -> String {
+        if has { return "tem" }
+        return assistant.hasSkillsFolder ? "pôr lá" : "sem skills"
+    }
+
+    private func help(_ assistant: Assistant, has: Bool) -> String {
+        if has { return "Clica para o \(assistant.label) deixar de carregar esta skill" }
+        if assistant.hasSkillsFolder { return "Clica para pôr esta skill no \(assistant.label)" }
+        return "O \(assistant.label) ainda não tem pasta de skills. Clicar cria \(assistant.skillsRoot.path) e põe esta lá."
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
             Text("Assistentes")
@@ -218,9 +230,12 @@ struct AssistantPanel: View {
                                 .foregroundStyle(has ? Color.primary : Color.secondary)
                                 .lineLimit(1)
                             Spacer(minLength: 4)
-                            Text(has ? "tem" : "pôr lá")
+                            Text(status(assistant, has: has))
                                 .font(.caption)
-                                .foregroundStyle(has ? Color.secondary : Color.accentColor)
+                                .foregroundStyle(
+                                    has ? Color.secondary
+                                        : (assistant.hasSkillsFolder ? Color.accentColor : Color.secondary)
+                                )
                         }
                         .padding(.horizontal, 9)
                         .padding(.vertical, 5)
@@ -230,9 +245,7 @@ struct AssistantPanel: View {
                         )
                     }
                     .buttonStyle(.plain)
-                    .help(has
-                          ? "Clica para o \(assistant.label) deixar de carregar esta skill"
-                          : "Clica para pôr esta skill no \(assistant.label)")
+                    .help(help(assistant, has: has))
                 }
             }
         }

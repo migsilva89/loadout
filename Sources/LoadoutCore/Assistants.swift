@@ -12,12 +12,19 @@ public struct Assistant: Identifiable, Hashable, Sendable {
     /// The installed app, when there is one. Used to show its real icon rather than a
     /// hand-drawn imitation of someone's trademark.
     public let appPath: String?
+    /// Whether it already keeps a skills directory. False means it is on the machine but has
+    /// never had a skill — putting the first one there creates the folder.
+    public let hasSkillsFolder: Bool
 
-    public init(id: String, label: String, skillsRoot: URL, appPath: String? = nil) {
+    public init(
+        id: String, label: String, skillsRoot: URL, appPath: String? = nil,
+        hasSkillsFolder: Bool = true
+    ) {
         self.id = id
         self.label = label
         self.skillsRoot = skillsRoot
         self.appPath = appPath
+        self.hasSkillsFolder = hasSkillsFolder
     }
 
     /// Two letters for when there is no app icon to show.
@@ -62,28 +69,32 @@ public enum AssistantRegistry {
             let id = String(name.dropFirst())
             guard !id.isEmpty, !id.contains(".") else { continue }
 
-            // An assistant is one that actually keeps skills. Having ~/.gemini or ~/.ssh
-            // says nothing — without a skills directory there is nowhere to put one, and
-            // listing them all turns the panel into noise.
+            // Anything holding skills counts. A known assistant with no skills folder still
+            // counts, listed apart as "no skills yet" — that is precisely the one you might
+            // want to hand the first skill to. Unknown dot-directories without skills stay
+            // out, so ~/.ssh never poses as an assistant.
             let root = entry.appendingPathComponent("skills")
             var isDirectory: ObjCBool = false
-            guard fm.fileExists(atPath: root.path, isDirectory: &isDirectory),
-                  isDirectory.boolValue
-            else { continue }
+            let hasFolder = fm.fileExists(atPath: root.path, isDirectory: &isDirectory)
+                && isDirectory.boolValue
+            let descriptor = known[id]
+            guard hasFolder || descriptor != nil else { continue }
 
-            let entry = known[id]
-            let app = entry?.app.flatMap { fm.fileExists(atPath: $0) ? $0 : nil }
+            let app = descriptor?.app.flatMap { fm.fileExists(atPath: $0) ? $0 : nil }
             found.append(Assistant(
                 id: id,
-                label: entry?.label ?? id.capitalized,
+                label: descriptor?.label ?? id.capitalized,
                 skillsRoot: root,
-                appPath: app
+                appPath: app,
+                hasSkillsFolder: hasFolder
             ))
         }
 
-        // The two he actually works in lead; the rest alphabetically.
+        // The two he actually works in lead, then the rest alphabetically, and the ones
+        // with no skills folder last — they are the tail of the list, not the headline.
         let leaders = ["claude", "codex"]
         return found.sorted { a, b in
+            if a.hasSkillsFolder != b.hasSkillsFolder { return a.hasSkillsFolder }
             switch (leaders.firstIndex(of: a.id), leaders.firstIndex(of: b.id)) {
             case let (l?, r?): return l < r
             case (_?, nil): return true
