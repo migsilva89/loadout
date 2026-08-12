@@ -29,7 +29,10 @@ struct DetailView: View {
                         // Centre-aligned, not top: the budget is two lines against the tiles'
                         // four, and hugging the top left its own corner of dead space below.
                         HStack(alignment: .center, spacing: Metrics.lg) {
+                            // The bottom padding leans the centred block upward, so its title
+                            // sits nearer the tiles' top edge than their bottom.
                             budgetSection(item)
+                                .padding(.bottom, Metrics.md)
                             Spacer(minLength: Metrics.md)
                             // Capped so the flexible tiles don't swallow the spacer: the grid
                             // hangs off the trailing edge at a steady width instead.
