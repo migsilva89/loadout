@@ -8,7 +8,19 @@ import LoadoutCore
 /// engine would be a dependency bought to render documents that are, in practice, this simple.
 struct MarkdownView: View {
     let text: String
+    /// Reading preferences from the card's Aa popover. Everything scales from the base size —
+    /// H1 at 1.66×, H2 at 1.14×, code 2.5pt under the body, the room above an H2 at 2× — so
+    /// growing the type keeps the hierarchy instead of collapsing it into one size.
+    var fontSize: CGFloat = 15
+    var design: Font.Design = .default
 
+    /// ~70 characters at the current size: the comfortable reading measure the Aa panel keeps
+    /// regardless of how wide the pane is stretched.
+    var measure: CGFloat { fontSize * 42 }
+    /// line-height ≈ 1.75 expressed as SwiftUI's between-lines spacing.
+    private var leading: CGFloat { fontSize * 0.75 }
+    private var body_: Color { Color.white.opacity(0.84) }
+    private var secondary: Color { Color.white.opacity(0.72) }
 
     var body: some View {
         // Spacing between blocks now lives on each block itself (headings need generous room
@@ -57,24 +69,22 @@ struct MarkdownView: View {
             }
             .padding(11)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.black.opacity(0.25), in: RoundedRectangle(cornerRadius: 9))
+            .background(Color.black.opacity(0.28), in: RoundedRectangle(cornerRadius: 9))
 
         case .heading(let level, let text):
             let style = headingStyle(level)
             Text(inline(text))
-                .font(.system(size: style.size, weight: .semibold))
-                .foregroundStyle(.primary)
+                .font(.system(size: style.size, weight: .semibold, design: design))
+                .foregroundStyle(Color.white)
                 .padding(.top, style.spaceAbove)
                 .padding(.bottom, style.spaceBelow)
 
         case .paragraph(let text):
-            // Body copy reads as `.primary` and fills the pane — the old 74-character cap
-            // left a wide window mostly empty, and the pane's own padding is margin enough.
             Text(inline(text))
-                .font(.system(size: 14.5))
-                .lineSpacing(6)
-                .foregroundStyle(.primary)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .font(.system(size: fontSize, design: design))
+                .lineSpacing(leading)
+                .foregroundStyle(body_)
+                .frame(maxWidth: measure, alignment: .leading)
                 .padding(.bottom, 6)
 
         case .bullet(let text):
@@ -82,28 +92,28 @@ struct MarkdownView: View {
             // wrapped lines fall under the text rather than back under the dot.
             HStack(alignment: .top, spacing: 8) {
                 Text("•")
-                    .font(.system(size: 14.5))
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: fontSize, design: design))
+                    .foregroundStyle(secondary)
                 Text(inline(text))
-                    .font(.system(size: 14.5))
-                    .lineSpacing(6)
-                    .foregroundStyle(.primary)
+                    .font(.system(size: fontSize, design: design))
+                    .lineSpacing(leading)
+                    .foregroundStyle(body_)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: measure, alignment: .leading)
             .padding(.leading, 4)
             .padding(.bottom, 6)
 
         case .numbered(let marker, let text):
             HStack(alignment: .top, spacing: 8) {
                 Text(marker)
-                    .font(.system(size: 13.5, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: fontSize - 1, design: .monospaced))
+                    .foregroundStyle(secondary)
                 Text(inline(text))
-                    .font(.system(size: 14.5))
-                    .lineSpacing(6)
-                    .foregroundStyle(.primary)
+                    .font(.system(size: fontSize, design: design))
+                    .lineSpacing(leading)
+                    .foregroundStyle(body_)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: measure, alignment: .leading)
             .padding(.leading, 4)
             .padding(.bottom, 6)
 
@@ -111,26 +121,27 @@ struct MarkdownView: View {
             HStack(spacing: 10) {
                 Rectangle().fill(Color.accentColor.opacity(0.5)).frame(width: 3)
                 Text(inline(text))
-                    .font(.system(size: 14.5))
-                    .lineSpacing(6)
+                    .font(.system(size: fontSize, design: design))
+                    .lineSpacing(leading)
                     .italic()
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(secondary)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: measure, alignment: .leading)
             .padding(.bottom, 6)
 
         case .code(let code):
             ScrollView(.horizontal, showsIndicators: false) {
                 Text(code)
-                    .font(.system(size: 12.5, design: .monospaced))
+                    .font(.system(size: fontSize - 2.5, design: .monospaced))
+                    .foregroundStyle(body_)
                     .padding(12)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.black.opacity(0.25), in: RoundedRectangle(cornerRadius: 8))
+            .background(Color.black.opacity(0.28), in: RoundedRectangle(cornerRadius: 8))
             .padding(.bottom, 9)
 
         case .rule:
-            Divider().padding(.vertical, 8)
+            Hairline(color: Color.white.opacity(0.07)).padding(.vertical, 8)
         }
     }
 
@@ -140,9 +151,9 @@ struct MarkdownView: View {
     /// is closer in weight to the paragraphs it introduces.
     private func headingStyle(_ level: Int) -> (size: CGFloat, spaceAbove: CGFloat, spaceBelow: CGFloat) {
         switch level {
-        case 1: return (21, 22, 9)
-        case 2: return (16, 22, 7)
-        default: return (14, 16, 5)
+        case 1: return (fontSize * 1.66, fontSize * 1.5, 9)
+        case 2: return (fontSize * 1.14, fontSize * 2, 7)
+        default: return (fontSize, fontSize * 1.1, 5)
         }
     }
 
@@ -155,8 +166,8 @@ struct MarkdownView: View {
             options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
         )) ?? AttributedString(text)
         for run in attributed.runs where run.inlinePresentationIntent?.contains(.code) == true {
-            attributed[run.range].backgroundColor = Color(nsColor: .quaternaryLabelColor)
-            attributed[run.range].font = .system(size: 13, design: .monospaced)
+            attributed[run.range].backgroundColor = Color.white.opacity(0.08)
+            attributed[run.range].font = .system(size: fontSize - 2, design: .monospaced)
         }
         return attributed
     }

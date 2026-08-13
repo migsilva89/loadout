@@ -13,6 +13,31 @@ struct DetailView: View {
     /// a taller window means a taller buffer instead of a fixed slab with dead space below.
     @State private var paneHeight: CGFloat = 900
 
+    // Reading preferences — the Aa popover's three choices, persisted because they are
+    // preferences about reading, not state of one session.
+    @AppStorage("readerFontSize") private var readerFontSize = 15.0
+    @AppStorage("readerFont") private var readerFont = "system"
+    @AppStorage("readerBackground") private var readerBackground = "darker"
+    @State private var readerPopoverOpen = false
+
+    private var readerDesign: Font.Design {
+        switch readerFont {
+        case "serif": return .serif
+        case "mono": return .monospaced
+        default: return .default
+        }
+    }
+
+    /// The reading surface, darker than the card and the toolbar so the text reads as paper,
+    /// not chrome. Ink is the extreme option, never the default.
+    private var readerGround: Color {
+        switch readerBackground {
+        case "dark": return Color(red: 0.118, green: 0.118, blue: 0.118)      // #1E1E1E
+        case "ink": return Color(red: 0.067, green: 0.067, blue: 0.071)       // #111112
+        default: return Color(red: 0.098, green: 0.098, blue: 0.098)          // #191919
+        }
+    }
+
     var body: some View {
         if let item = model.selected {
             ScrollView {
@@ -372,6 +397,10 @@ struct DetailView: View {
                 askButton
             }
 
+            if model.showsPreview, item.kind != .mcp {
+                readerButton
+            }
+
             Spacer(minLength: 8)
 
             budgetChip(item)
@@ -426,6 +455,71 @@ struct DetailView: View {
         .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
         .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(color.opacity(0.28), lineWidth: 0.5))
         .help(budgetHelp(item))
+    }
+
+    /// Safari Reader's pattern: one quiet Aa button, and the three reading choices live in
+    /// its popover — never as loose sliders on the bar.
+    private var readerButton: some View {
+        Button("Aa") { readerPopoverOpen.toggle() }
+            .buttonStyle(V2ToolbarButtonStyle(prominent: false, enabled: true))
+            .help("Reading size, typeface and background")
+            .pointingHand()
+            .popover(isPresented: $readerPopoverOpen, arrowEdge: .bottom) {
+                readerPopover
+            }
+            .onAppear {
+                // The screenshot hook again — presented after the window settles, since a
+                // popover asked for before its anchor has laid out never shows at all.
+                if ProcessInfo.processInfo.environment["LOADOUT_OPEN"] == "reader" {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { readerPopoverOpen = true }
+                }
+            }
+    }
+
+    private var readerPopover: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Button("A") { readerFontSize = max(13, readerFontSize - 1) }
+                    .font(.system(size: 11))
+                    .buttonStyle(V2ToolbarButtonStyle(prominent: false, enabled: readerFontSize > 13))
+                    .pointingHand()
+                Slider(value: $readerFontSize, in: 13...20, step: 0.5)
+                    .controlSize(.small)
+                Button("A") { readerFontSize = min(20, readerFontSize + 1) }
+                    .font(.system(size: 15))
+                    .buttonStyle(V2ToolbarButtonStyle(prominent: false, enabled: readerFontSize < 20))
+                    .pointingHand()
+                Text("\(readerFontSize, specifier: "%.0f") pt")
+                    .font(.system(size: 11.5))
+                    .monospacedDigit()
+                    .foregroundStyle(V2.textDim)
+                    .frame(width: 36, alignment: .trailing)
+            }
+            readerSegments(
+                options: [("system", "System"), ("serif", "Serif"), ("mono", "Mono")],
+                selection: $readerFont
+            )
+            readerSegments(
+                options: [("dark", "Dark"), ("darker", "Darker"), ("ink", "Ink")],
+                selection: $readerBackground
+            )
+        }
+        .padding(12)
+        .frame(width: 280)
+        .background(V2.popover)
+    }
+
+    private func readerSegments(options: [(String, String)], selection: Binding<String>) -> some View {
+        HStack(spacing: 1) {
+            ForEach(options, id: \.0) { value, label in
+                V2SegmentTab(label: label, selected: selection.wrappedValue == value) {
+                    selection.wrappedValue = value
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(2)
+        .background(V2.well, in: RoundedRectangle(cornerRadius: 7))
     }
 
     /// One button when exactly one assistant CLI is installed, a menu when there's a choice,
@@ -483,10 +577,11 @@ struct DetailView: View {
                 .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else if model.showsPreview {
-            MarkdownView(text: model.draft)
+            MarkdownView(text: model.draft, fontSize: readerFontSize, design: readerDesign)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 16)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 18)
+                .background(readerGround)
         } else if item.isEditable {
             VStack(spacing: 0) {
                 MarkdownEditor(
