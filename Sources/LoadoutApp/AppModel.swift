@@ -14,9 +14,20 @@ final class AppModel {
 
     // Selection and filters
     var context: Project?
-    var selection: Selection = .skills
-    /// The origin/state chip above the list. Resets to `.all` whenever the sidebar row
-    /// changes, so a stale "Disabled" chip never silently hides everything in a new kind.
+    /// Switching kind resets the filters — an assistant or over-budget filter set on Skills
+    /// would silently empty Commands, with the control that caused it not even rendered
+    /// there — and moves the selection to the new list, so the detail pane never shows a
+    /// skill while the Commands tab is lit.
+    var selection: Selection = .skills {
+        didSet {
+            guard oldValue != selection else { return }
+            filter = .all
+            assistantFilter = .any
+            selectedID = visibleItems.first?.id
+            loadDraft()
+        }
+    }
+    /// The origin/state filter behind the funnel.
     var filter: ItemFilter = .all
     /// The assistant menu next to sort. Independent of `filter`, and only meaningful for
     /// skills — resets to `.any` alongside `filter` whenever the sidebar row changes.
@@ -30,6 +41,9 @@ final class AppModel {
 
     // Editing
     var draft: String = ""
+    /// The file exactly as it sits on disk, refreshed on load and on save — what the editor's
+    /// gutter diffs the draft against to mark modified lines.
+    private(set) var diskDraft: String = ""
     var isDirty = false
     /// Reading mode: the same pane renders the markdown instead of showing the source.
     var showsPreview = true
@@ -134,6 +148,7 @@ final class AppModel {
     // MARK: - Reading
 
     func reload() {
+        let previousSelection = selectedID
         let inventory = scanner.scanAll(project: context)
         let annotated = usageIndex?.annotate(inventory.items) ?? inventory.items
         items = annotated
@@ -142,7 +157,24 @@ final class AppModel {
             self.selectedID = nil
         }
         if selectedID == nil { selectedID = visibleItems.first?.id }
-        loadDraft()
+        if isDirty, selectedID == previousSelection, selectedID != nil {
+            // The reload was caused by something else — a toggle, a failed save, the
+            // watcher — and the person is mid-edit on this very item. Refresh only the
+            // disk copy the gutter diffs against; wiping the draft here is how a failed
+            // ⌘S used to destroy the edits it had just refused to save.
+            if let path = selected?.path,
+               let onDisk = try? String(contentsOf: path, encoding: .utf8) {
+                diskDraft = onDisk
+            }
+        } else {
+            if isDirty, previousSelection != nil {
+                // The edited item itself vanished from disk. The draft must not be
+                // grafted onto whatever got selected next — that used to end with A's
+                // text saved into B's file.
+                statusMessage = "The file being edited disappeared — unsaved changes were discarded."
+            }
+            loadDraft()
+        }
     }
 
     var visibleItems: [Item] {
@@ -174,20 +206,17 @@ final class AppModel {
         ).count
     }
 
-    /// Plugins that actually ship something, so the plugin manager does not list empty rows.
-    var pluginsWithItems: [PluginInfo] {
-        plugins.filter { plugin in items.contains { $0.origin == .plugin(plugin.name) } }
-    }
-
     // MARK: - Draft
 
     func loadDraft() {
         guard let item = selected, let path = item.path, item.kind != .mcp else {
             draft = ""
+            diskDraft = ""
             isDirty = false
             return
         }
         draft = (try? String(contentsOf: path, encoding: .utf8)) ?? ""
+        diskDraft = draft
         isDirty = false
     }
 
@@ -209,6 +238,7 @@ final class AppModel {
         guard let item = selected else { return }
         perform("Saved \(item.name).") {
             try mutations.save(item, contents: draft)
+            diskDraft = draft
             isDirty = false
         }
     }
@@ -224,7 +254,8 @@ final class AppModel {
             } else {
                 try mutations.enableSkill(item)
             }
-            selectedID = nil
+            // The id survives an enable/disable, so the selection does too — nil-ing it
+            // here used to jump the detail pane to whatever sorted first.
         }
     }
 
@@ -357,21 +388,6 @@ final class AppModel {
         }
     }
 
-    /// Opens the whole folder in the editor rather than the single file, so a script beside the
-    /// markdown is one click away instead of needing a second trip through the Finder.
-    func openInEditor() {
-        guard let item = selected else { return }
-        let target = item.directory ?? item.path?.deletingLastPathComponent() ?? item.path
-        guard let target else { return }
-        NSWorkspace.shared.open(target)
-    }
-
-    /// Which folder "Open folder" will hand over, for the tooltip.
-    var editorTarget: URL? {
-        guard let item = selected else { return nil }
-        return item.directory ?? item.path?.deletingLastPathComponent()
-    }
-
     func revealBackups() {
         try? FileManager.default.createDirectory(at: paths.backups, withIntermediateDirectories: true)
         NSWorkspace.shared.activateFileViewerSelecting([paths.backups])
@@ -444,15 +460,11 @@ final class AppModel {
         self.watcher = watcher
     }
 
-    /// A change on disk must never throw away what the user is typing.
+    /// A change on disk must never throw away what the user is typing — and must never
+    /// graft it onto a different item either. `reload()` owns both rules now: the draft
+    /// survives exactly when the same item stays selected.
     private func reloadFromDisk() {
-        let editing = isDirty
-        let keptDraft = draft
         reload()
-        if editing {
-            draft = keptDraft
-            isDirty = true
-        }
     }
 
     func changeContext(to project: Project?) {

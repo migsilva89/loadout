@@ -51,7 +51,14 @@ struct PluginManagerRow: View {
                 Text(plugin.name)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(plugin.enabled ? V2.text : V2.textDim)
-                Text("\(itemCount) \(itemCount == 1 ? "item" : "items") · v\(plugin.version)")
+                // In a project scope the inventory holds only the project's items, so the
+                // per-plugin count would read a false 0 — plugins are global installs, and
+                // the row says so instead.
+                Text(
+                    model.context == nil
+                        ? "\(itemCount) \(itemCount == 1 ? "item" : "items") · v\(plugin.version)"
+                        : "v\(plugin.version) · global"
+                )
                     .font(.system(size: 11.5))
                     .foregroundStyle(V2.textDim)
             }

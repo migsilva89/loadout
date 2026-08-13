@@ -55,7 +55,6 @@ public enum Selection: String, Equatable, Hashable, Sendable, CaseIterable {
 public enum ItemFilter: String, Equatable, Hashable, Sendable, CaseIterable {
     case all
     case mine
-    case thisProject
     case fromPlugins
     case neverUsed
     case disabled
@@ -67,7 +66,6 @@ public enum ItemFilter: String, Equatable, Hashable, Sendable, CaseIterable {
         switch self {
         case .all: return "All"
         case .mine: return "Personal"
-        case .thisProject: return "This project"
         case .fromPlugins: return "From plugins"
         case .neverUsed: return "Never used"
         case .disabled: return "Off"
@@ -75,18 +73,12 @@ public enum ItemFilter: String, Equatable, Hashable, Sendable, CaseIterable {
         }
     }
 
-    /// The same choice, said in as few words as possible. "In 2+ assistants" used to live here
-    /// too, but a chip that reads "2+" to a first-time visitor answers nothing — it moved out
-    /// to its own assistant menu, and the five that remain fit one line at the column's normal
-    /// width on their full names, so there is no longer a reason to shorten them.
-    public var shortTitle: String { title }
 
     /// The full sentence a short chip label can't carry on its own, shown on hover.
     public var hint: String {
         switch self {
         case .all: return "Everything in this list"
         case .mine: return "Created and kept locally, not from a project or plugin"
-        case .thisProject: return "Specific to the project that's currently open"
         case .fromPlugins: return "Comes from an installed plugin"
         case .neverUsed: return "Never used in the last 90 days"
         case .disabled: return "Currently turned off"
@@ -135,11 +127,6 @@ public enum Filtering {
             return items
         case .mine:
             return items.filter { $0.origin == .personal }
-        case .thisProject:
-            return items.filter {
-                if case .project = $0.origin { return true }
-                return false
-            }
         case .fromPlugins:
             return items.filter {
                 if case .plugin = $0.origin { return true }
@@ -195,14 +182,8 @@ public enum Filtering {
 }
 
 public extension Usage {
-    /// "12 uses · 2 days ago", or "never used".
-    func summary(now: Date = Date()) -> String {
-        guard count > 0 else { return "never used" }
-        let uses = count == 1 ? "1 use" : "\(count) uses"
-        guard let last = lastUsed else { return uses }
-        return "\(uses) · \(Self.relative(last, now: now))"
-    }
-
+    /// "2 days ago", said the way a person would — what the detail cards and the header
+    /// subtitle print for dates.
     static func relative(_ date: Date, now: Date = Date()) -> String {
         let seconds = now.timeIntervalSince(date)
         if seconds < 3600 { return "minutes ago" }

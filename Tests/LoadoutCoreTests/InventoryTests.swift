@@ -185,6 +185,22 @@ final class InventoryTests: XCTestCase {
         XCTAssertEqual(scoped.items.first?.origin, .project("imark"))
     }
 
+    /// The scope shows what belongs to the project and nothing else: a personal skill must
+    /// NOT appear under a project scope, and a project with nothing of its own scopes to an
+    /// empty list rather than echoing the global inventory.
+    func testAProjectScopeExcludesTheGlobalInventory() {
+        let fixture = Fixture()
+        fixture.skill("global-skill")
+        let repo = fixture.projectRepo("TGC/iota", skills: [])
+        let iota = Project(name: "iota", relativePath: "TGC/iota", path: repo)
+
+        XCTAssertEqual(InventoryScanner(paths: fixture.paths).scanAll().items.map(\.name), ["global-skill"])
+        XCTAssertTrue(
+            InventoryScanner(paths: fixture.paths).scanAll(project: iota).items.isEmpty,
+            "a project with no skills of its own is empty, not a copy of Global"
+        )
+    }
+
     // MARK: AC1.6
 
     func testProjectsComeFromTheGeneratedIndex() {
@@ -278,8 +294,8 @@ final class InventoryTests: XCTestCase {
         XCTAssertEqual(ItemFilter.mine.title, "Personal")
     }
 
-    /// `.fromPlugins` narrows to items whose origin is `.plugin`, the same way `.thisProject`
-    /// narrows to `.project` — a chip per origin, so "From plugins" and "12" mean what they say.
+    /// `.fromPlugins` narrows to items whose origin is `.plugin` — a filter per origin, so
+    /// "From plugins" and "12" mean what they say.
     func testFromPluginsChipIsolatesPluginOrigin() {
         let fixture = Fixture()
         fixture.skill("pessoal")
@@ -318,14 +334,6 @@ final class InventoryTests: XCTestCase {
             Item(id: "3", name: "plugin", kind: .skill, origin: .plugin("vercel")),
         ]
         XCTAssertEqual(Filtering.filter(items, by: .mine).map(\.name), ["pessoal"])
-    }
-
-    func testThisProjectChipIsProjectOrigin() {
-        let items = [
-            Item(id: "1", name: "pessoal", kind: .skill, origin: .personal),
-            Item(id: "2", name: "projeto", kind: .skill, origin: .project("repo")),
-        ]
-        XCTAssertEqual(Filtering.filter(items, by: .thisProject).map(\.name), ["projeto"])
     }
 
     /// What used to be the ".shared" chip is now the assistant menu's "In more than one" entry.

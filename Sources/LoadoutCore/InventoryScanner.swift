@@ -30,7 +30,10 @@ public struct InventoryScanner: Sendable {
         }
 
         if let project {
-            items += projectItems(project)
+            // The scope answers "what belongs to this project", not "what would load
+            // there": mixing the global inventory in made a project with nothing of its
+            // own look exactly like Global, which read as the scope being broken.
+            return Inventory(items: projectItems(project), plugins: plugins)
         }
 
         return Inventory(items: items, plugins: plugins)

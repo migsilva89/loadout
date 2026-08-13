@@ -112,9 +112,4 @@ enum AppIconCache {
         cache.removeValue(forKey: "id:\(id)")
     }
 
-    /// Whichever app would open this file if it were double-clicked.
-    static func editor(for url: URL?) -> String? {
-        guard let url else { return nil }
-        return NSWorkspace.shared.urlForApplication(toOpen: url)?.path
-    }
 }

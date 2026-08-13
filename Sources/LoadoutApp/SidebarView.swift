@@ -25,15 +25,19 @@ struct SidebarView: View {
                 PluginManagerView(model: model)
             } else {
                 header
-                Rectangle().fill(V2.hairline).frame(height: 0.5)
+                Hairline()
                 list
             }
-            Rectangle().fill(V2.hairline).frame(height: 0.5)
+            Hairline()
             footer
         }
         .background(V2.sidebar)
         .onChange(of: model.searchFocused) { _, wantsFocus in
-            if wantsFocus { searchFieldFocused = true }
+            guard wantsFocus else { return }
+            searchFieldFocused = true
+            // Consume the request immediately: if it stays true, the next ⌘F is a
+            // true→true non-change and onChange never fires again.
+            DispatchQueue.main.async { model.searchFocused = false }
         }
         .onChange(of: searchFieldFocused) { _, focused in
             if !focused { model.searchFocused = false }
@@ -102,7 +106,7 @@ struct SidebarView: View {
             .frame(height: 24)
             .background(V2.well, in: RoundedRectangle(cornerRadius: 6))
             .padding(8)
-            Rectangle().fill(V2.hairline).frame(height: 0.5)
+            Hairline()
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     popoverGroupLabel("Scope")
@@ -213,7 +217,6 @@ struct SidebarView: View {
             popoverGroupLabel("Source")
             filterOption(.all)
             filterOption(.mine)
-            if model.context != nil { filterOption(.thisProject) }
             filterOption(.fromPlugins)
             popoverGroupLabel("State")
             filterOption(.neverUsed)
@@ -229,7 +232,7 @@ struct SidebarView: View {
                     assistantOption(.one(assistant.id), label: assistant.label)
                 }
             }
-            Rectangle().fill(V2.hairline).frame(height: 0.5).padding(.vertical, 5)
+            Hairline().padding(.vertical, 5)
             Button {
                 model.filter = .all
                 model.assistantFilter = .any
@@ -253,7 +256,7 @@ struct SidebarView: View {
 
     private func filterOption(_ chip: ItemFilter) -> some View {
         popoverRow(
-            title: chip.shortTitle, subtitle: nil, checked: model.filter == chip,
+            title: chip.title, subtitle: nil, checked: model.filter == chip,
             hint: chip.hint, trailingCount: model.count(for: chip)
         ) {
             model.filter = chip
@@ -364,7 +367,7 @@ struct SidebarView: View {
             tokens.append(FilterToken(id: "scope", label: project.name) { model.changeContext(to: nil) })
         }
         if model.filter != .all {
-            tokens.append(FilterToken(id: "filter", label: model.filter.shortTitle) { model.filter = .all })
+            tokens.append(FilterToken(id: "filter", label: model.filter.title) { model.filter = .all })
         }
         switch model.assistantFilter {
         case .any: break
@@ -409,13 +412,33 @@ struct SidebarView: View {
     // MARK: - List
 
     private var list: some View {
-        ScrollView {
-            LazyVStack(spacing: 1) {
-                ForEach(model.visibleItems) { item in
-                    SidebarRow(item: item, model: model)
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 1) {
+                    ForEach(model.visibleItems) { item in
+                        SidebarRow(item: item, model: model)
+                            .id(item.id)
+                    }
                 }
+                .padding(6)
             }
-            .padding(6)
+            // The custom rows don't get `List`'s free arrow keys, so the scroll area takes
+            // focus itself and moves the selection — click the list once, then ↑↓ walk it.
+            .focusable()
+            .focusEffectDisabled()
+            .onMoveCommand { direction in
+                let items = model.visibleItems
+                guard !items.isEmpty else { return }
+                let current = items.firstIndex { $0.id == model.selectedID }
+                let next: Int
+                switch direction {
+                case .down: next = min(items.count - 1, (current ?? -1) + 1)
+                case .up: next = max(0, (current ?? items.count) - 1)
+                default: return
+                }
+                model.select(items[next].id)
+                proxy.scrollTo(items[next].id, anchor: nil)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay { emptyState }
@@ -436,10 +459,21 @@ struct SidebarView: View {
                     "No matches", systemImage: "line.3.horizontal.decrease.circle",
                     description: Text("Nothing passes the active filters. Clear them to see everything again.")
                 )
+            } else if let project = model.context {
+                // A scoped, honestly empty project: say whose emptiness this is, instead of
+                // padding the list with the global inventory the way the old scope did.
+                ContentUnavailableView(
+                    "Nothing in \(project.name)", systemImage: "folder",
+                    description: Text("This project has no \(model.selection.searchNoun(plural: true)) of its own. Switch the scope back to Global to see everything.")
+                )
             } else {
                 ContentUnavailableView(
                     "Nothing here", systemImage: "tray",
-                    description: Text("This source is empty. Create a skill with ⌘N.")
+                    description: Text(
+                        model.selection == .skills
+                            ? "This source is empty. Create a skill with ⌘N."
+                            : "No \(model.selection.searchNoun(plural: true)) found on this machine."
+                    )
                 )
             }
         }
@@ -541,6 +575,11 @@ struct SidebarRow: View {
                         .help(usageHint)
                     if item.kind == .skill, item.origin == .personal {
                         MiniSwitch(on: item.enabled) { model.toggle(item) }
+                            .help(
+                                item.enabled
+                                    ? "Disable — Claude stops loading this skill"
+                                    : "Enable — Claude loads this skill again"
+                            )
                     }
                 }
                 Text(item.description)
@@ -621,7 +660,6 @@ struct MiniSwitch: View {
                 .animation(.easeOut(duration: 0.16), value: on)
         }
         .buttonStyle(.plain)
-        .help(on ? "Disable — Claude stops loading this" : "Enable — Claude loads this again")
         .pointingHand()
     }
 }

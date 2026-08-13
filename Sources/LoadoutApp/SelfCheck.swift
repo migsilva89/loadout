@@ -45,12 +45,25 @@ enum SelfCheck {
         model.save()
         check("rejects invalid frontmatter", model.errorMessage != nil)
         check("doesn't damage the file", model.selected?.description == "New résumé.")
+        // The refusal must not destroy the work it refused to save — a failed ⌘S used to
+        // reload the disk copy over the draft.
+        check("a failed save keeps the draft", model.draft.contains("no name"))
+        check("a failed save keeps the dirty flag", model.isDirty)
         model.errorMessage = nil
+        model.loadDraft()
+
+        // A mutation elsewhere must not wipe an edit in progress either.
+        model.draft = "---\nname: auto-teste\ndescription: Meio editada.\n---\n\nCorpo."
+        model.isDirty = true
+        model.reload()
+        check("a reload keeps the dirty draft on the same item", model.draft.contains("Meio editada"))
         model.loadDraft()
 
         // Disable and enable
         let created = model.items.first { $0.name == "auto-teste" }!
+        let selectionBeforeToggle = model.selectedID
         model.toggle(created)
+        check("toggling keeps the selection", model.selectedID == selectionBeforeToggle)
         check(
             "disabling moves it to skills-off",
             FileManager.default.fileExists(
@@ -83,6 +96,14 @@ enum SelfCheck {
         model.query = "this doesn't exist"
         check("filters out nonmatches", model.visibleItems.isEmpty)
         model.query = ""
+
+        // Switching kind resets the filters: an assistant filter set on Skills used to
+        // silently empty Commands, with the control that caused it not even rendered there.
+        model.assistantFilter = .one("claude")
+        model.selection = .commands
+        check("tab change resets the assistant filter", model.assistantFilter == .any)
+        check("tab change resets the funnel", model.filter == .all)
+        model.selection = .skills
 
         // Chip counts follow every narrowing the list itself follows — the "All 56 over an
         // empty list" bug was the counts ignoring the assistant menu.

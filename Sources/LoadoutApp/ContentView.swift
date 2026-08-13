@@ -4,36 +4,31 @@ import LoadoutCore
 
 struct ContentView: View {
     @Bindable var model: AppModel
+    @AppStorage("sidebarVisible") private var sidebarVisible = true
 
     var body: some View {
-        NavigationSplitView {
-            SidebarView(model: model)
-                .navigationSplitViewColumnWidth(min: 340, ideal: 372, max: 520)
-        } detail: {
-            DetailView(model: model)
+        VStack(spacing: 0) {
+            TitleBar(model: model, sidebarVisible: $sidebarVisible)
+            Hairline(color: Color.black.opacity(0.6))
+            HStack(spacing: 0) {
+                if sidebarVisible {
+                    SidebarView(model: model)
+                        .frame(width: 372)
+                        .transition(.move(edge: .leading))
+                    Hairline(vertical: true)
+                }
+                DetailView(model: model)
+                    .frame(maxWidth: .infinity)
+            }
+            .animation(.easeOut(duration: 0.18), value: sidebarVisible)
         }
+        // The custom bar owns the very top of the window, traffic lights included.
+        .ignoresSafeArea(.container, edges: .top)
         .background(V2.window)
         // The design is one deliberate dark theme, not a pair — the palette in Theme.swift
         // is authored against these exact surfaces, so the window opts out of following the
         // system appearance.
         .preferredColorScheme(.dark)
-        .toolbar {
-            // The kind bar lives in the title bar now, as the design draws it: one inset
-            // segmented control, name and count per kind, window-level because switching
-            // kind changes both columns below it.
-            ToolbarItem(placement: .principal) {
-                KindTabs(model: model)
-            }
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    model.isCreating = true
-                } label: {
-                    Label("New skill", systemImage: "plus")
-                }
-                .help("Create a new personal skill (⌘N)")
-                .pointingHand()
-            }
-        }
         .background(WindowPlacement())
 
         .sheet(isPresented: $model.isCreating) { NewSkillSheet(model: model) }
@@ -60,6 +55,80 @@ struct ContentView: View {
     }
 }
 
+// MARK: - Title bar
+
+/// The design's own 52pt title bar, in the three zones a Mac toolbar balances: the system's
+/// traffic lights and the sidebar toggle at the left, the kind tabs at the optical centre of
+/// the whole window — a ZStack, so they centre on the window and not on whatever the side
+/// zones leave over — and the actions at the right.
+struct TitleBar: View {
+    @Bindable var model: AppModel
+    @Binding var sidebarVisible: Bool
+
+    var body: some View {
+        ZStack {
+            KindTabs(model: model)
+            HStack(spacing: 12) {
+                // The traffic lights render themselves over this leading inset.
+                Spacer().frame(width: 68)
+                sidebarToggle
+                Spacer()
+                newSkillButton
+            }
+            .padding(.horizontal, 14)
+        }
+        .frame(height: 52)
+        .frame(maxWidth: .infinity)
+        .background(Color(red: 0.173, green: 0.173, blue: 0.180))   // #2C2C2E
+        .overlay(alignment: .top) { Hairline(color: Color.white.opacity(0.06)) }
+        // With the system title bar hidden, this strip is what the hand expects to grab.
+        .gesture(WindowDragGesture())
+    }
+
+    private var sidebarToggle: some View {
+        Button {
+            sidebarVisible.toggle()
+        } label: {
+            Image(systemName: "sidebar.left")
+                .font(.system(size: 13))
+                .foregroundStyle(Color.white.opacity(sidebarVisible ? 0.85 : 0.45))
+                .frame(width: 28, height: 26)
+                .background(
+                    sidebarVisible ? V2.button : Color.clear,
+                    in: RoundedRectangle(cornerRadius: 7)
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 7))
+        }
+        .buttonStyle(.plain)
+        .help(sidebarVisible ? "Hide the sidebar" : "Show the sidebar")
+        .pointingHand()
+    }
+
+    /// A Mac toolbar button, not a web one: 26pt, quiet fill and hairline, the plus glyph
+    /// with the label. Blue stays reserved for selection.
+    private var newSkillButton: some View {
+        Button {
+            model.isCreating = true
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "plus")
+                    .font(.system(size: 11, weight: .medium))
+                Text("New skill")
+                    .font(.system(size: 12.5))
+            }
+            .foregroundStyle(Color.white.opacity(0.88))
+            .padding(.horizontal, 11)
+            .frame(height: 26)
+            .background(V2.button, in: RoundedRectangle(cornerRadius: 7))
+            .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Color.white.opacity(0.10), lineWidth: 0.5))
+            .contentShape(RoundedRectangle(cornerRadius: 7))
+        }
+        .buttonStyle(.plain)
+        .help("Create a new personal skill (⌘N)")
+        .pointingHand()
+    }
+}
+
 // MARK: - Kind tabs
 
 /// The five kinds as one segmented control in the title bar — the design's replacement for
@@ -80,29 +149,13 @@ struct KindTabs: View {
     }
 
     private func tab(_ selection: Selection) -> some View {
-        let isActive = model.selection == selection
-        return Button {
+        V2SegmentTab(
+            label: selection.title,
+            count: model.count(for: selection),
+            selected: model.selection == selection
+        ) {
             model.selection = selection
-        } label: {
-            HStack(spacing: 6) {
-                Text(selection.title)
-                    .font(.system(size: 12.5, weight: isActive ? .medium : .regular))
-                    .foregroundStyle(isActive ? Color.white : Color.white.opacity(0.55))
-                Text("\(model.count(for: selection))")
-                    .font(.system(size: 10.5))
-                    .monospacedDigit()
-                    .foregroundStyle(Color.white.opacity(isActive ? 0.6 : 0.3))
-            }
-            .padding(.horizontal, 13)
-            .padding(.vertical, 4)
-            .background(
-                isActive ? Color.white.opacity(0.16) : Color.clear,
-                in: RoundedRectangle(cornerRadius: 6)
-            )
-            .contentShape(RoundedRectangle(cornerRadius: 6))
         }
-        .buttonStyle(.plain)
         .help(selection.rowHint)
-        .pointingHand()
     }
 }

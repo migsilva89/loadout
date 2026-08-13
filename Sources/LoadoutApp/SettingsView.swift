@@ -2,15 +2,14 @@ import SwiftUI
 import AppKit
 import LoadoutCore
 
-/// ⌘, opens this. Four tabs, one per thing a person occasionally needs to change and would
-/// otherwise have no obvious place to find.
+/// ⌘, opens this. Three tabs, one per thing a person occasionally needs to change and would
+/// otherwise have no obvious place to find. Appearance left with the v2 redesign: the app
+/// carries one deliberate dark theme now, so there is nothing to choose.
 struct SettingsView: View {
     @Bindable var model: AppModel
 
     var body: some View {
         TabView {
-            AppearanceTab()
-                .tabItem { Label("Appearance", systemImage: "paintbrush") }
             UsageTab(model: model)
                 .tabItem { Label("Usage", systemImage: "chart.bar") }
             AssistantsTab(model: model)
@@ -19,36 +18,6 @@ struct SettingsView: View {
                 .tabItem { Label("Backups", systemImage: "clock.arrow.circlepath") }
         }
         .frame(width: 520, height: 400)
-    }
-}
-
-// MARK: - Appearance
-
-private struct AppearanceTab: View {
-    // Read where `LoadoutApp.init` and `AppAppearance.apply()` write, so a change here is
-    // both persisted and reflected immediately without a restart.
-    @AppStorage("appearance") private var appearance: String = AppAppearance.system.rawValue
-
-    var body: some View {
-        Form {
-            Picker("Appearance", selection: $appearance) {
-                ForEach(AppAppearance.allCases, id: \.rawValue) { option in
-                    Text(option.label).tag(option.rawValue)
-                }
-            }
-            .pickerStyle(.radioGroup)
-            .onChange(of: appearance) { _, newValue in
-                (AppAppearance(rawValue: newValue) ?? .system).apply()
-            }
-            .help("Sets the window's light or dark appearance immediately, and remembers it for next launch")
-            Text("System follows the Mac's own setting. LOADOUT_APPEARANCE, when set, overrides this at launch.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        // Grouped is what System Settings looks like, and it pins content to the top of the
-        // pane instead of floating it in the middle of a fixed-size tab.
-        .formStyle(.grouped)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 }
 

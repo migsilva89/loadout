@@ -64,3 +64,52 @@ struct V2Card<Content: View>: View {
             .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(V2.hairlineSoft, lineWidth: 0.5))
     }
 }
+
+/// A half-point hairline — the separator weight the whole design is drawn with.
+struct Hairline: View {
+    var color: Color = V2.hairline
+    var vertical = false
+
+    var body: some View {
+        Rectangle()
+            .fill(color)
+            .frame(
+                width: vertical ? 0.5 : nil,
+                height: vertical ? nil : 0.5
+            )
+    }
+}
+
+/// One segment of the design's inset segmented controls — the kind tabs in the title bar and
+/// the document's Preview/Edit switch are the same tile, kept identical by construction.
+struct V2SegmentTab: View {
+    let label: String
+    var count: Int?
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Text(label)
+                    .font(.system(size: 12.5, weight: selected ? .medium : .regular))
+                    .foregroundStyle(selected ? Color.white : Color.white.opacity(0.55))
+                if let count {
+                    Text("\(count)")
+                        .font(.system(size: 10.5))
+                        .monospacedDigit()
+                        .foregroundStyle(Color.white.opacity(selected ? 0.6 : 0.3))
+                }
+            }
+            .padding(.horizontal, 13)
+            .padding(.vertical, 4)
+            .background(
+                selected ? Color.white.opacity(0.16) : Color.clear,
+                in: RoundedRectangle(cornerRadius: 6)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 6))
+        }
+        .buttonStyle(.plain)
+        .pointingHand()
+    }
+}

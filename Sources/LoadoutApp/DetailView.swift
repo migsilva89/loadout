@@ -6,6 +6,8 @@ import LoadoutCore
 /// section is a rounded surface on the darker window ground, the way the design draws them.
 struct DetailView: View {
     @Bindable var model: AppModel
+    /// What the editor reports back — caret position and live issues — for the status bar.
+    @State private var editorState = EditorState()
 
     var body: some View {
         if let item = model.selected {
@@ -160,7 +162,7 @@ struct DetailView: View {
         }
         .padding(.horizontal, 13)
         .padding(.vertical, 11)
-        .overlay(alignment: .bottom) { Rectangle().fill(Color.white.opacity(0.06)).frame(height: 0.5) }
+        .overlay(alignment: .bottom) { Hairline(color: Color.white.opacity(0.06)) }
     }
 
     private func budgetHelp(_ item: Item) -> String {
@@ -222,7 +224,7 @@ struct DetailView: View {
         }
         .padding(.horizontal, 13)
         .padding(.vertical, 9)
-        .overlay(alignment: .bottom) { Rectangle().fill(Color.white.opacity(0.06)).frame(height: 0.5) }
+        .overlay(alignment: .bottom) { Hairline(color: Color.white.opacity(0.06)) }
     }
 
     private func usageValue(_ item: Item) -> String {
@@ -319,8 +321,8 @@ struct DetailView: View {
             }
             .padding(.horizontal, 13)
             .padding(.vertical, 9)
-            .overlay(alignment: .bottom) { Rectangle().fill(Color.white.opacity(0.06)).frame(height: 0.5) }
-            .overlay(alignment: .trailing) { Rectangle().fill(Color.white.opacity(0.06)).frame(width: 0.5) }
+            .overlay(alignment: .bottom) { Hairline(color: Color.white.opacity(0.06)) }
+            .overlay(alignment: .trailing) { Hairline(color: Color.white.opacity(0.06), vertical: true) }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -340,7 +342,7 @@ struct DetailView: View {
         V2Card {
             VStack(spacing: 0) {
                 documentToolbar(item)
-                Rectangle().fill(Color.white.opacity(0.08)).frame(height: 0.5)
+                Hairline(color: Color.white.opacity(0.08))
                 documentBody(item)
             }
         }
@@ -352,7 +354,11 @@ struct DetailView: View {
             // in two modes.
             HStack(spacing: 1) {
                 viewModeTab("Preview", selected: model.showsPreview) { model.showsPreview = true }
-                viewModeTab("Edit", selected: !model.showsPreview) { model.showsPreview = false }
+                // The dot is the unsaved marker the design asks for on the Edit segment
+                // itself, so the state is visible even while reading the preview.
+                viewModeTab(model.isDirty ? "Edit •" : "Edit", selected: !model.showsPreview) {
+                    model.showsPreview = false
+                }
             }
             .padding(2)
             .background(V2.well, in: RoundedRectangle(cornerRadius: 7))
@@ -393,21 +399,8 @@ struct DetailView: View {
     }
 
     private func viewModeTab(_ name: String, selected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(name)
-                .font(.system(size: 12))
-                .foregroundStyle(selected ? Color.white : Color.white.opacity(0.55))
-                .padding(.horizontal, 13)
-                .padding(.vertical, 4)
-                .background(
-                    selected ? Color.white.opacity(0.16) : Color.clear,
-                    in: RoundedRectangle(cornerRadius: 6)
-                )
-                .contentShape(RoundedRectangle(cornerRadius: 6))
-        }
-        .buttonStyle(.plain)
-        .help(name == "Preview" ? "Read the document as rendered Markdown" : "Edit the raw file")
-        .pointingHand()
+        V2SegmentTab(label: name, selected: selected, action: action)
+            .help(name.hasPrefix("Preview") ? "Read the document as rendered Markdown" : "Edit the raw file")
     }
 
     /// The body's line count against the documented limit, always in view while editing —
@@ -491,17 +484,17 @@ struct DetailView: View {
                 .padding(.vertical, 16)
         } else if item.isEditable {
             VStack(spacing: 0) {
-                TextEditor(text: Binding(
-                    get: { model.draft },
-                    set: { model.draft = $0; model.isDirty = true }
-                ))
-                .font(.system(size: 12.5, design: .monospaced))
-                .scrollContentBackground(.hidden)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .frame(minHeight: 320)
-                .background(V2.editor)
-                editorStatusBar
+                MarkdownEditor(
+                    text: $model.draft,
+                    original: model.diskDraft,
+                    onEdit: { model.isDirty = true },
+                    onState: { editorState = $0 }
+                )
+                // A fixed viewport, the design's own cap: the buffer scrolls inside the
+                // editor, instead of the editor trying to be as tall as the whole file
+                // and wrestling the pane's outer scroll for the geometry.
+                .frame(height: 440)
+                editorStatusBar(item)
             }
         } else {
             VStack(alignment: .leading, spacing: 8) {
@@ -520,17 +513,25 @@ struct DetailView: View {
         }
     }
 
-    /// The design's editor footer: quiet facts about the buffer, nothing interactive.
-    private var editorStatusBar: some View {
-        HStack(spacing: 14) {
+    /// The design's editor footer: where the caret is, how big the buffer is, whether it is
+    /// saved, what it costs in tokens, and how many live issues the validator sees.
+    private func editorStatusBar(_ item: Item) -> some View {
+        let liveBudget = Budget.measure(document: model.draft)
+        return HStack(spacing: 14) {
+            Text("Ln \(editorState.line), Col \(editorState.column)")
             Text("\(model.draft.components(separatedBy: "\n").count) lines")
             Text("Markdown")
             Text("UTF-8")
             Spacer()
-            if model.isDirty {
-                Text("unsaved")
-                    .foregroundStyle(V2.amber)
+            if !editorState.issues.isEmpty {
+                Text("\(editorState.issues.count) \(editorState.issues.count == 1 ? "issue" : "issues")")
+                    .foregroundStyle(Color(red: 0.89, green: 0.29, blue: 0.29))
+                    .help(editorState.issues.map(\.message).joined(separator: "\n"))
             }
+            Text("~\(liveBudget.descriptionTokens) tok desc · \(liveBudget.bodyLines)/\(Budget.maxBodyLines) lines")
+                .foregroundStyle(liveBudget.isOverBudget ? V2.amber : V2.textDim)
+            Text(model.isDirty ? "Edited" : "Saved")
+                .foregroundStyle(model.isDirty ? V2.amber : V2.textDim)
         }
         .font(.system(size: 11))
         .monospacedDigit()
@@ -538,7 +539,7 @@ struct DetailView: View {
         .padding(.horizontal, 12)
         .frame(height: 28)
         .background(V2.footer)
-        .overlay(alignment: .top) { Rectangle().fill(Color.white.opacity(0.07)).frame(height: 0.5) }
+        .overlay(alignment: .top) { Hairline(color: Color.white.opacity(0.07)) }
     }
 
     // MARK: - Shared pieces
@@ -550,7 +551,7 @@ struct DetailView: View {
         }
         .padding(.horizontal, 13)
         .padding(.vertical, 9)
-        .overlay(alignment: .bottom) { Rectangle().fill(Color.white.opacity(0.08)).frame(height: 0.5) }
+        .overlay(alignment: .bottom) { Hairline(color: Color.white.opacity(0.08)) }
     }
 
     private func icon(for kind: ItemKind) -> String {

@@ -34,7 +34,7 @@ swift Scripts/make-icon.swift
 swift test
 ```
 
-49 testes sobre `LoadoutCore`, todos contra árvores temporárias — nunca tocam no `~/.claude` real.
+104 testes sobre `LoadoutCore`, todos contra árvores temporárias — nunca tocam no `~/.claude` real.
 
 A camada entre os botões e o disco tem a sua própria verificação, que corre o modelo da janela contra um `~` descartável:
 
@@ -42,11 +42,15 @@ A camada entre os botões e o disco tem a sua própria verificação, que corre 
 .build/debug/LoadoutApp --self-check
 ```
 
-Para ver os dois temas sem mexer nas preferências do sistema:
+A app tem um único tema, escuro, desenhado de propósito — não segue a preferência do sistema.
+
+Para exercitar cenários sem tocar no `~/.claude` real, há ganchos de arranque:
 
 ```bash
-LOADOUT_APPEARANCE=light ./dist/Loadout.app/Contents/MacOS/Loadout
+LOADOUT_HOME=/tmp/casa-fixture LOADOUT_VIEW=edit ./dist/Loadout.app/Contents/MacOS/Loadout
 ```
+
+`LOADOUT_SCOPE`, `LOADOUT_TAB`, `LOADOUT_ASSISTANT`, `LOADOUT_FILTER`, `LOADOUT_VIEW` e `LOADOUT_OPEN` compõem-se entre si.
 
 ## Como está feito
 

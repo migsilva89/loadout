@@ -66,12 +66,12 @@ Cada AC é verificável. `[T]` significa coberto por teste automático; `[M]` si
 
 ### AC2 — Vista e navegação
 
-- **AC2.1** `[M]` Janela de três colunas: fontes, lista, detalhe. Redimensionável, larguras mantidas entre arranques.
-- **AC2.2** `[M]` O selector no topo alterna entre Global e um projeto. Em projeto, a lista mostra o que o Claude veria nessa pasta: globais mais as do repo mais as de plugins ativos.
-- **AC2.3** `[M]` Cada linha da lista mostra nome, badge de origem e a descrição com o número de usos ao fim. Desativadas aparecem esbatidas.
+- **AC2.1** `[M]` Janela de duas colunas — lista e detalhe — com os kinds numa barra de título própria (redesenho v2 de 2026-08-13). A sidebar colapsa e o estado persiste entre arranques.
+- **AC2.2** `[T]` O scope alterna entre Global e um projeto. Em projeto, a lista mostra **apenas o que pertence a esse projeto** — um projeto sem nada mostra-se vazio, nunca um eco do inventário global (decisão de 2026-08-13; o merge antigo confundia).
+- **AC2.3** `[M]` Cada linha mostra nome, os assistentes que a carregam, o número de usos, o interruptor e a descrição em duas linhas. A origem vive no tooltip e no detalhe. Desativadas aparecem esbatidas.
 - **AC2.4** `[T]` A pesquisa filtra por nome e por descrição, sem distinguir maiúsculas nem acentos, e atualiza a lista a cada tecla.
 - **AC2.5** `[M]` O detalhe mostra nome, tipo, origem, caminho, data de alteração, o conteúdo em bruto do ficheiro, e a linha de uso.
-- **AC2.6** `[M]` Modo claro e escuro, ambos legíveis, a seguir a preferência do sistema.
+- **AC2.6** `[M]` Um tema escuro deliberado, fixo — a paleta do redesenho v2. A app não segue a preferência do sistema (decisão de 2026-08-13).
 - **AC2.7** `[M]` Navegação de teclado: setas para percorrer a lista, `⌘F` para a pesquisa, `⌘N` para nova skill, `⌘⌫` para apagar.
 
 ### AC3 — Ativar e desativar
@@ -89,7 +89,7 @@ Cada AC é verificável. `[T]` significa coberto por teste automático; `[M]` si
 - **AC4.2** `[T]` Guardar valida o frontmatter: `name` e `description` obrigatórios, `name` em kebab-case. Inválido não grava e explica porquê.
 - **AC4.3** `[T]` Criar uma skill nova gera `~/.claude/skills/<nome>/SKILL.md` a partir de template, com o nome validado e sem sobrescrever nada.
 - **AC4.4** `[T]` Apagar move a pasta para o Lixo, não faz `rm`.
-- **AC4.5** `[M]` "Abrir no editor" abre o ficheiro na aplicação por omissão do sistema.
+- **AC4.5** `[M]` "Reveal" abre a pasta no Finder (o botão de editor externo saiu a pedido, 2026-08-13); o editor embutido cobre a edição.
 - **AC4.6** `[T]` Ficheiros de plugin são só de leitura: tentar gravar devolve erro e não toca no disco.
 
 ### AC5 — Rede de segurança

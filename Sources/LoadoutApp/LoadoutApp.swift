@@ -4,23 +4,25 @@ import LoadoutCore
 
 @main
 struct LoadoutApp: App {
-    @State private var model = AppModel()
+    @State private var model = AppModel(paths: LoadoutApp.launchPaths())
+
+    /// `LOADOUT_HOME=<dir>` points the whole app at a fixture home — the scenario hooks'
+    /// sibling, for exercising states the real inventory doesn't have (validation errors,
+    /// empty sources) without touching the real ~/.claude.
+    private static func launchPaths() -> Paths {
+        if let home = ProcessInfo.processInfo.environment["LOADOUT_HOME"] {
+            return Paths(home: URL(fileURLWithPath: home))
+        }
+        return .live()
+    }
 
     init() {
         if CommandLine.arguments.contains("--self-check") {
             MainActor.assumeIsolated { SelfCheck.run() }
         }
-        // `LOADOUT_APPEARANCE=light` (or dark) pins the theme for this launch, so both can be
-        // checked without touching the system-wide setting or the stored Settings › Appearance
-        // choice. Unset, the stored choice applies — System by default, which follows macOS.
-        switch ProcessInfo.processInfo.environment["LOADOUT_APPEARANCE"]?.lowercased() {
-        case "light": NSApplication.shared.appearance = NSAppearance(named: .aqua)
-        case "dark": NSApplication.shared.appearance = NSAppearance(named: .darkAqua)
-        default:
-            let stored = UserDefaults.standard.string(forKey: "appearance")
-                .flatMap(AppAppearance.init(rawValue:)) ?? .system
-            stored.apply()
-        }
+        // The v2 design is one deliberate dark theme; pinning the whole app keeps AppKit
+        // chrome (menus, popovers, sheets) agreeing with the SwiftUI colour scheme.
+        NSApplication.shared.appearance = NSAppearance(named: .darkAqua)
     }
 
     var body: some Scene {
@@ -29,9 +31,10 @@ struct LoadoutApp: App {
                 .frame(minWidth: 824, minHeight: 640)
         }
         .defaultSize(width: 1440, height: 920)
-        // The unified toolbar prints the window title next to the leading items by default —
-        // that's the literal "Loadout" this redesign replaces with the app's own icon.
-        .windowToolbarStyle(UnifiedCompactWindowToolbarStyle(showsTitle: false))
+        // No system title bar at all: the v2 design draws its own 52pt bar — traffic lights
+        // at the left, the kind tabs at the window's optical centre, actions at the right —
+        // and a native toolbar under that would be two title bars stacked.
+        .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("New skill") { model.isCreating = true }
@@ -43,10 +46,19 @@ struct LoadoutApp: App {
                     .disabled(!model.isDirty)
             }
             CommandGroup(after: .textEditing) {
-                // The search field lives in the list column now, with no menu of its own to
-                // hang ⌘F on — this asks the model, which the field itself is watching.
-                Button("Find") { model.searchFocused = true }
-                    .keyboardShortcut("f", modifiers: .command)
+                // ⌘F goes to whichever search the eye is on: the editor's own find bar while
+                // the Edit mode is up, and otherwise the list's search field.
+                Button("Find") {
+                    if !model.showsPreview, model.selected?.isEditable == true {
+                        NotificationCenter.default.post(name: .loadoutEditorFind, object: nil)
+                    } else {
+                        // A hidden sidebar has no field to focus — reveal it first. The
+                        // stored key is the same one ContentView's @AppStorage watches.
+                        UserDefaults.standard.set(true, forKey: "sidebarVisible")
+                        model.searchFocused = true
+                    }
+                }
+                .keyboardShortcut("f", modifiers: .command)
             }
             CommandMenu("Loadout") {
                 ForEach(model.assistants) { assistant in
@@ -66,6 +78,9 @@ struct LoadoutApp: App {
                 Divider()
                 Button("Move selection to Trash") { model.isConfirmingDelete = true }
                     .keyboardShortcut(.delete, modifiers: .command)
+                    // MCP servers live inside ~/.claude.json, not in a folder of their own,
+                    // so there is nothing to trash; with no selection there is nothing at all.
+                    .disabled(!(model.selected?.isEditable ?? false))
             }
         }
         Settings {
@@ -74,34 +89,3 @@ struct LoadoutApp: App {
     }
 }
 
-// MARK: - Appearance
-
-/// The three choices Settings › Appearance offers, and what each means for `NSApp.appearance`.
-/// `.system` maps to `nil` rather than to a named appearance, which is what makes the app
-/// follow a live switch of the Mac's own light/dark setting instead of freezing at launch.
-enum AppAppearance: String, CaseIterable {
-    case system
-    case light
-    case dark
-
-    var label: String {
-        switch self {
-        case .system: return "System"
-        case .light: return "Light"
-        case .dark: return "Dark"
-        }
-    }
-
-    var nsAppearance: NSAppearance? {
-        switch self {
-        case .system: return nil
-        case .light: return NSAppearance(named: .aqua)
-        case .dark: return NSAppearance(named: .darkAqua)
-        }
-    }
-
-    @MainActor
-    func apply() {
-        NSApplication.shared.appearance = nsAppearance
-    }
-}
