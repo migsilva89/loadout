@@ -5,6 +5,9 @@ import LoadoutCore
 struct ContentView: View {
     @Bindable var model: AppModel
     @AppStorage("sidebarVisible") private var sidebarVisible = true
+    /// The sidebar's width, draggable at the divider and remembered between launches.
+    @AppStorage("sidebarWidth") private var sidebarWidth = 372.0
+    @State private var dragBaseWidth: CGFloat?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -13,9 +16,9 @@ struct ContentView: View {
             HStack(spacing: 0) {
                 if sidebarVisible {
                     SidebarView(model: model)
-                        .frame(width: 372)
+                        .frame(width: sidebarWidth)
                         .transition(.move(edge: .leading))
-                    Hairline(vertical: true)
+                    sidebarResizeHandle
                 }
                 DetailView(model: model)
                     .frame(maxWidth: .infinity)
@@ -52,6 +55,29 @@ struct ContentView: View {
         } message: {
             Text(model.errorMessage ?? "")
         }
+    }
+
+    /// The hairline between the columns, with an 8pt invisible grab area over it: drag to
+    /// resize the sidebar, clamped so neither column can be crushed.
+    private var sidebarResizeHandle: some View {
+        Hairline(vertical: true)
+            .overlay {
+                Color.clear
+                    .frame(width: 8)
+                    .contentShape(Rectangle())
+                    .onHover { inside in
+                        if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+                    }
+                    .gesture(
+                        DragGesture(minimumDistance: 1)
+                            .onChanged { value in
+                                let base = dragBaseWidth ?? sidebarWidth
+                                dragBaseWidth = base
+                                sidebarWidth = min(560, max(320, base + value.translation.width))
+                            }
+                            .onEnded { _ in dragBaseWidth = nil }
+                    )
+            }
     }
 }
 

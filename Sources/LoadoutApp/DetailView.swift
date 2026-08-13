@@ -9,6 +9,10 @@ struct DetailView: View {
     /// What the editor reports back — caret position and live issues — for the status bar.
     @State private var editorState = EditorState()
 
+    /// How tall the pane actually is right now — the editor sizes itself against this, so
+    /// a taller window means a taller buffer instead of a fixed slab with dead space below.
+    @State private var paneHeight: CGFloat = 900
+
     var body: some View {
         if let item = model.selected {
             ScrollView {
@@ -40,6 +44,7 @@ struct DetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .background(V2.window)
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { paneHeight = $0 }
         } else {
             ContentUnavailableView(
                 "Select an item",
@@ -490,10 +495,9 @@ struct DetailView: View {
                     onEdit: { model.isDirty = true },
                     onState: { editorState = $0 }
                 )
-                // A fixed viewport, the design's own cap: the buffer scrolls inside the
-                // editor, instead of the editor trying to be as tall as the whole file
-                // and wrestling the pane's outer scroll for the geometry.
-                .frame(height: 440)
+                // As tall as the window allows — the buffer scrolls inside the editor, and
+                // the 96pt discount keeps the toolbar and status bar in view alongside it.
+                .frame(height: max(440, paneHeight - 96))
                 editorStatusBar(item)
             }
         } else {
