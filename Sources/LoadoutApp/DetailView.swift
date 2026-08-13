@@ -577,8 +577,12 @@ struct DetailView: View {
                 .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else if model.showsPreview {
+            // The reading column keeps its 70ch measure and sits centred, Safari Reader's
+            // way — capped at the left edge, all the leftover width piled up on the right,
+            // it read as a rendering mistake rather than as a margin.
             MarkdownView(text: model.draft, fontSize: readerFontSize, design: readerDesign)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: readerFontSize * 42, alignment: .leading)
+                .frame(maxWidth: .infinity)
                 .padding(.horizontal, 20)
                 .padding(.vertical, 18)
                 .background(readerGround)
