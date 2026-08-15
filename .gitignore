@@ -1,0 +1,19 @@
+.build/
+dist/
+.DS_Store
+*.xcuserstate
+
+# Internal working notes, not documentation
+docs/HANDOFF*.md
+
+# Nothing credential-shaped ever gets committed
+.env
+.env.local
+*.p12
+*.pem
+*.cer
+*.mobileprovision
+
+# Capturas apanhadas por engano por um screencapture mal escrito
+/-l
+/37862

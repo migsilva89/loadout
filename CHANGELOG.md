@@ -1,0 +1,83 @@
+# Changelog
+
+Notable changes, newest first. Dates are the day the work landed on `main`.
+
+The versions are what a release is tagged as; between tags, `main` is what is being used daily.
+
+## Unreleased
+
+### Added
+
+- **A switch on everything.** Every kind Loadout lists can be turned off without being deleted:
+  skills, slash commands, subagents and MCP servers. A skill or a command moves to a `-off`
+  directory beside its own; a subagent likewise; an MCP server's entry is lifted out of
+  `~/.claude.json` and kept, so it can be put back exactly as it was.
+- **One skill out of a plugin.** A plugin that ships 38 things no longer forces all 38: each skill
+  and command has its own switch, and Loadout re-applies your choices when the plugin updates —
+  otherwise a new version would silently switch everything back on. Selecting a plugin now fills the
+  detail pane with what it ships, each item switchable from there.
+- **Commands and subagents made in the app.** The New button follows the tab, and writes the right
+  shape: a command is named after its file and gets no `name` field, a subagent gets one.
+- **Everything.** A third position on the scope button, beside Global and the projects: your own,
+  every project's and the plugins' in one list, each row tagged `global` or with the repository it
+  lives in. It says on screen what it is — a place to find something, not a picture of what is
+  loaded, because no assistant ever holds more than one project at a time.
+- **Make global.** A skill, command or subagent that lives inside a repository can be copied into
+  your own, so it works in every project. A copy and never a move: what is in a repository belongs
+  to whoever works there, and moving it out would take it from them at their next pull. It refuses
+  rather than overwrite one you already have. The other direction is deliberately absent — putting a
+  skill into a repository hands it to a team, which is a decision to make on purpose.
+- **Settings › Help.** What switching something off actually does to your files, where Loadout
+  keeps its own, and a Report a bug button that opens the issue with the version, the system and
+  the size of the inventory already filled in — shown on screen first, so nothing is sent unread.
+- **Codex's slash commands.** They live in `~/.codex/prompts`, and are merged by name with Claude's,
+  with the dots showing who loads what. Handing one to the other assistant says, in a line, that
+  Claude-only frontmatter does not travel.
+
+- **A conversation beside the editor.** The Ask button opens a chat with `claude`, `codex` or
+  `opencode`: the reply appears as it is written, and picks up where it left off when you come
+  back tomorrow. One conversation per skill, remembered by the assistant's own session id — so
+  there is no second copy of it here to drift.
+- **Changes you accept one at a time, in the document itself.** The assistant works in a
+  disposable copy of the skill's folder, never in `~/.claude`. Loadout compares the two and opens
+  each change up inside the document — the old lines struck through above the new — with Accept
+  and Reject beside it. Your file changes when you save, with the same mandatory backup as any
+  other write.
+- **Files beside the document.** A skill is a folder, so a change to a script next to `SKILL.md`
+  is listed rather than hidden. The ones you accept are written by the same Save.
+- **History.** The earlier conversations about a skill are a click away, by the day and the first
+  thing asked. Starting a new one files the old one instead of destroying it.
+- **`Create and ask` in the New skill sheet.** Makes the skeleton, then hands it to an assistant
+  with what you typed as the brief, so the description and body come back as proposals.
+
+### Changed
+
+- The Ask feature no longer promises to write nothing: it now proposes, and you decide. What has
+  not changed is that nothing reaches a file without that decision (spec AC7).
+- Loadout's own files — backups, the usage index, the assistant icons — moved out of `~/.claude`
+  into `~/Library/Application Support/Loadout/`. A directory belonging to Claude is no place for
+  another app's database, above all for whoever wipes `.claude` to fix something. The move runs
+  once, at launch, and says so in the footer.
+- Five colour themes, none of them the system's.
+
+### Fixed
+
+- **Disabling a skill changed its owner.** It always parked in `~/.claude/skills-off` and always
+  came back to `~/.claude/skills`, so a Codex-only skill switched off and on again became a Claude
+  skill and vanished from Codex. It now parks beside its owner, and switching it on asks which
+  assistants it should return to, ticked from what was loading it before.
+- **A warning that was always wrong.** Every slash command carried "the frontmatter is missing the
+  name field" for a field a command does not have — and the budget card measured that missing name
+  at 0/64. Only what makes a block unreadable is reported now.
+- **Nested frontmatter was read flat.** A skill with `metadata:` and a list of `validate` rules —
+  the Vercel plugin's, for one — showed inner keys as fields of the skill, with each rule's values
+  overwriting the one before. It is read and shown as the tree it is.
+- **Details that belonged to someone else.** A subagent listed its neighbours in the same folder
+  as its own files, and an MCP server pointed at the home directory instead of the
+  `~/.claude.json` it lives inside.
+- A shared skill's folder is a symlink into `~/.agents/skills`; copying it copied the link, which
+  from its new home pointed at nothing and left the assistant with no working directory.
+- A decision on a change was remembered by the change's number rather than by the change itself,
+  so a second edit to a line already accepted stayed silently accepted over text nobody had read.
+- The assistants' error channel was appearing in the conversation as if the assistant had said
+  it. It is held back now, and shown when a run fails — which is when it is the one thing you need.

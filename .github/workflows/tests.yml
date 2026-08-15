@@ -1,0 +1,16 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run the test suite
+        run: swift test
+      - name: Build the app bundle
+        run: ./Scripts/build-app.sh
