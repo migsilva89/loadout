@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or idea
+    url: ../../discussions
+    about: For anything that is not a bug or a concrete feature request.
+  - name: Security vulnerability
+    url: ../../security/advisories/new
+    about: Please report privately, never as a public issue.
