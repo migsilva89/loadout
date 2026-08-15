@@ -4,7 +4,9 @@ Notable changes, newest first. Dates are the day the work landed on `main`.
 
 The versions are what a release is tagged as; between tags, `main` is what is being used daily.
 
-## Unreleased
+## 0.1.0 — 2026-08-15
+
+The first public build: signed, notarised, and openable on a Mac that is not this one.
 
 ### Added
 
