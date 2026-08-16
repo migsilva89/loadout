@@ -4,6 +4,21 @@ Notable changes, newest first. Dates are the day the work landed on `main`.
 
 The versions are what a release is tagged as; between tags, `main` is what is being used daily.
 
+## Unreleased
+
+### Fixed
+
+- **A crowded folder no longer squeezes the document.** The Files row in Details tried to print
+  every name on one line and cut whatever did not fit down the middle, so a skill whose folder
+  holds a dozen others showed `remotion-int…on-multimedia/` — half a name, which tells you
+  nothing — and grew the card downwards until the document below ran out of room. It now states
+  the size, `13 items · 12 folders`, and opens on a click into one chip per entry that wraps onto
+  the next line instead of being cut. Shut by default, so the card's height no longer depends on
+  what happens to be in the folder.
+- **The way to the Finder says what it does.** The button beside Location was a bare folder glyph
+  at the far edge of the row, which is not something an eye finds. It says **Reveal** now, like
+  every other action in that card.
+
 ## 0.1.1 — 2026-08-16
 
 ### Added
