@@ -1,0 +1,23 @@
+name: Deploy site
+
+# The website reads the latest release from the GitHub API and caches it for a day, so a new
+# release would take up to 24 hours to show up. Publishing one rebuilds the site instead.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Rebuild loadout.migsilva.dev
+        env:
+          DEPLOY_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$DEPLOY_HOOK" ]; then
+            echo "No VERCEL_DEPLOY_HOOK secret set — nothing to call." >&2
+            exit 1
+          fi
+          curl --fail --silent --show-error -X POST "$DEPLOY_HOOK"
