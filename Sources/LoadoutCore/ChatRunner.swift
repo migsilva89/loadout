@@ -43,6 +43,7 @@ public final class ChatRunner: @unchecked Sendable {
         task.executableURL = cli.executable
         task.arguments = chat.arguments(prompt: prompt, resuming: session, briefing: briefing)
         task.currentDirectoryURL = directory
+        task.environment = cli.environment
         // Assistants that expect a terminal try to read stdin and hang waiting for it; a closed
         // stdin is what makes them get on with the prompt they were given on the command line.
         task.standardInput = FileHandle.nullDevice

@@ -61,6 +61,9 @@ struct LoadoutApp: App {
         Window("Loadout", id: "main") {
             ContentView(model: model)
                 .frame(minWidth: 824, minHeight: 640)
+                // After the window is up and the inventory has been read, so a version check can
+                // never be the reason a launch feels slow.
+                .task { UpdateNotice.checkOnLaunch() }
         }
         .defaultSize(width: 1440, height: 920)
         // No system title bar at all: the v2 design draws its own 52pt bar — traffic lights
@@ -68,6 +71,11 @@ struct LoadoutApp: App {
         // and a native toolbar under that would be two title bars stacked.
         .windowStyle(.hiddenTitleBar)
         .commands {
+            // Directly under "About Loadout", where every Mac app puts it and where a hand
+            // looking for it goes first.
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") { UpdateNotice.checkNow() }
+            }
             CommandGroup(replacing: .newItem) {
                 Button("New skill") { model.isCreating = true }
                     .keyboardShortcut("n", modifiers: .command)

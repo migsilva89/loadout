@@ -44,6 +44,32 @@ public struct AssistantCLI: Identifiable, Hashable, Sendable {
         isCustom ? nil : AssistantChat.builtin(id: id)
     }
 
+    /// The environment a run gets: this process's, with a `PATH` wide enough to find whatever the
+    /// CLI's shebang asks for.
+    ///
+    /// An app launched from Finder inherits a bare `PATH` — `/usr/bin:/bin:/usr/sbin:/sbin` — and
+    /// nothing more, however full the `PATH` in the owner's terminal is. `codex` is a script whose
+    /// first line is `#!/usr/bin/env node`, so a run from the app died with
+    /// "env: node: No such file or directory" even though Loadout had just found codex itself:
+    /// finding the script is not the same as finding what runs it. `claude` never showed this,
+    /// being a native binary that needs no interpreter — which is why one worked and one didn't.
+    ///
+    /// The CLI's own directory goes first, because an nvm-installed codex sits in the same folder
+    /// as the node that has to run it, and the usual install locations follow.
+    public var environment: [String: String] {
+        var environment = ProcessInfo.processInfo.environment
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        var directories = [executable.deletingLastPathComponent().path]
+        directories += (environment["PATH"] ?? "").split(separator: ":").map(String.init)
+        directories += [
+            "\(home)/.local/bin", "\(home)/.opencode/bin",
+            "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin",
+        ]
+        var seen = Set<String>()
+        environment["PATH"] = directories.filter { seen.insert($0).inserted }.joined(separator: ":")
+        return environment
+    }
+
     /// What the sheet says it runs, e.g. "codex exec" — the placeholder spelled out, not the
     /// literal prompt.
     public var invocationDescription: String {

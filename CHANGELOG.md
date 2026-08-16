@@ -4,6 +4,26 @@ Notable changes, newest first. Dates are the day the work landed on `main`.
 
 The versions are what a release is tagged as; between tags, `main` is what is being used daily.
 
+## 0.1.1 — 2026-08-16
+
+### Added
+
+- **It tells you when there's a new version.** Loadout is handed out as a disk image, so until now
+  nothing reached you after you downloaded it — a fix could ship and you would never hear about it.
+  It now checks once on launch, and speaks only when there is a newer version, mentioning any one
+  version once rather than every morning. There is a **Check for Updates…** in the Loadout menu for
+  when you want to ask. It never replaces the app behind your back: it names the new version and
+  opens its page, and you drag it across yourself.
+
+### Fixed
+
+- **Asking Codex no longer fails with "env: node: No such file or directory".** An app opened from
+  the Finder inherits almost no `PATH`, however full yours is in a terminal. Codex is a script that
+  asks for `node` on its first line, so Loadout found Codex and then couldn't run it. Claude Code
+  never showed this, being a program that needs nothing else to start it — which is why one worked
+  and one didn't. Assistants are now run with a `PATH` that includes their own folder, where the
+  thing that runs them sits.
+
 ## 0.1.0 — 2026-08-15
 
 The first public build: signed, notarised, and openable on a Mac that is not this one.
