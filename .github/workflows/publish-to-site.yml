@@ -1,0 +1,56 @@
+name: Publish the release to the site
+
+# The site prints the version and links the disk image straight from a file it keeps in its own
+# repository, so it asks GitHub nothing while it builds. This is what writes that file: publish a
+# release here and the commit lands there, which is what makes Vercel rebuild the site.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read the latest release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq '.tagName' | sed 's/^v//')"
+          bytes="$(gh release view --repo "$GITHUB_REPOSITORY" --json assets \
+            --jq '.assets[] | select(.name | endswith(".dmg")) | .size' | head -1)"
+
+          if [ -z "$version" ] || [ -z "$bytes" ]; then
+            echo "No version, or no disk image attached to the release — nothing to publish." >&2
+            exit 1
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "bytes=$bytes" >> "$GITHUB_OUTPUT"
+
+      - name: Check out the site
+        uses: actions/checkout@v4
+        with:
+          repository: migsilva89/loadout-website
+          token: ${{ secrets.SITE_REPO_TOKEN }}
+
+      - name: Write the release file and push it
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          BYTES: ${{ steps.release.outputs.bytes }}
+        run: |
+          set -euo pipefail
+          printf '{\n  "version": "%s",\n  "bytes": %s\n}\n' "$VERSION" "$BYTES" > content/release.json
+
+          if git diff --quiet; then
+            echo "The site already ships $VERSION — nothing to push."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Ship $VERSION"
+          git push
