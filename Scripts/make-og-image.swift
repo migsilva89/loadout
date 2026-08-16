@@ -32,7 +32,7 @@ let output = root.appendingPathComponent(".github/assets/og-image.jpg")
 let sizeLimit = 1_000_000
 
 guard let artwork = NSImage(contentsOf: artworkPath) else {
-    print("não consegui abrir \(artworkPath.path)")
+    print("couldn't open \(artworkPath.path)")
     exit(1)
 }
 
@@ -142,7 +142,7 @@ NSRect(x: margin, y: margin - 6, width: 132, height: 3).fill()
 image.unlockFocus()
 
 guard let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) else {
-    print("não consegui ler o que foi desenhado")
+    print("couldn't read what was drawn")
     exit(1)
 }
 
@@ -158,7 +158,7 @@ for quality in [0.92, 0.85, 0.78, 0.7, 0.6] {
 }
 
 guard let jpeg = data else {
-    print("não consegui codificar a imagem")
+    print("couldn't encode the image")
     exit(1)
 }
 
@@ -168,5 +168,5 @@ try? FileManager.default.createDirectory(
 try jpeg.write(to: output)
 print("✓ \(output.path) (\(jpeg.count / 1024) KB, \(Int(size.width))×\(Int(size.height)) points)")
 if jpeg.count > sizeLimit {
-    print("  aviso: passou o limite de 1 MB do GitHub, que vai recusá-la")
+    print("  warning: over GitHub's 1 MB limit, which will refuse it")
 }

@@ -35,7 +35,7 @@ final class MultiAssistantUsageTests: XCTestCase {
         XCTAssertEqual(index.usage(kind: .skill)["human-copywrite"]?.count, 1)
         let occurrence = try XCTUnwrap(index.occurrences(kind: .skill, key: "human-copywrite").first)
         XCTAssertEqual(occurrence.assistant, "codex")
-        XCTAssertEqual(occurrence.evidence, .inferred, "o Codex não prova, infere — e diz que infere")
+        XCTAssertEqual(occurrence.evidence, .inferred, "Codex does not prove, it infers — and says it infers")
     }
 
     func testMerelyNamingASkillNeverCounts() throws {
@@ -53,7 +53,7 @@ final class MultiAssistantUsageTests: XCTestCase {
 
         index.refresh()
 
-        XCTAssertNil(index.usage(kind: .skill)["seo-audit"], "uma menção não é um uso")
+        XCTAssertNil(index.usage(kind: .skill)["seo-audit"], "a mention is not a use")
     }
 
     func testSearchingOrEditingASkillIsNotUsingIt() throws {
@@ -75,7 +75,7 @@ final class MultiAssistantUsageTests: XCTestCase {
 
         index.refresh()
 
-        XCTAssertEqual(index.usage(kind: .skill), [:], "procurar e editar não é usar")
+        XCTAssertEqual(index.usage(kind: .skill), [:], "searching and editing is not using")
     }
 
     func testASingleCommandReadingTwoSkillsCountsBoth() throws {
@@ -83,8 +83,8 @@ final class MultiAssistantUsageTests: XCTestCase {
         fixture.codexSession("s", lines: [
             CodexLine.meta(session: "S-1"),
             CodexLine.toolCall(
-                "sed -n '1,240p' /Users/me/.agents/skills/uma/SKILL.md && "
-                    + "sed -n '1,240p' /Users/me/.agents/skills/outra/SKILL.md",
+                "sed -n '1,240p' /Users/me/.agents/skills/one/SKILL.md && "
+                    + "sed -n '1,240p' /Users/me/.agents/skills/another/SKILL.md",
                 at: iso(daysAgo: 1)
             ),
         ])
@@ -92,8 +92,8 @@ final class MultiAssistantUsageTests: XCTestCase {
 
         index.refresh()
 
-        XCTAssertEqual(index.usage(kind: .skill)["uma"]?.count, 1)
-        XCTAssertEqual(index.usage(kind: .skill)["outra"]?.count, 1)
+        XCTAssertEqual(index.usage(kind: .skill)["one"]?.count, 1)
+        XCTAssertEqual(index.usage(kind: .skill)["another"]?.count, 1)
     }
 
     func testArchivedCodexSessionsCountToo() throws {
@@ -129,7 +129,7 @@ final class MultiAssistantUsageTests: XCTestCase {
 
         index.refresh(since: .distantPast)
 
-        XCTAssertEqual(index.usage(kind: .skill)["x"]?.count, 1, "a mesma sessão não conta duas vezes")
+        XCTAssertEqual(index.usage(kind: .skill)["x"]?.count, 1, "the same session does not count twice")
     }
 
     func testCodexSurfaceComesFromTheOriginator() throws {
@@ -157,10 +157,10 @@ final class MultiAssistantUsageTests: XCTestCase {
 
         index.refresh()
 
-        XCTAssertEqual(index.usage(kind: .skill)["imark-review"]?.count, 1, "um uso, não dois")
+        XCTAssertEqual(index.usage(kind: .skill)["imark-review"]?.count, 1, "one use, not two")
         XCTAssertEqual(
             index.occurrences(kind: .skill, key: "imark-review").first?.surface, "paseo",
-            "o Paseo hospeda Claude também, e isso é uma etiqueta, não um evento novo"
+            "Paseo hosts Claude too, and that is a label rather than a new event"
         )
     }
 
@@ -222,13 +222,13 @@ final class MultiAssistantUsageTests: XCTestCase {
         )
         XCTAssertEqual(
             index.usageByAssistant(kind: .skill, key: "partilhada", assistants: ["claude"]),
-            ["claude": 1], "o detalhe respeita o mesmo filtro que o total"
+            ["claude": 1], "the breakdown honours the same filter as the total"
         )
     }
 
     func testExcludingEverybodyCountsNothing() throws {
         let fixture = Fixture()
-        fixture.transcript("c", lines: [Line.skill("uma", at: iso(daysAgo: 1))])
+        fixture.transcript("c", lines: [Line.skill("one", at: iso(daysAgo: 1))])
         let index = try index(fixture)
         index.refresh()
 
@@ -237,13 +237,13 @@ final class MultiAssistantUsageTests: XCTestCase {
 
     func testProjectsAndOccurrencesHonourTheSameFilter() throws {
         let fixture = Fixture()
-        fixture.transcript("c", lines: [Line.skill("uma", at: iso(daysAgo: 1))])
+        fixture.transcript("c", lines: [Line.skill("one", at: iso(daysAgo: 1))])
         let index = try index(fixture)
         index.refresh()
 
-        XCTAssertEqual(index.projects(kind: .skill, key: "uma", assistants: ["claude"]).count, 1)
-        XCTAssertEqual(index.projects(kind: .skill, key: "uma", assistants: ["codex"]), [])
-        XCTAssertEqual(index.occurrences(kind: .skill, key: "uma", assistants: ["codex"]), [])
+        XCTAssertEqual(index.projects(kind: .skill, key: "one", assistants: ["claude"]).count, 1)
+        XCTAssertEqual(index.projects(kind: .skill, key: "one", assistants: ["codex"]), [])
+        XCTAssertEqual(index.occurrences(kind: .skill, key: "one", assistants: ["codex"]), [])
     }
 
     // MARK: - Sources that cannot prove anything say so
@@ -260,15 +260,15 @@ final class MultiAssistantUsageTests: XCTestCase {
 
         let cursor = try XCTUnwrap(index.sourceStatuses().first { $0.sourceID == "cursor" })
         XCTAssertEqual(cursor.state, .unsupported)
-        XCTAssertEqual(cursor.sessionCount, 1, "há histórico; o que falta é prova")
+        XCTAssertEqual(cursor.sessionCount, 1, "there is history; what is missing is proof")
 
         let pi = try XCTUnwrap(index.sourceStatuses().first { $0.sourceID == "pi" })
-        XCTAssertEqual(pi.state, .noHistory, "sem histórico é diferente de sem parser")
+        XCTAssertEqual(pi.state, .noHistory, "no history is not the same as no parser")
     }
 
     func testAnUncheckedAssistantReadsAsNotCountedRatherThanMissing() throws {
         let fixture = Fixture()
-        fixture.transcript("c", lines: [Line.skill("uma", at: iso(daysAgo: 1))])
+        fixture.transcript("c", lines: [Line.skill("one", at: iso(daysAgo: 1))])
         let index = try index(fixture)
         index.refresh()
 
@@ -276,7 +276,7 @@ final class MultiAssistantUsageTests: XCTestCase {
             index.sourceStatuses(includedAssistants: ["codex"]).first { $0.sourceID == "claude" }
         )
         XCTAssertEqual(claude.state, .excluded)
-        XCTAssertEqual(claude.eventCount, 1, "continua indexado — só não conta")
+        XCTAssertEqual(claude.eventCount, 1, "still indexed — it just does not count")
     }
 
     // MARK: - Incremental passes
@@ -299,7 +299,7 @@ final class MultiAssistantUsageTests: XCTestCase {
 
     func testAFileIsRereadWhenItsParserChangesAndSkippedWhenItDoesNot() throws {
         let fixture = Fixture()
-        fixture.transcript("s", lines: [Line.skill("uma", at: iso(daysAgo: 1))])
+        fixture.transcript("s", lines: [Line.skill("one", at: iso(daysAgo: 1))])
         let inner = ClaudeUsageSource(paths: fixture.paths)
         let index = try index(fixture)
         let file = inner.historyFiles()[0]
@@ -311,9 +311,9 @@ final class MultiAssistantUsageTests: XCTestCase {
         let bumped = Reparsed(parserVersion: 2, inner: inner)
         XCTAssertEqual(
             index.indexFile(file, source: bumped, since: .distantPast), 1,
-            "o parser mudou, o ficheiro volta a ser lido"
+            "the parser changed, so the file is read again"
         )
-        XCTAssertEqual(index.usage(kind: .skill)["uma"]?.count, 1, "e sem duplicar")
+        XCTAssertEqual(index.usage(kind: .skill)["one"]?.count, 1, "and without duplicating")
     }
 
     func testACodexFileIsNotRereadWhenOnlyClaudesParserChanged() throws {
@@ -348,7 +348,7 @@ final class MultiAssistantUsageTests: XCTestCase {
         let fixture = Fixture()
         fixture.transcript("s", lines: [
             Line.skill("recente", at: iso(daysAgo: 5)),
-            Line.skill("antiga", at: iso(daysAgo: 200)),
+            Line.skill("old-one", at: iso(daysAgo: 200)),
         ])
         let index = try index(fixture)
 
@@ -356,58 +356,58 @@ final class MultiAssistantUsageTests: XCTestCase {
         XCTAssertEqual(index.usage(kind: .skill).count, 2)
 
         index.refresh(since: Date().addingTimeInterval(-30 * 86_400))
-        XCTAssertNil(index.usage(kind: .skill)["antiga"], "fora da janela, fora da contagem")
+        XCTAssertNil(index.usage(kind: .skill)["old-one"], "outside the window, outside the count")
         XCTAssertEqual(index.usage(kind: .skill)["recente"]?.count, 1)
 
         index.refresh(since: .distantPast)
-        XCTAssertEqual(index.usage(kind: .skill)["antiga"]?.count, 1, "alargar volta a lê-la")
+        XCTAssertEqual(index.usage(kind: .skill)["old-one"]?.count, 1, "widening reads it again")
     }
 
     // MARK: - Migration
 
     func testAnIndexFromTheOldSchemaIsRebuiltAsideAndSwappedWhole() throws {
         let fixture = Fixture()
-        fixture.transcript("s", lines: [Line.skill("antiga", at: iso(daysAgo: 1))])
+        fixture.transcript("s", lines: [Line.skill("old-one", at: iso(daysAgo: 1))])
 
         // Exactly what the previous version of Loadout left on disk.
         try FileManager.default.createDirectory(
             at: fixture.paths.index.deletingLastPathComponent(), withIntermediateDirectories: true
         )
-        try LegacyIndexWriter.write(at: fixture.paths.index, key: "antiga")
+        try LegacyIndexWriter.write(at: fixture.paths.index, key: "old-one")
 
         let index = try index(fixture)
         // Before the rebuild, the old file still answers: nobody loses their counts mid-migration.
-        XCTAssertEqual(index.usage(kind: .skill)["antiga"]?.count, 1)
-        XCTAssertEqual(index.occurrences(kind: .skill, key: "antiga"), [], "o schema antigo não sabe explicar")
+        XCTAssertEqual(index.usage(kind: .skill)["old-one"]?.count, 1)
+        XCTAssertEqual(index.occurrences(kind: .skill, key: "old-one"), [], "the old schema cannot explain itself")
 
         index.refresh(since: .distantPast)
 
-        XCTAssertEqual(index.usage(kind: .skill)["antiga"]?.count, 1, "reconstruído, mesmo número")
+        XCTAssertEqual(index.usage(kind: .skill)["old-one"]?.count, 1, "rebuilt, same number")
         XCTAssertEqual(
-            index.occurrences(kind: .skill, key: "antiga").first?.assistant, "claude",
+            index.occurrences(kind: .skill, key: "old-one").first?.assistant, "claude",
             "e agora sabe de quem foi"
         )
         XCTAssertFalse(
             FileManager.default.fileExists(
                 atPath: fixture.paths.index.appendingPathExtension("migrating").path
             ),
-            "a base temporária não fica para trás"
+            "the temporary database is not left behind"
         )
     }
 
     func testACancelledMigrationLeavesThePreviousIndexUsable() throws {
         let fixture = Fixture()
-        fixture.transcript("s", lines: [Line.skill("antiga", at: iso(daysAgo: 1))])
+        fixture.transcript("s", lines: [Line.skill("old-one", at: iso(daysAgo: 1))])
         try FileManager.default.createDirectory(
             at: fixture.paths.index.deletingLastPathComponent(), withIntermediateDirectories: true
         )
-        try LegacyIndexWriter.write(at: fixture.paths.index, key: "antiga")
+        try LegacyIndexWriter.write(at: fixture.paths.index, key: "old-one")
         let index = try index(fixture)
 
         index.refresh(since: .distantPast, cancelled: { true })
 
         XCTAssertEqual(
-            index.usage(kind: .skill)["antiga"]?.count, 1,
+            index.usage(kind: .skill)["old-one"]?.count, 1,
             "interrompida a meio, as contagens antigas continuam a servir"
         )
         XCTAssertFalse(

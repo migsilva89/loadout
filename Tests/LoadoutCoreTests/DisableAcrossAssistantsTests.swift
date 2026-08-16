@@ -14,7 +14,7 @@ final class DisableAcrossAssistantsTests: XCTestCase {
     private func skill(_ name: String, forAssistant id: String, in fixture: Fixture) {
         let folder = fixture.paths.skillsRoot(forAssistant: id).appendingPathComponent(name)
         try! fm.createDirectory(at: folder, withIntermediateDirectories: true)
-        try! "---\nname: \(name)\ndescription: Do \(id).\n---\n\nCorpo.".write(
+        try! "---\nname: \(name)\ndescription: From \(id).\n---\n\nBody.".write(
             to: folder.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8
         )
     }
@@ -24,7 +24,7 @@ final class DisableAcrossAssistantsTests: XCTestCase {
     private func sharedSkill(_ name: String, between ids: [String], in fixture: Fixture) {
         let canonical = fixture.paths.sharedSkills.appendingPathComponent(name)
         try! fm.createDirectory(at: canonical, withIntermediateDirectories: true)
-        try! "---\nname: \(name)\ndescription: Partilhada.\n---\n\nCorpo.".write(
+        try! "---\nname: \(name)\ndescription: Shared.\n---\n\nBody.".write(
             to: canonical.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8
         )
         for id in ids {
@@ -67,7 +67,7 @@ final class DisableAcrossAssistantsTests: XCTestCase {
         ))
         XCTAssertFalse(
             fixture.exists(fixture.paths.skillsOff.appendingPathComponent("so-do-codex")),
-            "não muda de dono a caminho do off"
+            "it does not change owner on the way to off"
         )
     }
 
@@ -158,14 +158,14 @@ final class DisableAcrossAssistantsTests: XCTestCase {
         ))
         XCTAssertFalse(
             fixture.exists(fixture.paths.skills.appendingPathComponent("so-do-codex")),
-            "não aparece no Claude por ter passado por lá"
+            "it does not show up under Claude just for having passed through"
         )
     }
 
     func testEnablingIntoSeveralUsesTheSharedStoreAndLinks() throws {
         let fixture = Fixture()
         skill("a-duplicar", forAssistant: "claude", in: fixture)
-        // O Codex está instalado nesta máquina, ainda que sem skills próprias.
+        // Codex is installed on this machine, even with no skills of its own.
         try! fm.createDirectory(
             at: fixture.paths.skillsRoot(forAssistant: "codex"), withIntermediateDirectories: true
         )
@@ -180,7 +180,7 @@ final class DisableAcrossAssistantsTests: XCTestCase {
 
         XCTAssertTrue(fixture.exists(
             fixture.paths.sharedSkills.appendingPathComponent("a-duplicar/SKILL.md")
-        ), "a pasta a sério vai para a partilhada")
+        ), "the real folder goes to the shared tree")
         for id in ["claude", "codex"] {
             let link = fixture.paths.skillsRoot(forAssistant: id).appendingPathComponent("a-duplicar")
             XCTAssertEqual(
@@ -220,7 +220,7 @@ final class DisableAcrossAssistantsTests: XCTestCase {
         )
 
         XCTAssertEqual(proposal.assistants, ["codex"])
-        XCTAssertFalse(proposal.remembered, "a app diz que não sabia, em vez de fingir que sabia")
+        XCTAssertFalse(proposal.remembered, "the app says it did not know, rather than pretending it did")
     }
 
     func testARoundTripLeavesTheDiskExactlyAsItWas() throws {
@@ -282,7 +282,7 @@ final class DisableAcrossAssistantsTests: XCTestCase {
         let plugin = scanner.installedPlugins().first!
         try mutations.disablePluginSkill(item("vercel-functions", in: fixture), in: plugin)
 
-        // A versão nova chega como uma cópia limpa do repositório do plugin, sem saber de nada.
+        // The new version arrives as a clean copy of the plugin's repository, knowing nothing.
         let fresh = plugin.installPath.appendingPathComponent("skills/vercel-functions")
         try fm.createDirectory(at: fresh, withIntermediateDirectories: true)
         try "---\nname: vercel-functions\ndescription: Nova.\n---\n".write(
@@ -293,7 +293,7 @@ final class DisableAcrossAssistantsTests: XCTestCase {
         let reapplied = mutations.reapplyDisabledSkills(of: plugin)
 
         XCTAssertEqual(reapplied, ["vercel-functions"])
-        XCTAssertFalse(fixture.exists(fresh), "voltou a sair do sítio que o Claude lê")
+        XCTAssertFalse(fixture.exists(fresh), "it left the place Claude reads again")
     }
 
     func testEnablingAPluginSkillForgetsItSoUpdatesLeaveItAlone() throws {
@@ -320,10 +320,10 @@ final class DisableAcrossAssistantsTests: XCTestCase {
 
         let reapplied = mutations.reapplyDisabledSkills(of: plugin)
 
-        XCTAssertEqual(reapplied, [], "não havia nada para mover")
+        XCTAssertEqual(reapplied, [], "there was nothing to move")
         XCTAssertEqual(
             mutations.records.pluginSkills(of: plugin.id), ["desaparecida"],
-            "a escolha fica, caso a skill volte numa versão futura"
+            "the choice stays, in case the skill comes back in a later version"
         )
     }
 
@@ -340,7 +340,7 @@ final class DisableAcrossAssistantsTests: XCTestCase {
         let fixture = Fixture()
         let repo = fixture.projectRepo("APPS/loadout", skills: ["do-repo"])
         fixture.projectsIndex("""
-        | Caminho | Descrição |
+        | Path | Description |
         |---|---|
         | `APPS/loadout` | A app |
         """)
@@ -392,15 +392,15 @@ extension DisableAcrossAssistantsTests {
 
         XCTAssertNotNil(
             mutations.records.entry(named: "demo"),
-            "o registo fica: sem ele ninguém sabe onde a skill devia voltar"
+            "the record stays: without it nobody knows where the skill should go back to"
         )
         XCTAssertTrue(
             fixture.exists(fixture.paths.home.appendingPathComponent(".claude/skills-off/demo/SKILL.md")),
-            "e a pasta não saiu do sítio"
+            "and the folder did not move"
         )
         XCTAssertFalse(
             fixture.exists(fixture.paths.sharedSkills.appendingPathComponent("demo")),
-            "nada foi movido antes de se saber que dava"
+            "nothing was moved before it was known to work"
         )
     }
 }

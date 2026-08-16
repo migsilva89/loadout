@@ -11,7 +11,7 @@ final class FilterCompositionTests: XCTestCase {
     private func codexSkill(_ name: String, in fixture: Fixture) {
         let folder = fixture.paths.skillsRoot(forAssistant: "codex").appendingPathComponent(name)
         try! fm.createDirectory(at: folder, withIntermediateDirectories: true)
-        try! "---\nname: \(name)\ndescription: Do Codex.\n---\n\nCorpo.".write(
+        try! "---\nname: \(name)\ndescription: From Codex.\n---\n\nBody.".write(
             to: folder.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8
         )
     }
@@ -34,7 +34,7 @@ final class FilterCompositionTests: XCTestCase {
 
     func testAnAssistantWithNothingLoadedCountsZeroOnEveryChip() {
         let fixture = Fixture()
-        fixture.skill("uma")
+        fixture.skill("one")
         fixture.skill("outra")
 
         for chip in ItemFilter.allCases {
@@ -99,7 +99,7 @@ final class FilterCompositionTests: XCTestCase {
 
     func testTheKindSliceStillBoundsEverything() {
         let fixture = Fixture()
-        fixture.skill("uma-skill")
+        fixture.skill("a-skill")
         fixture.command("um-comando")
 
         XCTAssertEqual(count(fixture, selection: .skills), 1)

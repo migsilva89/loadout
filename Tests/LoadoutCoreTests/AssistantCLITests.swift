@@ -13,10 +13,10 @@ final class AssistantCLITests: XCTestCase {
         let cursor = AssistantCLI(id: "cursor-agent", label: "Cursor", executable: executable, argumentTemplate: "-p --output-format text {prompt}", isCustom: false)
         let opencode = AssistantCLI(id: "opencode", label: "opencode", executable: executable, argumentTemplate: "run {prompt}", isCustom: false)
 
-        XCTAssertEqual(claude.arguments(for: "olá"), ["-p", "olá"])
-        XCTAssertEqual(codex.arguments(for: "olá"), ["exec", "olá"])
-        XCTAssertEqual(cursor.arguments(for: "olá"), ["-p", "--output-format", "text", "olá"])
-        XCTAssertEqual(opencode.arguments(for: "olá"), ["run", "olá"])
+        XCTAssertEqual(claude.arguments(for: "hello"), ["-p", "hello"])
+        XCTAssertEqual(codex.arguments(for: "hello"), ["exec", "hello"])
+        XCTAssertEqual(cursor.arguments(for: "hello"), ["-p", "--output-format", "text", "hello"])
+        XCTAssertEqual(opencode.arguments(for: "hello"), ["run", "hello"])
     }
 
     func testThePromptBecomesExactlyOneArgumentEvenWithQuotesAndASemicolon() {
@@ -28,7 +28,7 @@ final class AssistantCLITests: XCTestCase {
 
         let argv = cli.arguments(for: dangerous)
 
-        XCTAssertEqual(argv, ["run", dangerous], "o prompt inteiro é um só argv, nunca reinterpretado")
+        XCTAssertEqual(argv, ["run", dangerous], "the whole prompt is one argv, never re-parsed")
         XCTAssertEqual(argv.count, 2)
     }
 
@@ -116,7 +116,7 @@ final class AssistantCLITests: XCTestCase {
             name == "claude" ? claudeScript : nil
         }
 
-        XCTAssertEqual(found.map(\.id), ["claude"], "só o que existe aparece")
+        XCTAssertEqual(found.map(\.id), ["claude"], "only what exists shows up")
     }
 
     func testDiscoveryIncludesCustomEntriesWhoseExecutableExists() throws {
@@ -152,9 +152,9 @@ final class AssistantCLITests: XCTestCase {
             name == "claude" ? builtinScript : nil
         }
 
-        XCTAssertEqual(found.count, 1, "não aparece duplicado")
+        XCTAssertEqual(found.count, 1, "it does not appear twice")
         let winner = try XCTUnwrap(found.first)
-        XCTAssertTrue(winner.isCustom, "o custom ganha ao built-in com o mesmo id")
+        XCTAssertTrue(winner.isCustom, "a custom entry beats the built-in sharing its id")
         XCTAssertEqual(winner.executable, customScript)
         XCTAssertEqual(winner.label, "My Claude")
     }

@@ -130,9 +130,9 @@ enum DriveScript {
         case "new":
             let name = argument.isEmpty ? "novo" : argument
             switch model.selection {
-            case .commands: model.createCommand(name: name, description: "Feito pelo guião.")
-            case .agents: model.createCommand(name: name, description: "Feito pelo guião.", kind: .agent)
-            default: model.createSkill(name: name, description: "Feito pelo guião.")
+            case .commands: model.createCommand(name: name, description: "Made by the script.")
+            case .agents: model.createCommand(name: name, description: "Made by the script.", kind: .agent)
+            default: model.createSkill(name: name, description: "Made by the script.")
             }
             return "ok"
         case "delete":

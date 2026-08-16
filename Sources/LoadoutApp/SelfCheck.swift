@@ -30,7 +30,7 @@ enum SelfCheck {
         // state change — the scroll-spy alone produces a stream of them — and re-parsing a real
         // skill each time was two milliseconds a pass, a quarter of a frame, spent on text that
         // had not changed.
-        let sample = String(repeating: "# Título\n\nUm parágrafo com algumas palavras.\n\n", count: 60)
+        let sample = String(repeating: "# Heading\n\nA paragraph with a few words in it.\n\n", count: 60)
         _ = MarkdownView.blocks(in: sample)
         let started = Date()
         for _ in 0..<50 { _ = MarkdownView.blocks(in: sample) }
@@ -70,10 +70,10 @@ enum SelfCheck {
         model.loadDraft()
 
         // A mutation elsewhere must not wipe an edit in progress either.
-        model.draft = "---\nname: auto-teste\ndescription: Meio editada.\n---\n\nCorpo."
+        model.draft = "---\nname: auto-teste\ndescription: Half edited.\n---\n\nBody."
         model.isDirty = true
         model.reload()
-        check("a reload keeps the dirty draft on the same item", model.draft.contains("Meio editada"))
+        check("a reload keeps the dirty draft on the same item", model.draft.contains("Half edited"))
         model.loadDraft()
 
         // Disable and enable
@@ -138,7 +138,7 @@ enum SelfCheck {
         for name in ["vercel-cli", "vercel-functions"] {
             let folder = install.appendingPathComponent("skills/\(name)")
             try! FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            try! "---\nname: \(name)\ndescription: Do plugin.\n---\n\nCorpo.".write(
+            try! "---\nname: \(name)\ndescription: From the plugin.\n---\n\nBody.".write(
                 to: folder.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8
             )
         }
@@ -216,22 +216,22 @@ enum SelfCheck {
         // Subagents and MCP servers: the last two kinds that could only be deleted, never switched
         // off. An agent is a file like a command; a server is a few lines inside ~/.claude.json.
         model.selection = .agents
-        model.createCommand(name: "revisor", description: "Revê o que os outros escrevem.", kind: .agent)
-        let agent = model.items.first { $0.kind == .agent && $0.name == "revisor" }
+        model.createCommand(name: "reviewer", description: "Reviews what everyone else writes.", kind: .agent)
+        let agent = model.items.first { $0.kind == .agent && $0.name == "reviewer" }
         check("creates a subagent", agent != nil)
         model.toggle(agent!)
         check(
             "disabling a subagent moves it next door",
             FileManager.default.fileExists(
-                atPath: paths.agentsOff.appendingPathComponent("revisor.md").path
+                atPath: paths.agentsOff.appendingPathComponent("reviewer.md").path
             )
         )
-        let parkedAgent = model.items.first { $0.kind == .agent && $0.name == "revisor" }!
+        let parkedAgent = model.items.first { $0.kind == .agent && $0.name == "reviewer" }!
         check("it stays listed, switched off", !parkedAgent.enabled)
         model.toggle(parkedAgent)
         check(
             "enabling puts it back",
-            FileManager.default.fileExists(atPath: paths.agents.appendingPathComponent("revisor.md").path)
+            FileManager.default.fileExists(atPath: paths.agents.appendingPathComponent("reviewer.md").path)
         )
 
         try! JSONSerialization.data(withJSONObject: [
@@ -261,22 +261,22 @@ enum SelfCheck {
         // about version control — but the folder it moves sits in someone's working tree, so the
         // first disable says so, once.
         let repo = paths.projectsRoot.appendingPathComponent("APPS/loadout")
-        let repoSkill = repo.appendingPathComponent(".claude/skills/do-repo")
+        let repoSkill = repo.appendingPathComponent(".claude/skills/from-repo")
         try! FileManager.default.createDirectory(at: repoSkill, withIntermediateDirectories: true)
-        try! "---\nname: do-repo\ndescription: Do repositório.\n---\n\nCorpo.".write(
+        try! "---\nname: from-repo\ndescription: From the repository.\n---\n\nBody.".write(
             to: repoSkill.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8
         )
         try! FileManager.default.createDirectory(
             at: paths.projectsRoot, withIntermediateDirectories: true
         )
-        try! "| Caminho | Descrição |\n|---|---|\n| `APPS/loadout` | A app |\n".write(
+        try! "| Path | Description |\n|---|---|\n| `APPS/loadout` | The app |\n".write(
             to: paths.projectsIndex, atomically: true, encoding: .utf8
         )
 
         let projectModel = AppModel(paths: paths)
         projectModel.hasSeenProjectSkillWarning = false
         projectModel.changeContext(to: projectModel.projects.first)
-        let fromRepo = projectModel.items.first { $0.name == "do-repo" }!
+        let fromRepo = projectModel.items.first { $0.name == "from-repo" }!
         projectModel.toggle(fromRepo)
         check("a project skill warns before moving anything", projectModel.pendingProjectDisable != nil)
         check(
@@ -287,30 +287,30 @@ enum SelfCheck {
         check(
             "confirming parks it inside the repository",
             FileManager.default.fileExists(
-                atPath: repo.appendingPathComponent(".claude/skills-off/do-repo/SKILL.md").path
+                atPath: repo.appendingPathComponent(".claude/skills-off/from-repo/SKILL.md").path
             )
         )
         // Out of the repository and into your own, as a copy: the project keeps what it had.
-        projectModel.makeGlobal(projectModel.items.first { $0.name == "do-repo" }!)
+        projectModel.makeGlobal(projectModel.items.first { $0.name == "from-repo" }!)
         check(
             "making a project skill global copies it to your own",
             FileManager.default.fileExists(
-                atPath: paths.skills.appendingPathComponent("do-repo/SKILL.md").path
+                atPath: paths.skills.appendingPathComponent("from-repo/SKILL.md").path
             )
         )
         check(
             "and the project keeps its own",
             FileManager.default.fileExists(
-                atPath: repo.appendingPathComponent(".claude/skills-off/do-repo/SKILL.md").path
+                atPath: repo.appendingPathComponent(".claude/skills-off/from-repo/SKILL.md").path
             )
         )
 
-        projectModel.toggle(projectModel.items.first { $0.name == "do-repo" }!)
+        projectModel.toggle(projectModel.items.first { $0.name == "from-repo" }!)
         check(
             "and the second time it does not ask again",
             projectModel.pendingProjectDisable == nil
                 && FileManager.default.fileExists(
-                    atPath: repo.appendingPathComponent(".claude/skills/do-repo/SKILL.md").path
+                    atPath: repo.appendingPathComponent(".claude/skills/from-repo/SKILL.md").path
                 )
         )
 

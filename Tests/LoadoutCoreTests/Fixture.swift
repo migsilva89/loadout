@@ -21,8 +21,8 @@ final class Fixture {
     // MARK: Builders
 
     @discardableResult
-    func skill(_ name: String, description: String = "Faz coisas.", disabled: Bool = false,
-               extraFile: String? = nil, body: String = "Corpo.") -> URL {
+    func skill(_ name: String, description: String = "Does things.", disabled: Bool = false,
+               extraFile: String? = nil, body: String = "Body.") -> URL {
         let base = disabled ? paths.skillsOff : paths.skills
         let folder = base.appendingPathComponent(name)
         try! fm.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -65,7 +65,7 @@ final class Fixture {
 
     func agent(_ name: String) {
         try! fm.createDirectory(at: paths.agents, withIntermediateDirectories: true)
-        let text = "---\nname: \(name)\ndescription: Um agente.\n---\n\nInstruções."
+        let text = "---\nname: \(name)\ndescription: An agent.\n---\n\nInstructions."
         try! text.write(
             to: paths.agents.appendingPathComponent("\(name).md"), atomically: true, encoding: .utf8
         )
@@ -79,7 +79,7 @@ final class Fixture {
         for skill in skills {
             let folder = install.appendingPathComponent("skills/\(skill)")
             try! fm.createDirectory(at: folder, withIntermediateDirectories: true)
-            let text = "---\nname: \(skill)\ndescription: Do plugin \(name).\n---\n\nCorpo."
+            let text = "---\nname: \(skill)\ndescription: From plugin \(name).\n---\n\nBody."
             try! text.write(
                 to: folder.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8
             )
@@ -146,7 +146,7 @@ final class Fixture {
         for skill in skills {
             let folder = repo.appendingPathComponent(".claude/skills/\(skill)")
             try! fm.createDirectory(at: folder, withIntermediateDirectories: true)
-            try! "---\nname: \(skill)\ndescription: Do repo.\n---\n\nCorpo.".write(
+            try! "---\nname: \(skill)\ndescription: From the repo.\n---\n\nBody.".write(
                 to: folder.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8
             )
         }

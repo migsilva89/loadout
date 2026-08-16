@@ -44,8 +44,8 @@ final class AgentAndServerTests: XCTestCase {
         )
         XCTAssertEqual(mutations.records.pluginEntries(of: plugin.id), ["agents/deployment-expert.md"])
 
-        // A versão nova chega como uma cópia limpa — o agente de volta em `agents`, e nada em
-        // `agents-off`, que é o que o plugin publica.
+        // The new version arrives as a clean copy — the agent back in `agents` and nothing in
+        // `agents-off`, which is what the plugin publishes.
         try "---\nname: deployment-expert\ndescription: Nova.\n---\n".write(
             to: agents.appendingPathComponent("deployment-expert.md"), atomically: true, encoding: .utf8
         )
@@ -61,12 +61,12 @@ final class AgentAndServerTests: XCTestCase {
         let mutations = Mutations(paths: fixture.paths)
 
         let file = try mutations.createCommand(
-            name: "revisor", description: "Revê o que os outros escrevem.", kind: .agent
+            name: "reviewer", description: "Reviews what everyone else writes.", kind: .agent
         )
 
         let text = fixture.read(file)
-        XCTAssertTrue(text.contains("name: revisor"), "um subagente é chamado pelo nome, não pelo ficheiro")
-        XCTAssertEqual(item("revisor", in: fixture, kind: .agent).description, "Revê o que os outros escrevem.")
+        XCTAssertTrue(text.contains("name: reviewer"), "a subagent is called by its name, not by its file")
+        XCTAssertEqual(item("reviewer", in: fixture, kind: .agent).description, "Reviews what everyone else writes.")
     }
 
     // MARK: - MCP servers
@@ -75,7 +75,7 @@ final class AgentAndServerTests: XCTestCase {
         let fixture = Fixture()
         fixture.mcpServer("notebooklm", command: "npx notebooklm-mcp")
         fixture.mcpServer("paseo", command: "npx paseo-mcp")
-        // Outra coisa qualquer no mesmo ficheiro, que não é da nossa conta.
+        // Something else in the same file, none of our business.
         var root = (try? JSONSerialization.jsonObject(
             with: Data(contentsOf: fixture.paths.claudeJSON)
         )) as? [String: Any] ?? [:]
@@ -89,10 +89,10 @@ final class AgentAndServerTests: XCTestCase {
             with: Data(contentsOf: fixture.paths.claudeJSON)
         )) as? [String: Any] ?? [:]
         let servers = after["mcpServers"] as? [String: Any] ?? [:]
-        XCTAssertNil(servers["notebooklm"], "saiu do ficheiro")
-        XCTAssertNotNil(servers["paseo"], "o outro ficou")
-        XCTAssertEqual(after["numStartups"] as? Int, 42, "o resto do ficheiro não foi tocado")
-        XCTAssertNotNil(mutations.records.server(named: "notebooklm"), "ficou guardado")
+        XCTAssertNil(servers["notebooklm"], "left the file")
+        XCTAssertNotNil(servers["paseo"], "the other one stayed")
+        XCTAssertEqual(after["numStartups"] as? Int, 42, "the rest of the file was left alone")
+        XCTAssertNotNil(mutations.records.server(named: "notebooklm"), "it was kept")
     }
 
     func testADisabledServerIsStillListedWithItsCommand() throws {
@@ -103,8 +103,8 @@ final class AgentAndServerTests: XCTestCase {
         try mutations.setServer(item("notebooklm", in: fixture, kind: .mcp), enabled: false)
 
         let listed = item("notebooklm", in: fixture, kind: .mcp)
-        XCTAssertFalse(listed.enabled, "desligado, não desaparecido")
-        XCTAssertEqual(listed.description, "npx notebooklm-mcp", "ainda se lê o que ele era")
+        XCTAssertFalse(listed.enabled, "switched off, not vanished")
+        XCTAssertEqual(listed.description, "npx notebooklm-mcp", "you can still read what it was")
     }
 
     func testEnablingPutsBackExactlyWhatWasLifted() throws {
@@ -125,7 +125,7 @@ final class AgentAndServerTests: XCTestCase {
         XCTAssertEqual(entry["command"] as? String, "npx")
         XCTAssertEqual(entry["args"] as? [String], ["notebooklm-mcp", "--verbose"])
         XCTAssertEqual((entry["env"] as? [String: String])?["KEY"], "x")
-        XCTAssertTrue(mutations.records.servers().isEmpty, "o registo foi limpo")
+        XCTAssertTrue(mutations.records.servers().isEmpty, "the record was cleared")
         XCTAssertFalse(before.isEmpty)
     }
 
@@ -133,7 +133,7 @@ final class AgentAndServerTests: XCTestCase {
         let fixture = Fixture()
         fixture.mcpServer("notebooklm")
         let mutations = Mutations(paths: fixture.paths)
-        let ghost = Item(id: "mcp:personal:fantasma", name: "fantasma", kind: .mcp, origin: .personal)
+        let ghost = Item(id: "mcp:personal:ghost", name: "ghost", kind: .mcp, origin: .personal)
 
         XCTAssertThrowsError(try mutations.setServer(ghost, enabled: false))
         XCTAssertThrowsError(try mutations.setServer(ghost, enabled: true))
@@ -148,7 +148,7 @@ final class AgentAndServerTests: XCTestCase {
 
         let backups = (fm.enumerator(at: fixture.paths.backups, includingPropertiesForKeys: nil)?
             .compactMap { ($0 as? URL)?.lastPathComponent } ?? [])
-        XCTAssertTrue(backups.contains(".claude.json"), "há sempre uma cópia antes de escrever")
+        XCTAssertTrue(backups.contains(".claude.json"), "there is always a copy before a write")
     }
 }
 
@@ -176,10 +176,10 @@ extension AgentAndServerTests {
         let projects = after["projects"] as? [String: Any] ?? [:]
         let workServers = (projects["/Users/me/work/app"] as? [String: Any])?["mcpServers"] as? [String: Any]
         let otherServers = (projects["/Users/me/personal/app"] as? [String: Any])?["mcpServers"] as? [String: Any]
-        XCTAssertNil(workServers?["shared"], "saiu o que foi desligado")
-        XCTAssertNotNil(otherServers?["shared"], "o do outro projeto ficou")
+        XCTAssertNil(workServers?["shared"], "the one switched off left")
+        XCTAssertNotNil(otherServers?["shared"], "the other project's stayed")
 
-        // E volta ao sítio certo.
+        // And it goes back to the right place.
         let parked = InventoryScanner(paths: fixture.paths).scanAll().items
             .first { $0.kind == .mcp && $0.name == "shared" && !$0.enabled }!
         try mutations.setServer(parked, enabled: true)
@@ -199,16 +199,16 @@ extension AgentAndServerTests {
         let mutations = Mutations(paths: fixture.paths)
         try mutations.setServer(item("notebooklm", in: fixture, kind: .mcp), enabled: false)
 
-        // Reposto à mão, com outra configuração.
-        fixture.write(json: ["mcpServers": ["notebooklm": ["command": "npx outra-coisa"]]],
+        // Put back by hand, with a different configuration.
+        fixture.write(json: ["mcpServers": ["notebooklm": ["command": "npx something-else"]]],
                       to: fixture.paths.claudeJSON)
 
         let rows = InventoryScanner(paths: fixture.paths).scanAll().items
             .filter { $0.kind == .mcp && $0.name == "notebooklm" }
 
-        XCTAssertEqual(rows.count, 1, "uma linha, não duas com o mesmo id")
+        XCTAssertEqual(rows.count, 1, "one row, not two sharing an id")
         XCTAssertTrue(rows[0].enabled)
-        XCTAssertEqual(rows[0].description, "npx outra-coisa", "o que está no ficheiro é o que manda")
+        XCTAssertEqual(rows[0].description, "npx something-else", "what is in the file is what counts")
     }
 }
 
@@ -217,60 +217,60 @@ extension AgentAndServerTests {
 
     func testASubagentCannotBeSavedWithoutTheNameItIsCalledBy() throws {
         let fixture = Fixture()
-        fixture.agent("revisor")
+        fixture.agent("reviewer")
         let mutations = Mutations(paths: fixture.paths)
-        let agent = item("revisor", in: fixture, kind: .agent)
+        let agent = item("reviewer", in: fixture, kind: .agent)
         let before = fixture.read(agent.path!)
 
-        XCTAssertThrowsError(try mutations.save(agent, contents: "---\ndescription: sem nome\n---\n"))
-        XCTAssertEqual(fixture.read(agent.path!), before, "o ficheiro não foi tocado")
+        XCTAssertThrowsError(try mutations.save(agent, contents: "---\ndescription: no name\n---\n"))
+        XCTAssertEqual(fixture.read(agent.path!), before, "the file was left alone")
     }
 
     func testASubagentWhoseNameDisagreesWithItsFileSaysSo() throws {
         let fixture = Fixture()
         try fm.createDirectory(at: fixture.paths.agents, withIntermediateDirectories: true)
-        try "---\nname: outro-nome\ndescription: x\n---\n".write(
-            to: fixture.paths.agents.appendingPathComponent("desalinhado.md"),
+        try "---\nname: another-name\ndescription: x\n---\n".write(
+            to: fixture.paths.agents.appendingPathComponent("mismatched.md"),
             atomically: true, encoding: .utf8
         )
 
         XCTAssertEqual(
-            item("desalinhado", in: fixture, kind: .agent).warning,
-            "The name in the frontmatter (outro-nome) doesn't match the file (desalinhado)."
+            item("mismatched", in: fixture, kind: .agent).warning,
+            "The name in the frontmatter (another-name) doesn't match the file (mismatched)."
         )
     }
 
     func testTwoWritesInTheSameSecondKeepBothCopies() throws {
         let fixture = Fixture()
-        fixture.skill("duas-vezes")
+        fixture.skill("twice")
         let mutations = Mutations(paths: fixture.paths)
-        let skill = InventoryScanner(paths: fixture.paths).scanAll().items.first { $0.name == "duas-vezes" }!
+        let skill = InventoryScanner(paths: fixture.paths).scanAll().items.first { $0.name == "twice" }!
 
         let stamp = Date()
         try mutations.backups.snapshot(skill.path!, stamp: stamp)
-        try "---\nname: duas-vezes\ndescription: entretanto mudou.\n---\n".write(
+        try "---\nname: twice\ndescription: changed in the meantime.\n---\n".write(
             to: skill.path!, atomically: true, encoding: .utf8
         )
         try mutations.backups.snapshot(skill.path!, stamp: stamp)
 
         let copies = (fm.enumerator(at: fixture.paths.backups, includingPropertiesForKeys: nil)?
             .compactMap { ($0 as? URL) } ?? []).filter { $0.pathExtension == "md" }
-        XCTAssertEqual(copies.count, 2, "a segunda cópia não pode apagar a primeira")
+        XCTAssertEqual(copies.count, 2, "the second copy must not erase the first")
         let texts = copies.map { fixture.read($0) }
-        XCTAssertTrue(texts.contains { $0.contains("Faz coisas.") }, "a de antes de tudo sobrevive")
-        XCTAssertTrue(texts.contains { $0.contains("entretanto mudou") })
+        XCTAssertTrue(texts.contains { $0.contains("Does things.") }, "the one from before it all survives")
+        XCTAssertTrue(texts.contains { $0.contains("changed in the meantime") })
     }
 
     func testAnUnreadableRecordIsReportedRatherThanReadAsEmpty() throws {
         let fixture = Fixture()
         let records = OffRecords(paths: fixture.paths)
         try fm.createDirectory(at: fixture.paths.support, withIntermediateDirectories: true)
-        try "{{ isto não é json".write(to: records.serversFile, atomically: true, encoding: .utf8)
+        try "{{ this is not json".write(to: records.serversFile, atomically: true, encoding: .utf8)
 
-        XCTAssertEqual(records.servers(), [:], "não inventa o que não consegue ler")
+        XCTAssertEqual(records.servers(), [:], "it does not invent what it cannot read")
         XCTAssertEqual(
             records.unreadable().map(\.lastPathComponent), ["mcp-off.json"],
-            "mas diz que existe e não conseguiu — senão um servidor desligado desaparece sem explicação"
+            "but it says the file exists and could not be read — otherwise a switched-off server vanishes with no explanation"
         )
     }
 }

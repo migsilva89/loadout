@@ -35,7 +35,7 @@ final class FrontmatterTreeTests: XCTestCase {
         severity: recommended
     ---
 
-    Corpo.
+    Body.
     """
 
     private func value(_ pairs: [(String, Frontmatter.Value)], _ key: String) -> Frontmatter.Value? {
@@ -63,14 +63,14 @@ final class FrontmatterTreeTests: XCTestCase {
         let tree = Frontmatter.tree(vercelish)
 
         XCTAssertEqual(scalar(value(tree, "name")), "vercel-functions")
-        XCTAssertNil(value(tree, "minScore"), "não sobe ao topo")
+        XCTAssertNil(value(tree, "minScore"), "it does not rise to the top")
 
         let metadata = map(value(tree, "metadata"))
         XCTAssertEqual(scalar(value(metadata, "priority")), "8")
         let signals = map(value(metadata, "promptSignals"))
         XCTAssertEqual(scalar(value(signals, "minScore")), "6")
         XCTAssertEqual(list(value(signals, "phrases")).count, 2)
-        XCTAssertEqual(list(value(signals, "allOf")), [], "uma lista vazia é uma lista vazia")
+        XCTAssertEqual(list(value(signals, "allOf")), [], "an empty list is an empty list")
     }
 
     // MARK: - AC11.2 every entry of a list survives
@@ -78,7 +78,7 @@ final class FrontmatterTreeTests: XCTestCase {
     func testAListOfMapsKeepsEveryRule() {
         let rules = list(value(Frontmatter.tree(vercelish), "validate"))
 
-        XCTAssertEqual(rules.count, 2, "duas regras, não uma a apagar a outra")
+        XCTAssertEqual(rules.count, 2, "two rules, not one erasing the other")
         XCTAssertEqual(scalar(value(map(rules.first), "severity")), "error")
         XCTAssertEqual(scalar(value(map(rules.last), "severity")), "recommended")
         XCTAssertEqual(scalar(value(map(rules.last), "message")), "Manual retry logic")
@@ -132,7 +132,7 @@ final class FrontmatterTreeTests: XCTestCase {
           segunda linha
         ---
 
-        Corpo.
+        Body.
         """
         let tree = Frontmatter.tree(text)
 
@@ -141,12 +141,12 @@ final class FrontmatterTreeTests: XCTestCase {
     }
 
     func testAFlatFrontmatterProducesAFlatTree() {
-        let text = "---\nname: simples\ndescription: Uma linha.\n---\n\nCorpo."
+        let text = "---\nname: simples\ndescription: One line.\n---\n\nBody."
 
         let tree = Frontmatter.tree(text)
 
         XCTAssertEqual(tree.map(\.0), ["name", "description"])
-        XCTAssertEqual(scalar(value(tree, "description")), "Uma linha.")
+        XCTAssertEqual(scalar(value(tree, "description")), "One line.")
     }
 }
 
@@ -158,18 +158,18 @@ extension FrontmatterTreeTests {
         let text = """
         ---
         name: dobrada
-        description: Uma frase que continua
-          na linha seguinte, com dois pontos: aqui
+        description: A sentence that carries on
+          to the next line, with a colon: here
         ---
 
-        Corpo.
+        Body.
         """
         let tree = Frontmatter.tree(text)
 
         XCTAssertEqual(tree.map(\.0), ["name", "description"], "sem campos inventados")
         XCTAssertEqual(
             scalar(value(tree, "description")),
-            "Uma frase que continua na linha seguinte, com dois pontos: aqui"
+            "A sentence that carries on to the next line, with a colon: here"
         )
     }
 
@@ -208,7 +208,7 @@ extension FrontmatterTreeTests {
         let text = """
         ---
         name: x
-        # uma nota para quem lê o ficheiro
+        # a note for whoever reads the file
         description: y
         ---
         """
@@ -227,7 +227,7 @@ extension FrontmatterTreeTests {
           promptSignals:
             phrases:
               - "websocket"
-              # uma nota a explicar o que fica de fora, de propósito
+              # a note explaining what is left out, on purpose
               - "long polling"
             minScore: 6
           priority: 8
@@ -238,7 +238,7 @@ extension FrontmatterTreeTests {
 
         XCTAssertEqual(list(value(signals, "phrases")).compactMap { scalar($0) },
                        ["websocket", "long polling"])
-        XCTAssertEqual(scalar(value(signals, "minScore")), "6", "o que vem a seguir não se perde")
+        XCTAssertEqual(scalar(value(signals, "minScore")), "6", "what comes next is not lost")
         XCTAssertEqual(scalar(value(metadata, "priority")), "8")
     }
 }
