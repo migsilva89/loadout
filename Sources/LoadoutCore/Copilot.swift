@@ -35,6 +35,7 @@ public final class Copilot: @unchecked Sendable {
         task.executableURL = cli.executable
         task.arguments = cli.arguments(for: prompt)
         task.currentDirectoryURL = directory
+        task.environment = cli.environment
         let pipe = Pipe()
         task.standardOutput = pipe
         task.standardError = pipe
