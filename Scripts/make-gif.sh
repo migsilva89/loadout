@@ -2,12 +2,12 @@
 # Records the README's animation by driving the real app, and turns it into a GIF.
 #
 #   ./Scripts/make-gif.sh                 a longa, com tudo: browse, toggle, share, ask
-#   ./Scripts/make-gif.sh browse          só a lista e o que cada coisa é
-#   ./Scripts/make-gif.sh toggle          desligar e voltar a ligar uma skill
-#   ./Scripts/make-gif.sh share           pôr a mesma skill noutro assistente
-#   ./Scripts/make-gif.sh ask             a conversa e a alteração proposta
+#   ./Scripts/make-gif.sh browse          just the list, and what each thing is
+#   ./Scripts/make-gif.sh toggle          switching a skill off and back on
+#   ./Scripts/make-gif.sh share           putting the same skill on another assistant
+#   ./Scripts/make-gif.sh ask             the conversation and the change it proposes
 #
-# As curtas servem para um site, onde cada uma explica uma coisa só. A longa é a do README.
+# The short ones are for a website, where each explains one thing. The long one is the README's.
 #
 # No screen recording is involved, and none is possible from a script: capturing the *screen* needs
 # a permission a headless run has no way to be granted. Instead the app draws its own window to a
@@ -287,8 +287,8 @@ env \
 	.build/debug/LoadoutApp | tail -3
 
 COUNT="$(find "$FRAMES" -name 'frame-*.png' | wc -l | tr -d ' ')"
-[ "$COUNT" -gt 20 ] || { echo "só $COUNT fotogramas — alguma coisa correu mal"; exit 1; }
-echo "→ $COUNT fotogramas"
+[ "$COUNT" -gt 20 ] || { echo "only $COUNT frames — something went wrong"; exit 1; }
+echo "→ $COUNT frames"
 
 # ------------------------------------------------------------------------- the gif
 #
@@ -299,7 +299,7 @@ echo "→ $COUNT fotogramas"
 python3 Scripts/frame-timing.py "$FRAMES"
 
 # Two passes with a shared palette. One palette per frame turns a dark interface to mud.
-echo "→ A montar o GIF"
+echo "→ Assembling the GIF"
 ffmpeg -loglevel error -y -f concat -safe 0 -i "$FRAMES/list.txt" \
 	-vf "scale=$WIDTH:-1:flags=lanczos,palettegen=stats_mode=diff" "$FRAMES/palette.png"
 
@@ -313,7 +313,7 @@ echo "✓ $OUT ($SIZE)"
 if [ "$(du -k "$ROOT/$OUT" | cut -f1)" -gt 10240 ]; then
 	cat <<'WARN'
 
-  Passou dos 10 MB. O GitHub aceita, mas quem abre o README no telemóvel paga-o.
+  Over 10 MB. GitHub accepts it, but whoever opens the README on a phone pays for it.
   GIF_WIDTH=1000 ./Scripts/make-gif.sh
 WARN
 fi

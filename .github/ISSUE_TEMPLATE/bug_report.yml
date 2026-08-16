@@ -23,7 +23,7 @@ body:
     id: version
     attributes:
       label: Version
-      description: Loadout → Acerca de, ou o nome do ficheiro descarregado
+      description: Loadout → About Loadout, or the name of the file you downloaded
     validations:
       required: true
   - type: input

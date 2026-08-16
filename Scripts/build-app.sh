@@ -23,13 +23,13 @@ VERSION="${VERSION#v}"
 # before it will notarise anything.
 SIGN_IDENTITY="${LOADOUT_SIGN_IDENTITY:-}"
 
-echo "→ A compilar ($CONFIG)"
+echo "→ Building ($CONFIG)"
 swift build -c "$CONFIG" --product LoadoutApp
 
 BINARY="$(swift build -c "$CONFIG" --product LoadoutApp --show-bin-path)/LoadoutApp"
-[[ -x "$BINARY" ]] || { echo "não encontrei o binário em $BINARY"; exit 1; }
+[[ -x "$BINARY" ]] || { echo "no binary at $BINARY"; exit 1; }
 
-echo "→ A montar o bundle"
+echo "→ Assembling the bundle"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BINARY" "$APP/Contents/MacOS/Loadout"
@@ -37,7 +37,7 @@ cp "$BINARY" "$APP/Contents/MacOS/Loadout"
 if [[ -f "$ROOT/Resources/Loadout.icns" ]]; then
   cp "$ROOT/Resources/Loadout.icns" "$APP/Contents/Resources/Loadout.icns"
 else
-  echo "  (sem ícone: corre 'swift Scripts/make-icon.swift' primeiro)"
+  echo "  (no icon: run 'swift Scripts/make-icon.swift' first)"
 fi
 
 cat > "$APP/Contents/Info.plist" <<PLIST
@@ -64,13 +64,13 @@ PLIST
 plutil -lint "$APP/Contents/Info.plist" > /dev/null
 
 if [[ -n "$SIGN_IDENTITY" ]]; then
-  echo "→ A assinar com Developer ID"
+  echo "→ Signing with Developer ID"
   # No --deep: it is deprecated and signs nested code with the wrong options. There is nothing
   # nested here anyway — one binary in one bundle.
   codesign --force --sign "$SIGN_IDENTITY" --options runtime --timestamp "$APP"
   codesign --verify --strict --verbose=1 "$APP" 2>&1 | tail -1
 else
-  echo "→ A assinar (ad hoc — só corre nesta máquina)"
+  echo "→ Signing (ad hoc — only runs on this machine)"
   codesign --force --sign - "$APP" 2>/dev/null
 fi
 

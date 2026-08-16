@@ -8,7 +8,7 @@ final class CommandTests: XCTestCase {
 
     private func command(_ name: String, in fixture: Fixture, frontmatter: String? = nil) {
         try! fm.createDirectory(at: fixture.paths.commands, withIntermediateDirectories: true)
-        let text = frontmatter ?? "---\ndescription: Faz uma coisa.\nargument-hint: [ficheiro]\n---\n\nCorpo."
+        let text = frontmatter ?? "---\ndescription: Does a thing.\nargument-hint: [file]\n---\n\nBody."
         try! text.write(
             to: fixture.paths.commands.appendingPathComponent("\(name).md"),
             atomically: true, encoding: .utf8
@@ -18,7 +18,7 @@ final class CommandTests: XCTestCase {
     private func codexPrompt(_ name: String, in fixture: Fixture) {
         let root = fixture.paths.home.appendingPathComponent(".codex/prompts")
         try! fm.createDirectory(at: root, withIntermediateDirectories: true)
-        try! "---\ndescription: Do Codex.\n---\n\nCorpo.".write(
+        try! "---\ndescription: From Codex.\n---\n\nBody.".write(
             to: root.appendingPathComponent("\(name).md"), atomically: true, encoding: .utf8
         )
     }
@@ -34,24 +34,24 @@ final class CommandTests: XCTestCase {
         let fixture = Fixture()
         command("imark-review", in: fixture)
 
-        XCTAssertNil(item("imark-review", in: fixture).warning, "um command chama-se pelo ficheiro")
+        XCTAssertNil(item("imark-review", in: fixture).warning, "a command is called by its file")
     }
 
     func testAnUnreadableFrontmatterStillWarnsAndStillLists() {
         let fixture = Fixture()
-        command("partido", in: fixture, frontmatter: "---\ndescription: Sem fecho.\n\nCorpo.")
+        command("broken", in: fixture, frontmatter: "---\ndescription: No closing fence.\n\nBody.")
 
-        let broken = item("partido", in: fixture)
+        let broken = item("broken", in: fixture)
         XCTAssertNotNil(broken.warning)
-        XCTAssertEqual(broken.name, "partido", "continua listado")
+        XCTAssertEqual(broken.name, "broken", "it stays listed")
     }
 
     func testASkillIsStillHeldToItsOwnFieldRules() {
         let fixture = Fixture()
-        fixture.rawSkill("sem-nome", contents: "---\ndescription: Só descrição.\n---\n\nCorpo.")
+        fixture.rawSkill("nameless", contents: "---\ndescription: Description only.\n---\n\nBody.")
 
         let skill = InventoryScanner(paths: fixture.paths).scanAll().items
-            .first { $0.kind == .skill && $0.name == "sem-nome" }!
+            .first { $0.kind == .skill && $0.name == "nameless" }!
         XCTAssertEqual(skill.warning, "The frontmatter is missing the name field.")
     }
 
@@ -71,7 +71,7 @@ final class CommandTests: XCTestCase {
             fixture.paths.commands.appendingPathComponent("imark-review.md")
         ))
         let parked = item("imark-review", in: fixture)
-        XCTAssertFalse(parked.enabled, "continua na lista, desligado")
+        XCTAssertFalse(parked.enabled, "still in the list, switched off")
 
         try mutations.setCommand(parked, enabled: true)
         XCTAssertTrue(fixture.exists(
@@ -84,10 +84,10 @@ final class CommandTests: XCTestCase {
         let repo = fixture.projectRepo("APPS/loadout")
         let commands = repo.appendingPathComponent(".claude/commands")
         try fm.createDirectory(at: commands, withIntermediateDirectories: true)
-        try "---\ndescription: Do repo.\n---\n".write(
+        try "---\ndescription: From the repo.\n---\n".write(
             to: commands.appendingPathComponent("deploy.md"), atomically: true, encoding: .utf8
         )
-        fixture.projectsIndex("| Caminho | Descrição |\n|---|---|\n| `APPS/loadout` | A app |")
+        fixture.projectsIndex("| Path | Description |\n|---|---|\n| `APPS/loadout` | The app |")
         let project = ProjectsIndex(paths: fixture.paths).load().first!
         let scanner = InventoryScanner(paths: fixture.paths)
         let mutations = Mutations(paths: fixture.paths)
@@ -116,19 +116,19 @@ final class CommandTests: XCTestCase {
         XCTAssertEqual(mutations.records.pluginEntries(of: plugin.id), ["commands/status.md"])
         XCTAssertTrue(
             mutations.records.pluginSkills(of: plugin.id).isEmpty,
-            "um command não se disfarça de skill no registo"
+            "a command does not pass itself off as a skill in the record"
         )
 
-        // A versão nova chega limpa, sem saber do que foi desligado.
+        // The new version arrives clean, knowing nothing of what was switched off.
         let fresh = plugin.installPath.appendingPathComponent("commands/status.md")
         try fm.createDirectory(
             at: fresh.deletingLastPathComponent(), withIntermediateDirectories: true
         )
-        try "---\ndescription: Nova.\n---\n".write(to: fresh, atomically: true, encoding: .utf8)
+        try "---\ndescription: New.\n---\n".write(to: fresh, atomically: true, encoding: .utf8)
         try fm.removeItem(at: plugin.installPath.appendingPathComponent("commands-off/status.md"))
 
         XCTAssertEqual(mutations.reapplyDisabledSkills(of: plugin), ["status.md"])
-        XCTAssertFalse(fixture.exists(fresh), "voltou a sair do sítio que o Claude lê")
+        XCTAssertFalse(fixture.exists(fresh), "it left the place Claude reads again")
     }
 
     // MARK: - AC10.9 creating one
@@ -137,44 +137,44 @@ final class CommandTests: XCTestCase {
         let fixture = Fixture()
         let mutations = Mutations(paths: fixture.paths)
 
-        let file = try mutations.createCommand(name: "deploy", description: "Põe isto no ar.")
+        let file = try mutations.createCommand(name: "deploy", description: "Puts this on the air.")
 
         let text = fixture.read(file)
-        XCTAssertTrue(text.contains("description: Põe isto no ar."))
-        XCTAssertFalse(text.contains("name:"), "um command não leva campo name")
-        XCTAssertEqual(item("deploy", in: fixture).description, "Põe isto no ar.")
+        XCTAssertTrue(text.contains("description: Puts this on the air."))
+        XCTAssertFalse(text.contains("name:"), "a command carries no name field")
+        XCTAssertEqual(item("deploy", in: fixture).description, "Puts this on the air.")
 
-        XCTAssertThrowsError(try mutations.createCommand(name: "deploy", description: "Outra"))
-        XCTAssertThrowsError(try mutations.createCommand(name: "Não Válido", description: ""))
+        XCTAssertThrowsError(try mutations.createCommand(name: "deploy", description: "Another"))
+        XCTAssertThrowsError(try mutations.createCommand(name: "Not Valid", description: ""))
     }
 
     // MARK: - AC10.11 / AC10.13 the other assistants
 
     func testCodexPromptsAreInventoriedAndMergedByName() {
         let fixture = Fixture()
-        command("nos-dois", in: fixture)
-        codexPrompt("nos-dois", in: fixture)
-        codexPrompt("so-no-codex", in: fixture)
+        command("on-both", in: fixture)
+        codexPrompt("on-both", in: fixture)
+        codexPrompt("codex-only", in: fixture)
 
         let commands = InventoryScanner(paths: fixture.paths).scanAll().items.filter { $0.kind == .command }
 
-        XCTAssertEqual(commands.map(\.name).sorted(), ["nos-dois", "so-no-codex"])
-        XCTAssertEqual(item("nos-dois", in: fixture).assistants, ["claude", "codex"])
-        XCTAssertEqual(item("so-no-codex", in: fixture).assistants, ["codex"])
+        XCTAssertEqual(commands.map(\.name).sorted(), ["codex-only", "on-both"])
+        XCTAssertEqual(item("on-both", in: fixture).assistants, ["claude", "codex"])
+        XCTAssertEqual(item("codex-only", in: fixture).assistants, ["codex"])
     }
 
     func testAnAssistantWithNoPromptsDirectoryIsNotAnError() {
         let fixture = Fixture()
-        command("sozinho", in: fixture)
+        command("alone", in: fixture)
 
         let commands = InventoryScanner(paths: fixture.paths).scanAll().items.filter { $0.kind == .command }
 
-        XCTAssertEqual(commands.map(\.name), ["sozinho"])
+        XCTAssertEqual(commands.map(\.name), ["alone"])
     }
 
     func testSharingACommandLinksItRatherThanCopyingIt() throws {
         let fixture = Fixture()
-        command("nos-dois", in: fixture)
+        command("on-both", in: fixture)
         try fm.createDirectory(
             at: fixture.paths.home.appendingPathComponent(".codex/prompts"),
             withIntermediateDirectories: true
@@ -182,17 +182,17 @@ final class CommandTests: XCTestCase {
         let codex = AssistantRegistry.discover(paths: fixture.paths).first { $0.id == "codex" }!
         let mutations = Mutations(paths: fixture.paths)
 
-        let link = try mutations.shareCommand(item("nos-dois", in: fixture), with: codex)
+        let link = try mutations.shareCommand(item("on-both", in: fixture), with: codex)
 
         XCTAssertEqual(
             (try? fm.attributesOfItem(atPath: link.path)[.type]) as? FileAttributeType,
             .typeSymbolicLink,
-            "um ficheiro, uma edição"
+            "one file, one edit"
         )
-        XCTAssertEqual(item("nos-dois", in: fixture).assistants, ["claude", "codex"])
+        XCTAssertEqual(item("on-both", in: fixture).assistants, ["claude", "codex"])
 
-        try mutations.unshareCommand(item("nos-dois", in: fixture), from: codex)
-        XCTAssertEqual(item("nos-dois", in: fixture).assistants, ["claude"])
+        try mutations.unshareCommand(item("on-both", in: fixture), from: codex)
+        XCTAssertEqual(item("on-both", in: fixture).assistants, ["claude"])
     }
 }
 
@@ -201,31 +201,31 @@ extension CommandTests {
 
     private func projectFixture() -> (Fixture, Project, InventoryScanner, Mutations) {
         let fixture = Fixture()
-        let repo = fixture.projectRepo("APPS/loadout", skills: ["do-repo"])
+        let repo = fixture.projectRepo("APPS/loadout", skills: ["from-repo"])
         let commands = repo.appendingPathComponent(".claude/commands")
         try! fm.createDirectory(at: commands, withIntermediateDirectories: true)
-        try! "---\ndescription: Do repo.\n---\n\nCorpo.".write(
+        try! "---\ndescription: From the repo.\n---\n\nBody.".write(
             to: commands.appendingPathComponent("deploy.md"), atomically: true, encoding: .utf8
         )
-        fixture.projectsIndex("| Caminho | Descrição |\n|---|---|\n| `APPS/loadout` | A app |")
+        fixture.projectsIndex("| Path | Description |\n|---|---|\n| `APPS/loadout` | The app |")
         let project = ProjectsIndex(paths: fixture.paths).load().first!
         return (fixture, project, InventoryScanner(paths: fixture.paths), Mutations(paths: fixture.paths))
     }
 
     func testMakingAProjectSkillGlobalCopiesItAndLeavesTheProjectsOwn() throws {
         let (fixture, project, scanner, mutations) = projectFixture()
-        let skill = scanner.scanAll(project: project).items.first { $0.name == "do-repo" }!
+        let skill = scanner.scanAll(project: project).items.first { $0.name == "from-repo" }!
 
         try mutations.makeGlobal(skill)
 
-        XCTAssertTrue(fixture.exists(fixture.paths.skills.appendingPathComponent("do-repo/SKILL.md")),
-                      "passou a ser tua, em todo o lado")
+        XCTAssertTrue(fixture.exists(fixture.paths.skills.appendingPathComponent("from-repo/SKILL.md")),
+                      "it became yours, everywhere")
         XCTAssertTrue(
-            fixture.exists(project.path.appendingPathComponent(".claude/skills/do-repo/SKILL.md")),
-            "e a do repositório fica — ninguém perde nada no próximo pull"
+            fixture.exists(project.path.appendingPathComponent(".claude/skills/from-repo/SKILL.md")),
+            "and the repository's stays — nobody loses anything at the next pull"
         )
         XCTAssertEqual(
-            scanner.scanAll().items.filter { $0.kind == .skill && $0.name == "do-repo" }.count, 1
+            scanner.scanAll().items.filter { $0.kind == .skill && $0.name == "from-repo" }.count, 1
         )
     }
 
@@ -240,22 +240,22 @@ extension CommandTests {
 
     func testItRefusesRatherThanOverwriteOneYouAlreadyHave() throws {
         let (fixture, project, scanner, mutations) = projectFixture()
-        fixture.skill("do-repo", description: "A minha, diferente.")
-        let skill = scanner.scanAll(project: project).items.first { $0.name == "do-repo" }!
+        fixture.skill("from-repo", description: "Mine, different.")
+        let skill = scanner.scanAll(project: project).items.first { $0.name == "from-repo" }!
 
         XCTAssertThrowsError(try mutations.makeGlobal(skill))
         XCTAssertEqual(
-            Frontmatter.parse(fixture.read(fixture.paths.skills.appendingPathComponent("do-repo/SKILL.md"))).description,
-            "A minha, diferente.",
-            "a que já era tua não foi tocada"
+            Frontmatter.parse(fixture.read(fixture.paths.skills.appendingPathComponent("from-repo/SKILL.md"))).description,
+            "Mine, different.",
+            "the one that was already yours was left alone"
         )
     }
 
     func testAGlobalOneCannotBeMadeGlobal() {
         let fixture = Fixture()
-        fixture.skill("minha")
+        fixture.skill("mine")
         let mutations = Mutations(paths: fixture.paths)
-        let mine = InventoryScanner(paths: fixture.paths).scanAll().items.first { $0.name == "minha" }!
+        let mine = InventoryScanner(paths: fixture.paths).scanAll().items.first { $0.name == "mine" }!
 
         XCTAssertThrowsError(try mutations.makeGlobal(mine))
     }

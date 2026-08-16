@@ -17,7 +17,7 @@ final class MigrationTests: XCTestCase {
     func testMovesAllThreeOutOfTheClaudeDirectory() {
         let fixture = Fixture()
         let paths = fixture.paths
-        writeLegacy(fixture, at: paths.legacyBackups.appendingPathComponent("2026-01-01/skills/a/SKILL.md"), "cópia")
+        writeLegacy(fixture, at: paths.legacyBackups.appendingPathComponent("2026-01-01/skills/a/SKILL.md"), "copy")
         writeLegacy(fixture, at: paths.legacyIndex, "base de dados")
         writeLegacy(fixture, at: paths.legacyCLIIcons.appendingPathComponent("kiro.png"), "png")
 
@@ -26,7 +26,7 @@ final class MigrationTests: XCTestCase {
         XCTAssertEqual(moved, Paths.Migration(backups: true, index: true, icons: true))
         XCTAssertEqual(
             try? String(contentsOf: paths.backups.appendingPathComponent("2026-01-01/skills/a/SKILL.md"), encoding: .utf8),
-            "cópia"
+            "copy"
         )
         XCTAssertEqual(try? String(contentsOf: paths.index, encoding: .utf8), "base de dados")
         XCTAssertTrue(fm.fileExists(atPath: paths.cliIcons.appendingPathComponent("kiro.png").path))
@@ -88,7 +88,7 @@ final class MigrationTests: XCTestCase {
     func testTheNewPathsAreOutsideTheClaudeDirectory() {
         let paths = Paths(home: URL(fileURLWithPath: "/tmp/casa"))
         for url in [paths.backups, paths.index, paths.cliIcons] {
-            XCTAssertFalse(url.path.contains("/.claude"), "\(url.path) ainda está dentro de .claude")
+            XCTAssertFalse(url.path.contains("/.claude"), "\(url.path) is still inside .claude")
             XCTAssertTrue(url.path.hasPrefix(paths.support.path))
         }
     }

@@ -50,7 +50,7 @@ final class UsageTests: XCTestCase {
         let index = try UsageIndex(paths: fixture.paths)
         let file = index.transcriptFiles()[0]
 
-        XCTAssertEqual(index.indexFile(file, since: .distantPast), 1, "primeira passagem lê")
+        XCTAssertEqual(index.indexFile(file, since: .distantPast), 1, "the first pass reads")
         XCTAssertEqual(index.indexFile(file, since: .distantPast), -1, "segunda passagem salta")
 
         // Touching the file must bring it back into the pass.
@@ -78,16 +78,16 @@ final class UsageTests: XCTestCase {
         let fixture = Fixture()
         fixture.transcript("s", lines: [
             Line.skill("recente", at: iso(daysAgo: 10)),
-            Line.skill("antiga", at: iso(daysAgo: 200)),
+            Line.skill("old-one", at: iso(daysAgo: 200)),
         ])
         let index = try UsageIndex(paths: fixture.paths)
 
         index.refresh()
         XCTAssertEqual(index.usage(kind: .skill)["recente"]?.count, 1)
-        XCTAssertNil(index.usage(kind: .skill)["antiga"], "fora da janela")
+        XCTAssertNil(index.usage(kind: .skill)["old-one"], "outside the window")
 
         index.refresh(since: .distantPast)
-        XCTAssertEqual(index.usage(kind: .skill)["antiga"]?.count, 1, "histórico completo a pedido")
+        XCTAssertEqual(index.usage(kind: .skill)["old-one"]?.count, 1, "full history on demand")
     }
 
     // MARK: AC6.5
@@ -95,40 +95,40 @@ final class UsageTests: XCTestCase {
     func testUsageKnowsCountRecencyAndHowManyProjects() throws {
         let fixture = Fixture()
         fixture.transcript("a", lines: [
-            Line.skill("espalhada", at: iso(daysAgo: 9), cwd: "/Users/me/repo-um"),
-            Line.skill("espalhada", at: iso(daysAgo: 3), cwd: "/Users/me/repo-dois"),
-            Line.skill("espalhada", at: iso(daysAgo: 1), cwd: "/Users/me/repo-dois"),
+            Line.skill("spread-out", at: iso(daysAgo: 9), cwd: "/Users/me/repo-um"),
+            Line.skill("spread-out", at: iso(daysAgo: 3), cwd: "/Users/me/repo-two"),
+            Line.skill("spread-out", at: iso(daysAgo: 1), cwd: "/Users/me/repo-two"),
         ])
         let index = try UsageIndex(paths: fixture.paths)
 
         index.refresh()
-        let usage = try XCTUnwrap(index.usage(kind: .skill)["espalhada"])
+        let usage = try XCTUnwrap(index.usage(kind: .skill)["spread-out"])
 
         XCTAssertEqual(usage.count, 3)
         XCTAssertEqual(usage.projectCount, 2)
         let age = Date().timeIntervalSince(try XCTUnwrap(usage.lastUsed))
-        XCTAssertEqual(age / 86_400, 1, accuracy: 0.1, "o último uso é o mais recente")
+        XCTAssertEqual(age / 86_400, 1, accuracy: 0.1, "the last use is the most recent one")
     }
 
     func testProjectsNamesThemBusiestFirst() throws {
         let fixture = Fixture()
         fixture.transcript("a", lines: [
-            Line.skill("espalhada", at: iso(daysAgo: 9), cwd: "/Users/me/repo-um"),
-            Line.skill("espalhada", at: iso(daysAgo: 3), cwd: "/Users/me/repo-dois"),
-            Line.skill("espalhada", at: iso(daysAgo: 1), cwd: "/Users/me/repo-dois"),
+            Line.skill("spread-out", at: iso(daysAgo: 9), cwd: "/Users/me/repo-um"),
+            Line.skill("spread-out", at: iso(daysAgo: 3), cwd: "/Users/me/repo-two"),
+            Line.skill("spread-out", at: iso(daysAgo: 1), cwd: "/Users/me/repo-two"),
             Line.skill("outra", at: iso(daysAgo: 1), cwd: "/Users/me/repo-tres"),
         ])
         let index = try UsageIndex(paths: fixture.paths)
         index.refresh()
 
-        let projects = index.projects(kind: .skill, key: "espalhada")
+        let projects = index.projects(kind: .skill, key: "spread-out")
 
         XCTAssertEqual(
             projects, [
-                ProjectUsage(project: "repo-dois", count: 2),
+                ProjectUsage(project: "repo-two", count: 2),
                 ProjectUsage(project: "repo-um", count: 1),
             ],
-            "os projetos vêm do mais usado para o menos, e só os desta skill"
+            "projects come most-used first, and only this skill's"
         )
     }
 
@@ -158,24 +158,24 @@ final class UsageTests: XCTestCase {
     func testACorruptedLineDoesNotStopTheRest() throws {
         let fixture = Fixture()
         fixture.transcript("s", lines: [
-            Line.skill("antes", at: iso(daysAgo: 1)),
+            Line.skill("before", at: iso(daysAgo: 1)),
             Line.corrupted,
             "",
             "{\"type\":\"assistant\"}",
-            Line.skill("depois", at: iso(daysAgo: 1)),
+            Line.skill("after", at: iso(daysAgo: 1)),
         ])
         let index = try UsageIndex(paths: fixture.paths)
 
         index.refresh()
 
-        XCTAssertEqual(index.usage(kind: .skill)["antes"]?.count, 1)
-        XCTAssertEqual(index.usage(kind: .skill)["depois"]?.count, 1)
+        XCTAssertEqual(index.usage(kind: .skill)["before"]?.count, 1)
+        XCTAssertEqual(index.usage(kind: .skill)["after"]?.count, 1)
     }
 
     func testTranscriptsSpreadOverManyDirectoriesAreAllFound() throws {
         let fixture = Fixture()
         fixture.transcript("a", lines: [Line.skill("x", at: iso(daysAgo: 1))], project: "um")
-        fixture.transcript("b", lines: [Line.skill("x", at: iso(daysAgo: 1))], project: "dois")
+        fixture.transcript("b", lines: [Line.skill("x", at: iso(daysAgo: 1))], project: "two")
         let index = try UsageIndex(paths: fixture.paths)
 
         index.refresh()
@@ -226,7 +226,7 @@ final class UsageTests: XCTestCase {
     func testCopilotSaysSoWhenNoCLIIsGiven() {
         let copilot = Copilot()
 
-        XCTAssertThrowsError(try copilot.run(cli: nil, prompt: "olá", in: URL(fileURLWithPath: "/tmp"))) {
+        XCTAssertThrowsError(try copilot.run(cli: nil, prompt: "hello", in: URL(fileURLWithPath: "/tmp"))) {
             XCTAssertEqual($0 as? LoadoutError, .claudeNotFound)
         }
     }
@@ -235,9 +235,9 @@ final class UsageTests: XCTestCase {
         let copilot = Copilot()
         let bogus = cli(executable: URL(fileURLWithPath: "/nao/existe/claude"))
 
-        XCTAssertThrowsError(try copilot.run(cli: bogus, prompt: "olá", in: URL(fileURLWithPath: "/tmp"))) {
+        XCTAssertThrowsError(try copilot.run(cli: bogus, prompt: "hello", in: URL(fileURLWithPath: "/tmp"))) {
             guard case LoadoutError.io = $0 as! LoadoutError else {
-                return XCTFail("devia explicar que não conseguiu correr, deu \($0)")
+                return XCTFail("it should explain that it could not run; got \($0)")
             }
         }
     }
@@ -247,10 +247,10 @@ final class UsageTests: XCTestCase {
         let copilot = Copilot()
         let result = try copilot.run(
             cli: cli(executable: URL(fileURLWithPath: "/bin/echo")),
-            prompt: "olá", in: URL(fileURLWithPath: "/tmp")
+            prompt: "hello", in: URL(fileURLWithPath: "/tmp")
         )
 
-        XCTAssertTrue(result.output.contains("olá"))
+        XCTAssertTrue(result.output.contains("hello"))
         XCTAssertEqual(result.exitCode, 0)
         XCTAssertFalse(result.timedOut)
     }
@@ -267,17 +267,17 @@ final class UsageTests: XCTestCase {
         let started = Date()
 
         let result = try copilot.run(
-            cli: cli(executable: script), prompt: "olá", in: URL(fileURLWithPath: "/tmp"), timeout: 0.4
+            cli: cli(executable: script), prompt: "hello", in: URL(fileURLWithPath: "/tmp"), timeout: 0.4
         )
 
         XCTAssertTrue(result.timedOut)
-        XCTAssertLessThan(Date().timeIntervalSince(started), 10, "não ficou pendurado")
+        XCTAssertLessThan(Date().timeIntervalSince(started), 10, "it did not hang")
     }
 
     // MARK: AC8.3
 
     func testTheWatcherCoalescesABurstIntoASingleCallback() {
-        let expectation = expectation(description: "um só callback")
+        let expectation = expectation(description: "one callback only")
         let watcher = Watcher(coalescing: 0.15) { expectation.fulfill() }
 
         for _ in 0..<50 { watcher.schedule() }

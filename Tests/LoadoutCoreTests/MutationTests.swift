@@ -13,7 +13,7 @@ final class MutationTests: XCTestCase {
 
     func testDisablingMovesTheWholeFolderToSkillsOff() throws {
         let fixture = Fixture()
-        fixture.skill("imark-review", extraFile: "echo olá")
+        fixture.skill("imark-review", extraFile: "echo hello")
         let mutations = Mutations(paths: fixture.paths)
 
         try mutations.disableSkill(item(named: "imark-review", in: fixture))
@@ -23,7 +23,7 @@ final class MutationTests: XCTestCase {
         XCTAssertTrue(fixture.exists(parked.appendingPathComponent("SKILL.md")))
         XCTAssertTrue(
             fixture.exists(parked.appendingPathComponent("scripts/run.sh")),
-            "os ficheiros extra vão junto"
+            "the extra files travel with it"
         )
     }
 
@@ -57,7 +57,7 @@ final class MutationTests: XCTestCase {
         }
         XCTAssertTrue(
             fixture.exists(fixture.paths.skills.appendingPathComponent("dupla/SKILL.md")),
-            "a original continua no sítio"
+            "the original stays where it was"
         )
     }
 
@@ -83,7 +83,7 @@ final class MutationTests: XCTestCase {
         let permissions = root["permissions"] as? [String: Any]
         XCTAssertEqual(
             (permissions?["allow"] as? [String])?.count, 2,
-            "o resto do ficheiro sobrevive"
+            "the rest of the file survives"
         )
         XCTAssertEqual(InventoryScanner(paths: fixture.paths).installedPlugins().first?.enabled, false)
     }
@@ -103,7 +103,7 @@ final class MutationTests: XCTestCase {
         XCTAssertThrowsError(try mutations.disableSkill(pluginSkill))
         XCTAssertThrowsError(try mutations.save(pluginSkill, contents: "---\nname: x\ndescription: y\n---\n"))
         XCTAssertThrowsError(try mutations.delete(pluginSkill))
-        XCTAssertEqual(fixture.read(pluginSkill.path!), before, "o ficheiro não foi tocado")
+        XCTAssertEqual(fixture.read(pluginSkill.path!), before, "the file was left alone")
     }
 
     // MARK: AC4.2
@@ -115,7 +115,7 @@ final class MutationTests: XCTestCase {
         let skill = item(named: "valida", in: fixture)
         let original = fixture.read(skill.path!)
 
-        XCTAssertThrowsError(try mutations.save(skill, contents: "---\ndescription: só isto\n---\n"))
+        XCTAssertThrowsError(try mutations.save(skill, contents: "---\ndescription: this only\n---\n"))
         XCTAssertThrowsError(try mutations.save(skill, contents: "---\nname: valida\n---\n"))
         XCTAssertThrowsError(
             try mutations.save(skill, contents: "---\nname: Nome Errado\ndescription: x\n---\n")
@@ -128,7 +128,7 @@ final class MutationTests: XCTestCase {
         fixture.skill("boa")
         let mutations = Mutations(paths: fixture.paths)
         let skill = item(named: "boa", in: fixture)
-        let updated = "---\nname: boa\ndescription: Nova descrição.\n---\n\nCorpo novo."
+        let updated = "---\nname: good\ndescription: New description.\n---\n\nNew body."
 
         try mutations.save(skill, contents: updated)
 
@@ -160,7 +160,7 @@ final class MutationTests: XCTestCase {
         XCTAssertThrowsError(try mutations.createSkill(name: "existe", description: "x"))
         XCTAssertThrowsError(
             try mutations.createSkill(name: "parada", description: "x"),
-            "colide com uma desativada"
+            "it clashes with a disabled one"
         )
     }
 
@@ -169,7 +169,7 @@ final class MutationTests: XCTestCase {
         XCTAssertTrue(isValidSkillName("seo2"))
         XCTAssertFalse(isValidSkillName(""))
         XCTAssertFalse(isValidSkillName("Imark"))
-        XCTAssertFalse(isValidSkillName("com espaço"))
+        XCTAssertFalse(isValidSkillName("with space"))
         XCTAssertFalse(isValidSkillName("acaba-"))
         XCTAssertFalse(isValidSkillName("-comeca"))
         XCTAssertFalse(isValidSkillName("under_score"))
@@ -186,7 +186,7 @@ final class MutationTests: XCTestCase {
         try mutations.delete(skill)
 
         XCTAssertFalse(fixture.exists(skill.directory!))
-        // A cópia de segurança é o que garante que nada se perde de vez.
+        // The backup is what guarantees nothing is lost for good.
         XCTAssertTrue(backupContents(fixture).contains { $0.contains("descartavel") })
     }
 
@@ -194,21 +194,21 @@ final class MutationTests: XCTestCase {
 
     func testEveryWriteLeavesASnapshotBehind() throws {
         let fixture = Fixture()
-        fixture.skill("com-copia", extraFile: "echo x")
+        fixture.skill("with-a-copy", extraFile: "echo x")
         let mutations = Mutations(paths: fixture.paths)
-        let skill = item(named: "com-copia", in: fixture)
+        let skill = item(named: "with-a-copy", in: fixture)
 
-        try mutations.save(skill, contents: "---\nname: com-copia\ndescription: nova.\n---\n")
-        try mutations.disableSkill(item(named: "com-copia", in: fixture))
+        try mutations.save(skill, contents: "---\nname: with-a-copy\ndescription: new.\n---\n")
+        try mutations.disableSkill(item(named: "with-a-copy", in: fixture))
 
         let backups = backupContents(fixture)
-        XCTAssertTrue(backups.contains { $0.hasSuffix("skills/com-copia/SKILL.md") })
+        XCTAssertTrue(backups.contains { $0.hasSuffix("skills/with-a-copy/SKILL.md") })
         // The folder's snapshot lands beside the file's rather than on top of it: two writes in the
         // same second used to share one destination, and the second deleted the first — throwing
         // away the copy of the state before any of it began.
         XCTAssertTrue(
-            backups.contains { $0.contains("skills/com-copia") && $0.hasSuffix("scripts/run.sh") },
-            "a árvore inteira, não só o SKILL.md"
+            backups.contains { $0.contains("skills/with-a-copy") && $0.hasSuffix("scripts/run.sh") },
+            "the whole tree, not just SKILL.md"
         )
     }
 
@@ -223,8 +223,8 @@ final class MutationTests: XCTestCase {
     func testListSnapshotsFindsOnlyStampNamedFolders() throws {
         let fixture = Fixture()
         let backups = Backups(paths: fixture.paths)
-        fixture.skill("uma")
-        try backups.snapshot(fixture.paths.skills.appendingPathComponent("uma"))
+        fixture.skill("one")
+        try backups.snapshot(fixture.paths.skills.appendingPathComponent("one"))
 
         // Something that isn't a stamp folder must never be mistaken for one.
         try FileManager.default.createDirectory(
@@ -237,15 +237,15 @@ final class MutationTests: XCTestCase {
         )
 
         let snapshots = backups.listSnapshots()
-        XCTAssertEqual(snapshots.count, 1, "só a pasta com nome de carimbo conta")
+        XCTAssertEqual(snapshots.count, 1, "only the folder named after a stamp counts")
         XCTAssertTrue(Backups.stampFormatter.date(from: snapshots[0].name) != nil)
     }
 
     func testTotalSizeSumsEveryFileAcrossEverySnapshot() throws {
         let fixture = Fixture()
         let backups = Backups(paths: fixture.paths)
-        fixture.skill("uma", extraFile: "conteúdo qualquer")
-        try backups.snapshot(fixture.paths.skills.appendingPathComponent("uma"))
+        fixture.skill("one", extraFile: "some contents")
+        try backups.snapshot(fixture.paths.skills.appendingPathComponent("one"))
 
         XCTAssertGreaterThan(backups.totalSize(), 0)
     }
@@ -264,12 +264,12 @@ final class MutationTests: XCTestCase {
         let cutoff = Date().addingTimeInterval(-30 * 24 * 3600)
         let removed = try backups.deleteSnapshots(olderThan: cutoff)
 
-        XCTAssertEqual(removed, 1, "só a pasta antiga sai")
+        XCTAssertEqual(removed, 1, "only the old folder goes")
         let remaining = backups.listSnapshots()
         XCTAssertEqual(remaining.count, 1)
         XCTAssertNotEqual(remaining.first?.date, old)
         XCTAssertTrue(FileManager.default.fileExists(atPath: fixture.paths.backups.path),
-                       "a pasta de backups em si nunca é apagada")
+                       "the backups folder itself is never deleted")
     }
 
     // MARK: AC5.4
@@ -283,7 +283,7 @@ final class MutationTests: XCTestCase {
         try! FileManager.default.createDirectory(
             at: fixture.paths.support, withIntermediateDirectories: true
         )
-        try! "não sou uma pasta".write(
+        try! "I am not a folder".write(
             to: fixture.paths.backups, atomically: true, encoding: .utf8
         )
         let mutations = Mutations(paths: fixture.paths)
@@ -292,10 +292,10 @@ final class MutationTests: XCTestCase {
 
         XCTAssertThrowsError(try mutations.save(skill, contents: "---\nname: bloqueada\ndescription: y\n---\n")) {
             guard case LoadoutError.backupFailed = $0 as! LoadoutError else {
-                return XCTFail("devia falhar na cópia, falhou com \($0)")
+                return XCTFail("it should fail at the copy; it failed with \($0)")
             }
         }
-        XCTAssertEqual(fixture.read(skill.path!), original, "não escreveu sem cópia")
+        XCTAssertEqual(fixture.read(skill.path!), original, "it did not write without a copy")
     }
 
     private func backupContents(_ fixture: Fixture) -> [String] {

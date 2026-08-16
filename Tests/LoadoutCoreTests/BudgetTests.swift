@@ -14,7 +14,7 @@ final class BudgetTests: XCTestCase {
 
     func testMeasuresDescriptionAndBodySeparately() {
         let budget = Budget.measure(
-            document: document(description: "Doze caracteres.", body: "uma linha\noutra linha")
+            document: document(description: "Sixteen chars.!!", body: "one line\nanother line")
         )
 
         XCTAssertEqual(budget.descriptionCharacters, 16)

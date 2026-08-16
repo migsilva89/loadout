@@ -42,7 +42,7 @@ final class InventoryTests: XCTestCase {
         fixture.skill("normal")
         let elsewhere = fixture.root.appendingPathComponent("outra-arvore/emprestada")
         try FileManager.default.createDirectory(at: elsewhere, withIntermediateDirectories: true)
-        try "---\nname: emprestada\ndescription: Vem de fora.\n---\n\nCorpo.".write(
+        try "---\nname: emprestada\ndescription: Comes from elsewhere.\n---\n\nBody.".write(
             to: elsewhere.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8
         )
         try FileManager.default.createSymbolicLink(
@@ -52,7 +52,7 @@ final class InventoryTests: XCTestCase {
         let skills = InventoryScanner(paths: fixture.paths).scanAll().items.filter { $0.kind == .skill }
 
         XCTAssertEqual(skills.map(\.name).sorted(), ["emprestada", "normal"])
-        XCTAssertEqual(skills.first { $0.name == "emprestada" }?.description, "Vem de fora.")
+        XCTAssertEqual(skills.first { $0.name == "emprestada" }?.description, "Comes from elsewhere.")
     }
 
     /// Real skills write `description: >` with the text folded underneath; showing the
@@ -67,7 +67,7 @@ final class InventoryTests: XCTestCase {
           by speaking like caveman.
         ---
 
-        Corpo.
+        Body.
         """)
 
         let item = InventoryScanner(paths: fixture.paths).scanAll().items.first { $0.kind == .skill }
@@ -90,16 +90,16 @@ final class InventoryTests: XCTestCase {
 
     func testBrokenFrontmatterStillProducesAnItemWithAWarning() {
         let fixture = Fixture()
-        fixture.rawSkill("sem-frontmatter", contents: "# Só markdown\n\nNada de yaml.")
+        fixture.rawSkill("no-frontmatter", contents: "# Just markdown\n\nNo yaml at all.")
 
         let item = InventoryScanner(paths: fixture.paths).scanAll().items.first { $0.kind == .skill }
-        XCTAssertEqual(item?.name, "sem-frontmatter", "cai para o nome da pasta")
+        XCTAssertEqual(item?.name, "no-frontmatter", "it falls back to the folder's name")
         XCTAssertNotNil(item?.warning)
     }
 
     func testUnclosedFrontmatterIsReportedNotSwallowed() {
         let fixture = Fixture()
-        fixture.rawSkill("aberto", contents: "---\nname: aberto\ndescription: x\n\nSem fecho.")
+        fixture.rawSkill("aberto", contents: "---\nname: aberto\ndescription: x\n\nNo closing fence.")
 
         let item = InventoryScanner(paths: fixture.paths).scanAll().items.first { $0.kind == .skill }
         XCTAssertEqual(item?.warning, "The frontmatter opens but never closes with ---.")
@@ -107,7 +107,7 @@ final class InventoryTests: XCTestCase {
 
     func testMismatchBetweenFolderAndDeclaredNameIsFlagged() {
         let fixture = Fixture()
-        fixture.rawSkill("pasta-a", contents: "---\nname: outro-nome\ndescription: x\n---\n\nCorpo.")
+        fixture.rawSkill("pasta-a", contents: "---\nname: outro-nome\ndescription: x\n---\n\nBody.")
 
         let item = InventoryScanner(paths: fixture.paths).scanAll().items.first { $0.kind == .skill }
         XCTAssertNotNil(item?.warning)
@@ -135,9 +135,9 @@ final class InventoryTests: XCTestCase {
         let inventory = InventoryScanner(paths: fixture.paths).scanAll()
         let fromPlugin = inventory.items.filter { $0.origin == .plugin("vercel") }
 
-        XCTAssertEqual(fromPlugin.count, 3, "duas skills e um comando")
+        XCTAssertEqual(fromPlugin.count, 3, "two skills and one command")
         XCTAssertEqual(inventory.plugins.map(\.id), ["vercel@official"])
-        XCTAssertFalse(fromPlugin.allSatisfy(\.isEditable), "ficheiros de plugin não se editam")
+        XCTAssertFalse(fromPlugin.allSatisfy(\.isEditable), "plugin files are not edited")
     }
 
     /// Changed 2026-08-15, after an audit drove the interface: a plugin being off is the plugin's
@@ -150,10 +150,10 @@ final class InventoryTests: XCTestCase {
         fixture.plugin("velho", skills: ["algo"], enabled: false)
 
         let inventory = InventoryScanner(paths: fixture.paths).scanAll()
-        XCTAssertEqual(inventory.plugins.first?.enabled, false, "o plugin está desligado")
+        XCTAssertEqual(inventory.plugins.first?.enabled, false, "the plugin is switched off")
         XCTAssertEqual(
             inventory.items.first { $0.name == "algo" }?.enabled, true,
-            "e a skill continua a dizer o que ela própria é: ligada, dentro de um plugin que está fora"
+            "and the skill still says what it itself is: on, inside a plugin that is out"
         )
     }
 
@@ -216,14 +216,14 @@ final class InventoryTests: XCTestCase {
         fixture.projectsIndex("""
         # Índice de Projetos
 
-        | Caminho | Descrição |
+        | Path | Description |
         |---|---|
-        | `PERSONAL/APPS/imark` | Revisão de markdown |
+        | `PERSONAL/APPS/imark` | Markdown review |
         | `TGC/open-mercato` | Plataforma |
 
-        ## Outra secção
+        ## Another section
 
-        | Caminho | Descrição |
+        | Path | Description |
         |---|---|
         | `PERSONAL/APPS/imark` | Duplicado, deve ser ignorado |
         """)
@@ -245,14 +245,16 @@ final class InventoryTests: XCTestCase {
     // MARK: AC2.4
 
     func testSearchIgnoresCaseAndAccents() {
+        // Accented on purpose: typing the plain letters has to find it, or a search box is
+        // useless to anyone whose skills are named in their own language.
         let item = Item(
-            id: "1", name: "Revisão-SEO", kind: .skill, origin: .personal,
-            description: "Auditoria de páginas"
+            id: "1", name: "Résumé-Review", kind: .skill, origin: .personal,
+            description: "Naïve façade audit"
         )
-        XCTAssertTrue(Filtering.matches(item, query: "revisao"))
-        XCTAssertTrue(Filtering.matches(item, query: "seo"))
-        XCTAssertTrue(Filtering.matches(item, query: "PAGINAS"))
-        XCTAssertTrue(Filtering.matches(item, query: "   "), "consulta vazia mostra tudo")
+        XCTAssertTrue(Filtering.matches(item, query: "resume"))
+        XCTAssertTrue(Filtering.matches(item, query: "RÉSUMÉ"))
+        XCTAssertTrue(Filtering.matches(item, query: "FACADE"))
+        XCTAssertTrue(Filtering.matches(item, query: "   "), "an empty query shows everything")
         XCTAssertFalse(Filtering.matches(item, query: "vercel"))
     }
 
@@ -283,7 +285,7 @@ final class InventoryTests: XCTestCase {
         XCTAssertEqual(
             Filtering.filter(skills, by: .disabled).map(\.name).sorted(),
             ["parqueada"],
-            "Off é o que foi desligado item a item; um plugin inteiro fora é o interruptor do plugin"
+            "Off is what was switched off item by item; a whole plugin out is the plugin's own switch"
         )
         XCTAssertEqual(
             Filtering.slice(items, for: .skills).filter { $0.origin == .plugin("vercel") }.map(\.name).sorted(),
@@ -293,7 +295,7 @@ final class InventoryTests: XCTestCase {
             Filtering.slice(items, for: .skills)
                 .filter { $0.origin == .plugin("vercel") }
                 .allSatisfy { $0.enabled },
-            "cada uma diz o seu próprio estado; o do plugin é dito à parte"
+            "each says its own state; the plugin's is said separately"
         )
     }
 
@@ -405,11 +407,11 @@ extension InventoryTests {
 
     func testEverythingHoldsGlobalAndEveryProjectWithTheirOriginsIntact() {
         let fixture = Fixture()
-        fixture.skill("minha")
-        fixture.projectRepo("APPS/loadout", skills: ["do-loadout"])
-        fixture.projectRepo("TGC/open-mercato", skills: ["do-mercato"])
+        fixture.skill("mine")
+        fixture.projectRepo("APPS/loadout", skills: ["from-loadout"])
+        fixture.projectRepo("TGC/open-mercato", skills: ["from-mercato"])
         fixture.projectsIndex("""
-        | Caminho | Descrição |
+        | Path | Description |
         |---|---|
         | `APPS/loadout` | A app |
         | `TGC/open-mercato` | A plataforma |
@@ -419,12 +421,12 @@ extension InventoryTests {
         let items = InventoryScanner(paths: fixture.paths).scanEverything(projects: projects).items
             .filter { $0.kind == .skill }
 
-        XCTAssertEqual(items.map(\.name).sorted(), ["do-loadout", "do-mercato", "minha"])
-        XCTAssertEqual(items.first { $0.name == "minha" }?.origin, .personal)
-        XCTAssertEqual(items.first { $0.name == "do-loadout" }?.origin, .project("loadout"))
+        XCTAssertEqual(items.map(\.name).sorted(), ["from-loadout", "from-mercato", "mine"])
+        XCTAssertEqual(items.first { $0.name == "mine" }?.origin, .personal)
+        XCTAssertEqual(items.first { $0.name == "from-loadout" }?.origin, .project("loadout"))
         XCTAssertEqual(
-            items.first { $0.name == "do-mercato" }?.origin, .project("open-mercato"),
-            "cada linha continua a saber de onde é — é isso que a etiqueta mostra"
+            items.first { $0.name == "from-mercato" }?.origin, .project("open-mercato"),
+            "each row still knows where it comes from — that is what the tag shows"
         )
     }
 
@@ -433,7 +435,7 @@ extension InventoryTests {
         fixture.projectRepo("APPS/loadout", skills: ["deploy"])
         fixture.projectRepo("TGC/open-mercato", skills: ["deploy"])
         fixture.projectsIndex("""
-        | Caminho | Descrição |
+        | Path | Description |
         |---|---|
         | `APPS/loadout` | A app |
         | `TGC/open-mercato` | A plataforma |
@@ -444,6 +446,6 @@ extension InventoryTests {
             .filter { $0.name == "deploy" }
 
         XCTAssertEqual(deploys.count, 2)
-        XCTAssertEqual(Set(deploys.map(\.id)).count, 2, "ids distintos, senão uma tapa a outra na lista")
+        XCTAssertEqual(Set(deploys.map(\.id)).count, 2, "distinct ids, or one hides the other in the list")
     }
 }
