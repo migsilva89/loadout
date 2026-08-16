@@ -43,6 +43,11 @@ struct DetailView: View {
     /// left, which is what put a second scroller around the whole page.
     @State private var chromeHeight: CGFloat = 380
 
+    /// Whether the Details card is listing what sits beside the document. Shut by default, and
+    /// deliberately not remembered between selections: opening it on one skill should not make
+    /// every other skill's card taller before you have even looked at it.
+    @State private var filesExpanded = false
+
     /// The document's headings as the renderer reports them, and which of them is being read.
     /// Both arrive as preferences, and both change rarely: the list only when the text does, the
     /// active one only when the reader crosses a heading.
@@ -112,6 +117,7 @@ struct DetailView: View {
                     activeHeading = nil
                     paneScroller = nil
                     renderedDocumentID = nil
+                    filesExpanded = false
                 }
                 .onGeometryChange(for: CGSize.self, of: { $0.size }) { size in
                     paneHeight = size.height
@@ -451,7 +457,7 @@ struct DetailView: View {
                 if let folder = item.directory {
                     let extras = folderContents(folder).filter { $0 != item.path?.lastPathComponent }
                     if !extras.isEmpty {
-                        detailRow(label: "Files", value: extras.joined(separator: "  "), mono: true)
+                        filesRow(extras)
                     }
                 }
             }
@@ -459,8 +465,78 @@ struct DetailView: View {
         }
     }
 
-    /// The actions whose symbol needs no word beside it.
-    private static let glyphOnlyActions: Set<String> = ["Reveal", "Copy"]
+    /// What is beside the document, counted when shut and spelled out when opened.
+    ///
+    /// It used to be one line of names run together, cut in the middle when they did not fit —
+    /// which on a skill like `remotion-best-practices`, whose folder holds a dozen sibling
+    /// skills, printed `remotion-int…on-multimedia/`: a name cut in half tells you nothing, and
+    /// a row whose height depended on the folder pushed the document below it out of room.
+    ///
+    /// Shut it states the size, which is the thing you actually want at a glance. Opened, each
+    /// entry is a chip in the same flow layout the filter bar uses, so names wrap onto a second
+    /// line rather than being cut. Shut is the default, so the card's height no longer depends on
+    /// what happens to be in the folder.
+    @ViewBuilder
+    private func filesRow(_ entries: [String]) -> some View {
+        let folders = entries.filter { $0.hasSuffix("/") }.count
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text("Files")
+                .font(.system(size: 12.5))
+                .foregroundStyle(Color.white.opacity(0.5))
+                .frame(width: 74, alignment: .leading)
+            VStack(alignment: .leading, spacing: filesExpanded ? 8 : 0) {
+                Button {
+                    withAnimation(.easeOut(duration: 0.16)) { filesExpanded.toggle() }
+                } label: {
+                    HStack(spacing: 5) {
+                        Text(filesSummary(entries.count, folders: folders))
+                            .font(.system(size: 12.5))
+                            .foregroundStyle(Color.white.opacity(0.88))
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(V2.textMid)
+                            .rotationEffect(.degrees(filesExpanded ? 0 : -90))
+                    }
+                }
+                .buttonStyle(.plain)
+                .help(filesExpanded ? "Hide what is in the folder" : "Show what is in the folder")
+                .pointingHand()
+
+                if filesExpanded {
+                    ChipFlow(spacing: 6, lineSpacing: 6) {
+                        ForEach(entries, id: \.self) { entry in
+                            Text(entry)
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundStyle(V2.textMid)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                        .fill(Color.white.opacity(0.05))
+                                )
+                                .textSelection(.enabled)
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 13)
+        .padding(.vertical, 9)
+        .overlay(alignment: .bottom) { Hairline(color: Color.white.opacity(0.06)) }
+    }
+
+    /// "12 items · 3 folders" — the folder count only when there is one, since "0 folders" is a
+    /// fact nobody asked for.
+    private func filesSummary(_ total: Int, folders: Int) -> String {
+        let items = count(total, of: "item")
+        return folders > 0 ? "\(items) · \(count(folders, of: "folder"))" : items
+    }
+
+    /// The actions whose symbol needs no word beside it. "Reveal" was here and should not have
+    /// been: the row beside it is a path, but a lone folder glyph at the far edge is not something
+    /// an eye finds — the same mistake this file already records about "Make global".
+    private static let glyphOnlyActions: Set<String> = ["Copy"]
 
     /// The glyph for a row's action. Named after what the action is, so a second action added
     /// later either finds its symbol here or falls back to something honest rather than wrong.
