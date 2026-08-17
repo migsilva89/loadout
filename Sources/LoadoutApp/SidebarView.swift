@@ -9,6 +9,11 @@ struct SidebarView: View {
     @Bindable var model: AppModel
     @FocusState private var searchFieldFocused: Bool
 
+    /// The same stored key the rows and Settings read, so whichever one changes it, the other two
+    /// are already showing the answer.
+    @AppStorage("listDensity") private var density = "compact"
+    private var compact: Bool { density == "compact" }
+
     // Popovers start closed in normal use; the environment hook lets a screenshot scenario
     // open one from the outside, since no synthetic clicks ever drive a live window here.
     @State private var scopeOpen = ProcessInfo.processInfo.environment["LOADOUT_OPEN"] == "scope"
@@ -52,6 +57,7 @@ struct SidebarView: View {
                 scopeButton
                 sortButton
                 Spacer(minLength: 6)
+                densityButton
                 filterButton
             }
             searchField
@@ -203,6 +209,60 @@ struct SidebarView: View {
 
     /// One filter from each group can be on at a time — the same single-choice model the old
     /// chips had, but the choices now live behind the funnel with the counts beside them.
+    /// Comfortable or compact, beside the funnel.
+    ///
+    /// It began life in Settings › Appearance, which was the wrong house: this is not a preference
+    /// about how the app looks, it is a control over the list you are looking at right now, and it
+    /// belongs where the eye already goes to change what the list shows. It is still in Settings as
+    /// well — the same door in two places, like the reading size — but this is the one people find.
+    ///
+    /// Two segments rather than one toggling glyph. A single icon has to stand for both the state
+    /// it is in and the state it would take you to, and it manages neither: the first version was a
+    /// lone list glyph that nobody could read as "density". Showing both choices side by side, with
+    /// the current one lit, is the switcher every Finder window has taught people already.
+    private var densityButton: some View {
+        HStack(spacing: 0) {
+            densitySegment(
+                "comfortable", symbol: "rectangle.grid.1x2",
+                hint: "Comfortable: each item with its description"
+            )
+            densitySegment(
+                "compact", symbol: "list.dash",
+                hint: "Compact: names only, so more fits on screen"
+            )
+        }
+        .padding(2)
+        .background(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(V2.button)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .strokeBorder(V2.hairline, lineWidth: 0.5)
+                }
+        )
+    }
+
+    private func densitySegment(_ value: String, symbol: String, hint: String) -> some View {
+        let on = density == value
+        return Button {
+            density = value
+        } label: {
+            Image(systemName: symbol)
+                .font(.system(size: 11))
+                .foregroundStyle(on ? Color.white : V2.textDim)
+                .frame(width: 24, height: 20)
+                .background {
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(on ? V2.accent : Color.clear)
+                }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(hint)
+        .accessibilityLabel(hint)
+        .pointingHand()
+    }
+
     private var filterButton: some View {
         let count = activeFilterCount
         return Button {
@@ -504,15 +564,24 @@ struct SidebarView: View {
 
     private var footer: some View {
         HStack(spacing: 5) {
-            SettingsLink {
+            // A switch rather than a door: the same button that opens Settings closes it, so
+            // there is no second control to find and nothing to learn about getting out.
+            Button {
+                model.showsSettings.toggle()
+            } label: {
                 HStack(spacing: 5) {
                     Image(systemName: "gearshape")
                         .font(.system(size: 10.5))
-                    Text("Settings")
+                    Text(model.showsSettings ? "Done" : "Settings")
                 }
+                .foregroundStyle(model.showsSettings ? V2.link : Color.primary)
             }
             .buttonStyle(.plain)
-            .help("Appearance, usage indexing, assistants and backups (⌘,)")
+            .help(
+                model.showsSettings
+                    ? "Back to the list (⌘, or Esc)"
+                    : "Projects, appearance, usage indexing, assistants and backups (⌘,)"
+            )
             .pointingHand()
 
             Spacer()
@@ -562,6 +631,10 @@ struct SidebarRow: View {
 
     private var isSelected: Bool { model.selectedID == item.id }
 
+    /// The list without descriptions, for somebody who knows their own skills by name.
+    @AppStorage("listDensity") private var density = "compact"
+    private var compact: Bool { density == "compact" }
+
     var body: some View {
         Button {
             model.select(item.id)
@@ -569,7 +642,8 @@ struct SidebarRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 7) {
                     Text(item.name)
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.system(size: 15, weight: .medium))
+                        .help(originHint)
                         .foregroundStyle(
                             isSelected ? Color.white
                                 : (item.enabled && !model.pluginIsOff(for: item) ? V2.text : V2.textDim)
@@ -590,14 +664,9 @@ struct SidebarRow: View {
                     }
                     if case .plugin(let plugin) = item.origin {
                         PluginTag(name: plugin, muted: isSelected)
-                    } else if model.showsEverything {
-                        // Only in the everything list: in Global every row is global, and inside a
-                        // project every row is that project's, so there the tag would be the same
-                        // word repeated down the column.
-                        PluginTag(
-                            name: item.origin == .personal ? "global" : item.origin.label,
-                            muted: isSelected, quiet: true
-                        )
+                    } else if let tag = originTag {
+                        PluginTag(name: tag, muted: isSelected, quiet: true)
+                            .help(originTagHint)
                     }
                     Spacer(minLength: 6)
                     Text("\(item.usage.count)")
@@ -611,21 +680,34 @@ struct SidebarRow: View {
                             .spotlight(Spotlight.toggle(item.id))
                     }
                 }
-                Text(item.description)
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(Color.white.opacity(isSelected ? 0.78 : 0.42))
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-                    .padding(.trailing, 38)
+                // Deliberately quieter than the name, and by more than one step. The row is scanned
+                // by name — the description is there to settle "is this the one?" once your eye has
+                // already stopped, and at the old size and brightness it competed with the thing
+                // you were actually reading down the column.
+                //
+                // Gone entirely in the compact list. That is the whole point of compact: at 83
+                // skills the descriptions are what makes the column a wall, and somebody who knows
+                // their own skills by name is only paying to scroll.
+                if !compact {
+                    Text(item.description)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.white.opacity(isSelected ? 0.72 : 0.34))
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .padding(.trailing, 38)
+                }
             }
             .padding(.horizontal, 9)
-            .padding(.vertical, 7)
+            .padding(.vertical, compact ? 5 : 7)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(isSelected ? V2.accent : Color.clear, in: RoundedRectangle(cornerRadius: 7))
             .contentShape(RoundedRectangle(cornerRadius: 7))
         }
         .buttonStyle(.plain)
-        .help(originHint)
+        // Deliberately not `.help` on the whole row. A tooltip on the button covers everything
+        // inside it, so hovering the use count answered "Your own, in ~/.claude" — the row's own
+        // answer to a question nobody asked there. Each thing now explains itself: the name says
+        // where it comes from, the number says what it counts, the switch says what it will do.
         .pointingHand()
         .spotlight(Spotlight.row(item.id))
         .contextMenu {
@@ -647,6 +729,13 @@ struct SidebarRow: View {
                     model.isConfirmingDelete = true
                 }
             }
+            // Yours to remove; the ones a repository ships are the team's, and have no Remove.
+            if model.canRemove(item) {
+                Button("Remove…", role: .destructive) {
+                    model.select(item.id)
+                    model.isConfirmingDelete = true
+                }
+            }
         }
     }
 
@@ -654,10 +743,36 @@ struct SidebarRow: View {
         model.visibleAssistants.filter { item.assistants.contains($0.id) }
     }
 
+    /// Where the row comes from, when the scope does not already answer that.
+    ///
+    /// In the everything list nothing is implied, so every row says it. Inside a project every row
+    /// is that project's, so a tag would be one word repeated down the column. Global is the case
+    /// this exists for: it is your own things — except MCP servers, which `~/.claude.json` also
+    /// files under project directories. Two servers called `notion`, from two different
+    /// repositories, were two rows with the same name and nothing to tell them apart.
+    private var originTag: String? {
+        if model.showsEverything {
+            return item.origin == .personal ? "global" : item.origin.label
+        }
+        if model.context == nil, case .project(let name) = item.origin { return name }
+        return nil
+    }
+
+    /// The folder's name is not unique — two checkouts can both be called `app` — so the tooltip
+    /// gives the path that is.
+    private var originTagHint: String {
+        guard let directory = item.projectDirectory else {
+            return "Where this comes from"
+        }
+        return "Declared under \(directory)"
+    }
+
+    /// Says the window the person actually chose in Settings › Usage. Hardcoding 90 days told
+    /// somebody on a 30-day window the wrong thing about their own numbers.
     private var usageHint: String {
         item.usage.count == 0
-            ? "Never used in the last 90 days"
-            : "\(item.usage.count) uses in the last 90 days"
+            ? "Never used in \(model.usageWindowLabel)"
+            : "\(item.usage.count) uses in \(model.usageWindowLabel)"
     }
 
     private var originHint: String {

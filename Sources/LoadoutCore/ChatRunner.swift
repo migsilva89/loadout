@@ -35,13 +35,14 @@ public final class ChatRunner: @unchecked Sendable {
         prompt: String,
         resuming session: String?,
         briefing: String? = nil,
+        model: String? = nil,
         in directory: URL,
         timeout: TimeInterval = 600,
         onEvent: @escaping @Sendable (ChatEvent) -> Void
     ) {
         let task = Process()
         task.executableURL = cli.executable
-        task.arguments = chat.arguments(prompt: prompt, resuming: session, briefing: briefing)
+        task.arguments = chat.arguments(prompt: prompt, resuming: session, briefing: briefing, model: model)
         task.currentDirectoryURL = directory
         task.environment = cli.environment
         // Assistants that expect a terminal try to read stdin and hang waiting for it; a closed

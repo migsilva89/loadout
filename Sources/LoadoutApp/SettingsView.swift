@@ -2,8 +2,8 @@ import SwiftUI
 import AppKit
 import LoadoutCore
 
-/// ⌘, opens this. Five tabs, one per thing a person occasionally needs to change or look up and
-/// would otherwise have no obvious place to find.
+/// ⌘, opens this. One tab per thing a person occasionally needs to change or look up and would
+/// otherwise have no obvious place to find.
 struct SettingsView: View {
     @Bindable var model: AppModel
 
@@ -11,12 +11,14 @@ struct SettingsView: View {
         TabView {
             AppearanceTab()
                 .tabItem { Label("Appearance", systemImage: "paintpalette") }
+            ProjectsTab(model: model)
+                .tabItem { Label("Projects", systemImage: "folder") }
             UsageTab(model: model)
                 .tabItem { Label("Usage", systemImage: "chart.bar") }
             AssistantsTab(model: model)
                 .tabItem { Label("Assistants", systemImage: "person.2") }
-            BackupsTab(model: model)
-                .tabItem { Label("Backups", systemImage: "clock.arrow.circlepath") }
+            StorageTab(model: model)
+                .tabItem { Label("Storage", systemImage: "internaldrive") }
             HelpTab(model: model)
                 .tabItem { Label("Help", systemImage: "questionmark.circle") }
         }
@@ -78,7 +80,7 @@ enum BugReport {
 /// The five themes as five circles, each showing its own accent. No names under them and no
 /// menu: the choice is a colour, so the control is the colour — and picking one repaints the
 /// window behind this sheet on the spot, which is the only preview worth having.
-private struct AppearanceTab: View {
+struct AppearanceTab: View {
     private let themes = ThemeStore.shared
     // The same three keys the reading pane and the ⌘+/− menu use: this is where a person looks for
     // text size, and a preferences window that only holds five circles looks like a placeholder.
@@ -112,6 +114,7 @@ private struct AppearanceTab: View {
                     HStack(spacing: 8) {
                         Slider(value: $readerFontSize, in: 12...22, step: 1)
                             .frame(width: 180)
+                            .pointingHand()
                         Text("\(Int(readerFontSize)) pt")
                             .font(.system(size: 11, design: .monospaced))
                             .foregroundStyle(.secondary)
@@ -122,11 +125,13 @@ private struct AppearanceTab: View {
                     Text("Serif").tag("serif")
                     Text("Monospaced").tag("mono")
                 }
+                .pointingHand()
                 Picker("Reading background", selection: $readerBackground) {
                     Text("Card").tag("card")
                     Text("Darker").tag("darker")
                     Text("Ink").tag("ink")
                 }
+                .pointingHand()
             } header: {
                 Text("Reading")
             } footer: {
@@ -165,9 +170,106 @@ private struct AppearanceTab: View {
     }
 }
 
+// MARK: - Projects
+
+/// Where Loadout looks for repositories.
+///
+/// This is the whole of what a person has to keep up to date, and it is deliberately the short
+/// list: two or three folders, typed once. What is inside them is worked out on every launch, so
+/// a repository cloned this morning is in the list this afternoon with nobody maintaining
+/// anything. Before this tab existed the app read one generated file, `~/Projects/INDEX.md`, and
+/// anyone without it saw no projects at all.
+struct ProjectsTab: View {
+    @Bindable var model: AppModel
+
+    var body: some View {
+        Form {
+            Section {
+                if model.projectRoots.folders.isEmpty {
+                    Text("No folders yet, so Loadout has no projects to show — only what is loaded globally.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(model.projectRoots.folders, id: \.self) { folder in
+                        HStack {
+                            Text(display(folder))
+                                .font(.system(size: 12, design: .monospaced))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Spacer()
+                            Button {
+                                remove(folder)
+                            } label: {
+                                Image(systemName: "minus.circle")
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Stop looking in \(display(folder))")
+                            .pointingHand()
+                        }
+                    }
+                }
+
+                HStack {
+                    Button("Add folder…") { add() }
+                        .help("Choose a folder Loadout should look in for repositories")
+                        .pointingHand()
+                    Spacer()
+                    Text(found)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } header: {
+                Text("Where your projects live")
+            } footer: {
+                Text(
+                    "Loadout looks inside these for repositories — a folder with a .git or a "
+                    + ".claude in it — up to two levels down. Each project's own skills and "
+                    + "commands then show up when you pick it from the scope button at the top of "
+                    + "the list."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private var found: String {
+        let count = model.projects.count
+        return "\(count) \(count == 1 ? "project" : "projects") found"
+    }
+
+    private func display(_ url: URL) -> String {
+        ProjectRoots.abbreviate(url, home: model.paths.home)
+    }
+
+    private func add() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = true
+        panel.prompt = "Use folder"
+        panel.message = "Choose a folder Loadout should look in for repositories."
+        guard panel.runModal() == .OK else { return }
+        // Appended rather than replacing, and a folder chosen twice is not added twice.
+        var folders = model.projectRoots.folders
+        for url in panel.urls where !folders.contains(where: {
+            $0.standardizedFileURL == url.standardizedFileURL
+        }) {
+            folders.append(url)
+        }
+        model.setProjectRoots(folders)
+    }
+
+    private func remove(_ folder: URL) {
+        model.setProjectRoots(model.projectRoots.folders.filter { $0 != folder })
+    }
+}
+
 // MARK: - Usage
 
-private struct UsageTab: View {
+struct UsageTab: View {
     @Bindable var model: AppModel
     @AppStorage("usageWindowDays") private var windowRaw: String = "90"
 
@@ -196,6 +298,7 @@ private struct UsageTab: View {
             }
             .onChange(of: windowRaw) { _, _ in model.reindexUsage(windowDays: windowDays) }
             .help("How far back to read each assistant's sessions for usage counts; stored in this Mac's preferences")
+            .pointingHand()
 
             LabeledContent("Indexed sessions", value: "\(model.indexedFileCount)")
             LabeledContent("Indexed events", value: "\(model.indexedEventCount)")
@@ -222,7 +325,7 @@ private struct UsageTab: View {
                 Button("Reindex now") { model.reindexUsage(windowDays: windowDays) }
                     .disabled(model.indexProgress != nil)
                     .help("Reread every assistant's sessions now, using the window chosen above")
-                    .pointingHand()
+                    .pointingHand(enabled: model.indexProgress == nil)
             }
         }
         // Grouped is what System Settings looks like, and it pins content to the top of the
@@ -282,7 +385,7 @@ private struct UsageSourceRow: View {
 
 // MARK: - Assistants
 
-private struct AssistantsTab: View {
+struct AssistantsTab: View {
     @Bindable var model: AppModel
 
     var body: some View {
@@ -362,7 +465,7 @@ private struct AskCLIRow: View {
                 Button("Test") { test() }
                     .disabled(testing)
                     .help("Actually runs \(cli.label) with a trivial prompt (\"reply with OK\") to check it works")
-                    .pointingHand()
+                    .pointingHand(enabled: !testing)
                 if let customEntry {
                     Button("Edit") { model.editingCustomAssistantCLI = customEntry }
                         .pointingHand()
@@ -446,6 +549,7 @@ private struct AssistantSettingsRow: View {
                     + "checking it again brings the same numbers back. Sharing and syncing keep "
                     + "working either way."
             )
+            .pointingHand()
         }
         .padding(.vertical, 3)
     }
@@ -453,86 +557,133 @@ private struct AssistantSettingsRow: View {
 
 // MARK: - Backups
 
-private struct BackupsTab: View {
+struct StorageTab: View {
     @Bindable var model: AppModel
     @State private var isCounting = false
-    @State private var snapshotCount = 0
-    @State private var totalBytes: Int64 = 0
+    @State private var report = Housekeeping.Report()
     @State private var isDeleting = false
     @State private var confirmingDelete = false
     @State private var resultMessage: String?
 
     var body: some View {
         Form {
-            LabeledContent("Folder", value: model.paths.backups.path)
+            Section {
+                if isCounting {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.small)
+                        Text("Counting…")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    LabeledContent("Snapshots", value: "\(report.snapshots)")
+                    LabeledContent(
+                        "Size on disk",
+                        value: ByteCountFormatter.string(fromByteCount: report.bytes, countStyle: .file)
+                    )
+                    if report.strandedRecords > 0 {
+                        LabeledContent("Records for things that are gone", value: "\(report.strandedRecords)")
+                    }
+                }
 
-            if isCounting {
-                HStack(spacing: 6) {
-                    ProgressView().controlSize(.small)
-                    Text("Counting…")
+                HStack {
+                    Button("Show in Finder") { model.revealBackups() }
+                        .help("Reveal \(model.paths.backups.path) in Finder")
+                        .pointingHand()
+                    Spacer()
+                    Button("Clean up now") { confirmingDelete = true }
+                        .disabled(isDeleting || isCounting || report.isEmpty)
+                        .help(
+                            report.isEmpty
+                                ? "Nothing to clear right now"
+                                : "Sweep snapshots older than 30 days and records for things that no longer exist"
+                        )
+                        .pointingHand(enabled: !(isDeleting || isCounting || report.isEmpty))
+                }
+
+                if let resultMessage {
+                    Text(resultMessage)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-            } else {
-                LabeledContent("Snapshots", value: "\(snapshotCount)")
-                LabeledContent(
-                    "Size on disk",
-                    value: ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
+            } header: {
+                Text("What Loadout keeps")
+            } footer: {
+                Text(
+                    "Before every edit Loadout copies the file, which is why a mistake is "
+                    + "survivable. Copies older than 30 days are swept automatically at launch, "
+                    + "to the Trash — so nothing is gone until you empty it."
                 )
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
 
-            HStack {
-                Button("Show in Finder") { model.revealBackups() }
-                    .help("Reveal \(model.paths.backups.path) in Finder")
-                    .pointingHand()
-                Spacer()
-                Button("Delete snapshots older than 30 days") { confirmingDelete = true }
-                    .disabled(isDeleting || isCounting)
-                    .help("Permanently remove backup snapshots older than 30 days, after confirming")
-                    .pointingHand()
-            }
-
-            if let resultMessage {
-                Text(resultMessage)
+            if !report.unreadableRecords.isEmpty {
+                Section {
+                    ForEach(report.unreadableRecords, id: \.self) { url in
+                        Text(url.lastPathComponent)
+                            .font(.system(size: 12, design: .monospaced))
+                    }
+                    Button("Show in Finder") { model.revealBackups() }
+                        .pointingHand()
+                } header: {
+                    Text("Couldn’t be read")
+                } footer: {
+                    // Never swept: an unreadable file is a question, and deleting it answers it
+                    // the wrong way. Something switched off may be recorded in here.
+                    Text(
+                        "These are Loadout’s own records and something switched off may be "
+                        + "written in them. They are left alone rather than cleared, so nothing "
+                        + "is lost while the cause is unknown."
+                    )
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                }
             }
         }
         .formStyle(.grouped)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .task { await countSnapshots() }
-        .alert("Delete snapshots older than 30 days?", isPresented: $confirmingDelete) {
+        .task { await recount() }
+        .alert("Clean up now?", isPresented: $confirmingDelete) {
             Button("Cancel", role: .cancel) {}
-            Button("Delete", role: .destructive) { Task { await deleteOld() } }
+            Button("Clean up", role: .destructive) { Task { await sweep() } }
         } message: {
-            Text("These are the app's own safety copies made before edits. This can't be undone from here.")
+            Text(
+                "Backup copies older than 30 days go to the Trash, and records for things that no "
+                + "longer exist are forgotten. Nothing you wrote is touched."
+            )
         }
     }
 
-    private func countSnapshots() async {
+    private func recount() async {
         isCounting = true
-        let backups = Backups(paths: model.paths)
-        // Walking every snapshot's file sizes is not cheap, so it runs off the main thread —
-        // that's the whole reason this is a `Task` instead of a plain computed property.
-        let (count, bytes) = await Task.detached(priority: .utility) {
-            let snapshots = backups.listSnapshots()
-            return (snapshots.count, backups.totalSize())
-        }.value
-        snapshotCount = count
-        totalBytes = bytes
+        let housekeeping = Housekeeping(paths: model.paths)
+        // Sizing every snapshot is not cheap, so it runs off the main thread — the whole reason
+        // this is a task rather than a computed property.
+        report = await Task.detached(priority: .utility) { housekeeping.report() }.value
         isCounting = false
     }
 
-    private func deleteOld() async {
+    private func sweep() async {
         isDeleting = true
-        let backups = Backups(paths: model.paths)
-        let cutoff = Date().addingTimeInterval(-30 * 24 * 3600)
-        let removed = (try? await Task.detached(priority: .utility) {
-            try backups.deleteSnapshots(olderThan: cutoff)
-        }.value) ?? 0
-        resultMessage = "Removed \(removed) \(removed == 1 ? "snapshot" : "snapshots")."
+        let housekeeping = Housekeeping(paths: model.paths)
+        let done = await Task.detached(priority: .utility) {
+            (try? housekeeping.sweep()) ?? Housekeeping.Report()
+        }.value
+        resultMessage = describe(done)
         isDeleting = false
-        await countSnapshots()
+        await recount()
+    }
+
+    private func describe(_ done: Housekeeping.Report) -> String {
+        var parts: [String] = []
+        if done.expiredSnapshots > 0 {
+            parts.append("\(done.expiredSnapshots) \(done.expiredSnapshots == 1 ? "snapshot" : "snapshots")")
+        }
+        if done.strandedRecords > 0 {
+            parts.append("\(done.strandedRecords) \(done.strandedRecords == 1 ? "record" : "records")")
+        }
+        return parts.isEmpty ? "Nothing to clear." : "Cleared " + parts.joined(separator: " and ") + "."
     }
 }
 

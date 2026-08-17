@@ -339,12 +339,8 @@ final class DisableAcrossAssistantsTests: XCTestCase {
     func testAProjectSkillParksInsideItsOwnRepository() throws {
         let fixture = Fixture()
         let repo = fixture.projectRepo("APPS/loadout", skills: ["do-repo"])
-        fixture.projectsIndex("""
-        | Path | Description |
-        |---|---|
-        | `APPS/loadout` | A app |
-        """)
-        let project = ProjectsIndex(paths: fixture.paths).load().first!
+        let project = ProjectRoots(folders: [fixture.paths.projectsRoot])
+            .discover(home: fixture.paths.home).first!
         let scanner = InventoryScanner(paths: fixture.paths)
         let mutations = Mutations(paths: fixture.paths)
         let skill = scanner.scanAll(project: project).items.first { $0.name == "do-repo" }!

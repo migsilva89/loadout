@@ -72,6 +72,29 @@ final class AskModel {
     private(set) var cli: AssistantCLI?
     var draftMessage = ""
 
+    /// Which model this assistant is being asked for, or `nil` to let the CLI use its own default.
+    ///
+    /// Remembered per assistant rather than once for the panel: "opus" means something to `claude`
+    /// and nothing to `codex`, so one shared setting would send each of them the other's vocabulary.
+    /// Read back whenever the assistant changes, which is also when the answer changes.
+    var chosenModel: String? {
+        didSet {
+            guard let cli, chosenModel != oldValue else { return }
+            let key = AssistantModels.defaultsKey(assistantID: cli.id)
+            let trimmed = chosenModel?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let trimmed, !trimmed.isEmpty {
+                UserDefaults.standard.set(trimmed, forKey: key)
+            } else {
+                UserDefaults.standard.removeObject(forKey: key)
+            }
+        }
+    }
+
+    /// The model remembered for an assistant, if one was ever chosen.
+    private static func rememberedModel(for cli: AssistantCLI) -> String? {
+        UserDefaults.standard.string(forKey: AssistantModels.defaultsKey(assistantID: cli.id))
+    }
+
     private let runner = ChatRunner()
     private let workspaces: AskWorkspaces
     private let transcripts: URL
@@ -154,6 +177,9 @@ final class AskModel {
         self.itemID = itemID
         self.cli = cli
         self.origin = origin
+        // Set straight rather than through the property's own setter, which would write back the
+        // value it has just read.
+        _chosenModel = Self.rememberedModel(for: cli)
         entries = []
         proposals = []
         focusedProposalID = nil
@@ -257,13 +283,14 @@ final class AskModel {
         let session = sessionID
         let briefing = self.briefing
         let runner = self.runner
+        let model = chosenModel
 
         // The child process is read on a background queue and its events hop back here one at a
         // time, because everything they touch — the entries, the pending blocks — is the window's.
         Task.detached(priority: .userInitiated) {
             runner.send(
                 cli: cli, chat: chat, prompt: message, resuming: session, briefing: briefing,
-                in: workspace.root
+                model: model, in: workspace.root
             ) { event in
                 Task { @MainActor in self.receive(event) }
             }

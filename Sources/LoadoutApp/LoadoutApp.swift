@@ -32,6 +32,12 @@ struct LoadoutApp: App {
         if CommandLine.arguments.contains("--self-check") {
             MainActor.assumeIsolated { SelfCheck.run() }
         }
+        // `LOADOUT_SHOT=welcome LOADOUT_SHOT_TO=/tmp/x.png` writes a picture of one sheet and
+        // exits — the only way a script can check a screen the window recorder cannot photograph.
+        if let sheet = ProcessInfo.processInfo.environment["LOADOUT_SHOT"] {
+            let path = ProcessInfo.processInfo.environment["LOADOUT_SHOT_TO"] ?? "/tmp/loadout-shot.png"
+            MainActor.assumeIsolated { SheetShot.run(sheet, to: path) }
+        }
         // All five themes are dark ones; pinning the whole app keeps AppKit chrome (menus,
         // popovers, sheets) agreeing with the SwiftUI colour scheme whichever is on.
         NSApplication.shared.appearance = NSAppearance(named: .darkAqua)
@@ -64,6 +70,11 @@ struct LoadoutApp: App {
                 // After the window is up and the inventory has been read, so a version check can
                 // never be the reason a launch feels slow.
                 .task { UpdateNotice.checkOnLaunch() }
+                // After the inventory has been read, so the welcome can state what was found
+                // rather than open on zeroes.
+                .task { model.showWelcomeIfNeeded() }
+                // Quietly, in the background, after everything the window needs is on screen.
+                .task { model.sweepInBackground() }
         }
         .defaultSize(width: 1440, height: 920)
         // No system title bar at all: the v2 design draws its own 52pt bar — traffic lights
@@ -75,6 +86,11 @@ struct LoadoutApp: App {
             // looking for it goes first.
             CommandGroup(after: .appInfo) {
                 Button("Check for Updates…") { UpdateNotice.checkNow() }
+                Divider()
+                Button(model.showsSettings ? "Hide Settings" : "Settings…") {
+                    model.showsSettings.toggle()
+                }
+                .keyboardShortcut(",", modifiers: .command)
             }
             CommandGroup(replacing: .newItem) {
                 Button("New skill") { model.isCreating = true }
@@ -144,9 +160,10 @@ struct LoadoutApp: App {
                     .disabled(!(model.selected?.isEditable ?? false))
             }
         }
-        Settings {
-            SettingsView(model: model)
-        }
+        // No `Settings` scene any more: ⌘, opens the pane instead, so there is one Settings and
+        // one place it appears. The shortcut is added by hand because the scene was what gave it
+        // to the app menu for free.
+
     }
 }
 

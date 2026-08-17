@@ -352,6 +352,10 @@ public struct Mutations: Sendable {
     /// Loadout's record **before** it is removed, so failing to remember it never loses a server.
     public func setServer(_ item: Item, enabled: Bool) throws {
         guard item.kind == .mcp else { throw LoadoutError.notEditable(item.name) }
+        if item.declaredByRepository {
+            try setRepositoryServer(item, enabled: enabled)
+            return
+        }
         let project = projectKey(for: item)
 
         guard var root = readClaudeJSON() else {
@@ -380,6 +384,78 @@ public struct Mutations: Sendable {
         )
         try backups.snapshot(paths.claudeJSON)
         mutateServers(in: &root, project: project) { $0.removeValue(forKey: item.name) }
+        try writeJSON(root, to: paths.claudeJSON)
+    }
+
+    /// Removes an MCP server of your own for good: its entry leaves `~/.claude.json`, and the record
+    /// that made switching off reversible is forgotten with it.
+    ///
+    /// Deliberately not "Move to Trash", which is what every other delete in this app is. There is
+    /// no file to move — the server is a few lines among the assistant's other settings — so what
+    /// stands in for the Trash is the snapshot taken before the write, in Loadout's backups. Say so
+    /// wherever this is offered.
+    ///
+    /// A server the repository ships is never touched: that file belongs to the team, and taking a
+    /// line out of it would remove the server from everybody at their next pull.
+    public func removeServer(_ item: Item) throws {
+        guard item.kind == .mcp else { throw LoadoutError.notEditable(item.name) }
+        guard !item.declaredByRepository else { throw LoadoutError.notEditable(item.name) }
+        let project = projectKey(for: item)
+
+        guard var root = readClaudeJSON() else {
+            throw LoadoutError.io("Couldn't read \(paths.claudeJSON.lastPathComponent).")
+        }
+        // Switched off, so the entry is already out of the file and the record is the only copy of
+        // it. Forgetting the record is the whole deletion in that case.
+        let live = servers(in: root, project: project)[item.name] != nil
+        let remembered = records.server(named: item.name, project: project) != nil
+        guard live || remembered else { throw LoadoutError.notFound(item.name) }
+
+        if live {
+            try backups.snapshot(paths.claudeJSON)
+            mutateServers(in: &root, project: project) { $0.removeValue(forKey: item.name) }
+            try writeJSON(root, to: paths.claudeJSON)
+        }
+        if remembered {
+            try records.forgetServer(named: item.name, project: project)
+        }
+    }
+
+    /// Declines, or takes back, one of the servers a repository ships in its own `.mcp.json`.
+    ///
+    /// The repository's file is never touched. Deleting a line there would take the server away
+    /// from everyone on the team at their next pull, which is not a thing to do from a switch. The
+    /// answer goes where Claude Code already keeps it — `disabledMcpjsonServers`, inside your own
+    /// `~/.claude.json`, under this project — so the choice is yours alone and reversible.
+    private func setRepositoryServer(_ item: Item, enabled: Bool) throws {
+        guard let project = item.projectDirectory else {
+            throw LoadoutError.notFound(item.name)
+        }
+        // Somebody who has never configured a server of their own has no `~/.claude.json` yet, and
+        // the refusal still has to be recordable: start the file rather than refuse the switch.
+        var root = readClaudeJSON() ?? [:]
+        // A no-op when the file is not there yet, which is the case this starts one.
+        try backups.snapshot(paths.claudeJSON)
+
+        var projects = root["projects"] as? [String: Any] ?? [:]
+        var entry = projects[project] as? [String: Any] ?? [:]
+        var declined = entry["disabledMcpjsonServers"] as? [String] ?? []
+        var accepted = entry["enabledMcpjsonServers"] as? [String] ?? []
+
+        if enabled {
+            declined.removeAll { $0 == item.name }
+            // Said yes explicitly, so Claude does not ask again the next time the repository is
+            // opened. Without this, switching back on only means "no longer refused".
+            if !accepted.contains(item.name) { accepted.append(item.name) }
+        } else {
+            accepted.removeAll { $0 == item.name }
+            if !declined.contains(item.name) { declined.append(item.name) }
+        }
+
+        entry["disabledMcpjsonServers"] = declined
+        entry["enabledMcpjsonServers"] = accepted
+        projects[project] = entry
+        root["projects"] = projects
         try writeJSON(root, to: paths.claudeJSON)
     }
 

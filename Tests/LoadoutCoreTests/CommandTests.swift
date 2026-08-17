@@ -87,8 +87,8 @@ final class CommandTests: XCTestCase {
         try "---\ndescription: From the repo.\n---\n".write(
             to: commands.appendingPathComponent("deploy.md"), atomically: true, encoding: .utf8
         )
-        fixture.projectsIndex("| Path | Description |\n|---|---|\n| `APPS/loadout` | The app |")
-        let project = ProjectsIndex(paths: fixture.paths).load().first!
+        let project = ProjectRoots(folders: [fixture.paths.projectsRoot])
+            .discover(home: fixture.paths.home).first!
         let scanner = InventoryScanner(paths: fixture.paths)
         let mutations = Mutations(paths: fixture.paths)
 
@@ -207,8 +207,8 @@ extension CommandTests {
         try! "---\ndescription: From the repo.\n---\n\nBody.".write(
             to: commands.appendingPathComponent("deploy.md"), atomically: true, encoding: .utf8
         )
-        fixture.projectsIndex("| Path | Description |\n|---|---|\n| `APPS/loadout` | The app |")
-        let project = ProjectsIndex(paths: fixture.paths).load().first!
+        let project = ProjectRoots(folders: [fixture.paths.projectsRoot])
+            .discover(home: fixture.paths.home).first!
         return (fixture, project, InventoryScanner(paths: fixture.paths), Mutations(paths: fixture.paths))
     }
 

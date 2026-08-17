@@ -46,8 +46,10 @@ enum SheetShots {
         // checking is drawn on its own rather than whichever the TabView happens to open on.
         capture(HelpTab(model: model), size: CGSize(width: 520, height: 400),
                 to: directory.appendingPathComponent("settings-help.png"))
-        capture(SettingsView(model: model), size: CGSize(width: 520, height: 400),
-                to: directory.appendingPathComponent("settings-appearance.png"))
+        // The live pane, not the one it replaced. Shooting `SettingsView` left the window people
+        // actually open unchecked, and the two drifted apart while the picture stayed green.
+        capture(SettingsPane(model: model), size: CGSize(width: 760, height: 560),
+                to: directory.appendingPathComponent("settings-pane.png"))
     }
 
     /// Puts the view in a real window, lets it lay out and draw, then reads the window's backing

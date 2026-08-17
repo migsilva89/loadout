@@ -12,6 +12,70 @@ final class AppModel {
     private(set) var plugins: [PluginInfo] = []
     private(set) var projects: [Project] = []
 
+    /// The folders searched for repositories. Empty on a machine where nobody has said yet, which
+    /// is what the welcome sheet and the empty state both key off.
+    private(set) var projectRoots = ProjectRoots(folders: [])
+
+    /// Whether Settings has taken the right-hand pane.
+    ///
+    /// Not a window: everything Settings decides is about what is on screen behind it, and a
+    /// window that floats over the thing it changes has to be moved aside to see the result.
+    var showsSettings = false
+
+    /// Which Settings section is showing, by name.
+    ///
+    /// The pane owns this as its own view state normally; this is the way a scripted walkthrough
+    /// drives it, so every section can be photographed without a hand on the mouse.
+    var settingsSection = "projects"
+
+    /// Whether the one-time welcome is on screen.
+    ///
+    /// Shown on a machine that has never been asked. Not shown to somebody who already has
+    /// folders chosen, which is what stops it appearing for anyone upgrading — they have already
+    /// answered the question, they just answered it before it was a question.
+    var isShowingWelcome = false
+
+    private static let welcomeSeenKey = "hasSeenWelcome"
+
+    /// Clears what has expired, once per launch, without asking.
+    ///
+    /// The copies Loadout makes before every edit had nothing removing them: a year of editing
+    /// left a year of copies, and the only way to notice was to go looking at your disk. Old ones
+    /// go to the Trash rather than being deleted, so this is still reversible until you empty it.
+    /// Runs off the main thread and says nothing when there was nothing to do — housekeeping that
+    /// announces itself is just another thing to dismiss.
+    func sweepInBackground() {
+        let housekeeping = Housekeeping(paths: paths)
+        Task.detached(priority: .background) {
+            _ = try? housekeeping.sweep()
+        }
+    }
+
+    /// Decides once, at launch, whether to say hello. Kept apart from `init` so a self-check or a
+    /// scripted walkthrough never has a sheet appear in the middle of it.
+    func showWelcomeIfNeeded() {
+        guard !UserDefaults.standard.bool(forKey: Self.welcomeSeenKey),
+              projectRoots.folders.isEmpty,
+              ProcessInfo.processInfo.environment["LOADOUT_SCENE"] == nil
+        else { return }
+        isShowingWelcome = true
+    }
+
+    /// Closes it for good, whichever button was used. Asking again next launch would be nagging,
+    /// and the same question lives in Settings › Projects and on the empty list.
+    func dismissWelcome() {
+        UserDefaults.standard.set(true, forKey: Self.welcomeSeenKey)
+        isShowingWelcome = false
+    }
+
+    /// Replaces the folders and looks again straight away, so the list on screen answers the
+    /// change rather than waiting for the next launch.
+    func setProjectRoots(_ folders: [URL]) {
+        projectRoots = ProjectRoots(folders: folders)
+        projectRoots.save(home: paths.home)
+        projects = projectRoots.discover(home: paths.home)
+    }
+
     // Selection and filters
     var context: Project?
     /// The third position of the scope button: your own, every project's, and the plugins', in one
@@ -67,6 +131,9 @@ final class AppModel {
     // Sheets
     var isCreating = false
     var isConfirmingDelete = false
+    /// Which of the two destructions the one confirmation is asking about: taking a server out of
+    /// the assistant's settings, or moving a folder to the Trash.
+    var removesServerOnConfirm: Bool { selected.map { canRemove($0) } ?? false }
     /// The CLI the "Ask" sheet is targeting. Presenting the sheet and picking a CLI are the
     /// same action — setting this to non-nil is what shows it.
     var askCLI: AssistantCLI?
@@ -154,7 +221,10 @@ final class AppModel {
         }
     }
 
-    init(paths: Paths = .live()) {
+    /// - Parameter roots: the folders to search for repositories. Given explicitly only by the
+    ///   self-check, which points the app at a throwaway home and must not inherit the folders the
+    ///   person at this keyboard happens to work in.
+    init(paths: Paths = .live(), roots injectedRoots: ProjectRoots? = nil) {
         // Before anything opens a file: Loadout's own backups, index and icons used to sit
         // inside ~/.claude, and this is the launch that moves them into the app's own folder.
         // Ahead of `UsageIndex` above all — opening the index first would create an empty one
@@ -167,7 +237,9 @@ final class AppModel {
         self.scanner = InventoryScanner(paths: paths)
         self.mutations = Mutations(paths: paths)
         self.usageIndex = try? UsageIndex(paths: paths)
-        self.projects = ProjectsIndex(paths: paths).load()
+        let roots = injectedRoots ?? ProjectRoots.load(home: paths.home)
+        self.projectRoots = roots
+        self.projects = roots.discover(home: paths.home)
         self.hiddenAssistantIDs = Set(
             (UserDefaults.standard.string(forKey: Self.hiddenAssistantsKey) ?? "")
                 .split(separator: ",").map(String.init)
@@ -234,6 +306,10 @@ final class AppModel {
 
     private func finishReporting() {
         print("--- after accepting ---")
+        // The pane's mode is reported because a proposal shown on a screen nobody is looking at
+        // reads as an assistant that did nothing. Preview cannot draw a struck-through line, so
+        // Edit is the only mode where a pending change exists visually.
+        print("view mode: \(showsPreview ? "Preview" : "Edit")")
         print("dirty: \(isDirty)")
         print("draft description: \(Frontmatter.parse(draft).description ?? "—")")
         print("file on disk still: \(Frontmatter.parse(diskDraft).description ?? "—")")
@@ -886,6 +962,16 @@ final class AppModel {
     }
 
     func togglePlugin(_ plugin: PluginInfo) {
+        // The switch is already disabled where a repository has decided; this is the same answer for
+        // anything that reaches here another way, because writing your settings would change a file
+        // and nothing else.
+        if let choice = plugin.repositoryChoice, let name = context?.name {
+            errorMessage = """
+            \(name) keeps the \(plugin.name) plugin \(choice ? "on" : "off") in its own settings, \
+            which Claude reads after yours. Change it in that repository, or leave this scope.
+            """
+            return
+        }
         perform(plugin.enabled ? "Disabled the \(plugin.name) plugin." : "Enabled the \(plugin.name) plugin.") {
             try mutations.setPlugin(plugin, enabled: !plugin.enabled)
         }
@@ -922,6 +1008,30 @@ final class AppModel {
         sendAskMessage()
     }
 
+    /// The same door for a command or a subagent: make it, then hand it straight to an assistant
+    /// with the brief already written.
+    ///
+    /// A command *is* a prompt, which is the one thing an assistant is unambiguously good at
+    /// writing — so leaving these two kinds without the path the skills had was an accident of
+    /// which tab shipped first, not a decision.
+    func createCommandAndAsk(name: String, brief: String, kind: ItemKind, cli: AssistantCLI) {
+        createCommand(name: name, description: brief, kind: kind)
+        guard errorMessage == nil, selected?.name == name else { return }
+        askAssistant(cli)
+        guard showsAskPanel else { return }
+        let intent = brief.trimmingCharacters(in: .whitespacesAndNewlines)
+        let what = kind == .agent ? "subagent" : "command"
+        ask.draftMessage = intent.isEmpty
+            ? """
+              I've just made this \(what) and it's empty. Ask me what it should do, then write it.
+              """
+            : """
+              I've just made this \(what) from one sentence: "\(intent)". Write it properly — say \
+              what it does in its description, and write the body it runs.
+              """
+        sendAskMessage()
+    }
+
     func deleteSelected() {
         guard let item = selected else { return }
         perform("Moved \(item.name) to the Trash.") {
@@ -929,6 +1039,22 @@ final class AppModel {
             selectedID = nil
         }
     }
+
+    /// An MCP server of your own, taken out of the assistant's settings for good.
+    ///
+    /// Its own call rather than a branch of `deleteSelected`, because the two are not the same act:
+    /// that one moves a folder to the Trash and can be undone from there, and this one cuts lines
+    /// out of a settings file, where the only way back is the copy Loadout takes first.
+    func removeSelectedServer() {
+        guard let item = selected, item.kind == .mcp else { return }
+        perform("Removed \(item.name). A copy of the file before the change is in the backups.") {
+            try mutations.removeServer(item)
+            selectedID = nil
+        }
+    }
+
+    /// True for the servers this app may remove: yours, not the ones a repository ships.
+    func canRemove(_ item: Item) -> Bool { item.kind == .mcp && !item.declaredByRepository }
 
     // MARK: - Assistant CLIs ("Ask")
 

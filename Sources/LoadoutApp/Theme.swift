@@ -255,6 +255,16 @@ enum V2 {
     static let text = Color.white.opacity(0.92)
     static let textMid = Color.white.opacity(0.62)
     static let textDim = Color.white.opacity(0.45)
+
+    /// A switched-off badge: the tile behind the glyph, and the glyph itself.
+    ///
+    /// Off has to read as *quiet*, never as *missing*. In the Plugins list the off tile was white
+    /// at 6% with a `textDim` glyph on it, and the two were close enough that the icon disappeared
+    /// into its own tile — a row that looked broken rather than switched off. The glyph is now the
+    /// same weight the row's own dimmed text uses, over a tile dark enough to separate it from the
+    /// sidebar. `ThemeCheck` measures the pair in every theme, so nudging either one is caught.
+    static let offTile = Color.white.opacity(0.05)
+    static let offGlyph = Color.white.opacity(0.62)
     static let textFaint = Color.white.opacity(0.32)
 
     /// Hairlines between and around surfaces.

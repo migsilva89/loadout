@@ -139,6 +139,13 @@ enum DriveScript {
             guard model.selected != nil else { return "nothing selected" }
             model.deleteSelected()
             return "ok"
+        case "remove":
+            // The Remove button on a server, which is a different act from `delete`: no Trash, an
+            // entry out of the assistant's settings.
+            guard let item = model.selected else { return "nothing selected" }
+            guard model.canRemove(item) else { return "not ours to remove" }
+            model.removeSelectedServer()
+            return "ok"
         case "save":
             model.save()
             return "ok"
