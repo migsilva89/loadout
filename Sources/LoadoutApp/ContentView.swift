@@ -63,11 +63,23 @@ struct ContentView: View {
                         SidebarView(model: model)
                             .frame(width: sidebarWidth(in: available))
                             .transition(.move(edge: .leading))
+                            // While Settings is up the list is still there — still readable, so
+                            // you keep your place — but it is not a list any more. Frosted rather
+                            // than hidden, because a pane that vanishes makes people wonder what
+                            // else went with it.
+                            .frostedPause(model.showsSettings)
                         sidebarResizeHandle(in: available)
                     }
-                    // The Plugins tab lists plugins, not items, so its detail is the plugin's —
-                    // what it ships and which of it is switched on.
-                    if model.selection == .plugins, let plugin = model.selectedPlugin {
+                    // Settings takes the whole of the right, in the place a selected item would
+                    // be. It is not a window of its own, so nothing has to be dug out from behind
+                    // the app.
+                    if model.showsSettings {
+                        SettingsPane(model: model)
+                            .frame(maxWidth: .infinity)
+                            .transition(.opacity)
+                    } else if model.selection == .plugins, let plugin = model.selectedPlugin {
+                        // The Plugins tab lists plugins, not items, so its detail is the plugin's —
+                        // what it ships and which of it is switched on.
                         PluginDetailView(model: model, plugin: plugin)
                             .frame(maxWidth: .infinity)
                     } else {
@@ -84,6 +96,7 @@ struct ContentView: View {
                     }
                 }
                 .animation(.easeOut(duration: 0.18), value: sidebarVisible)
+                .animation(.easeOut(duration: 0.16), value: model.showsSettings)
                 .animation(.easeOut(duration: 0.18), value: model.showsAskPanel)
                 // The row is the one thing in here that does not move while the divider is
                 // dragged, which is exactly why the drag has to be measured against it.
@@ -107,17 +120,29 @@ struct ContentView: View {
         // The system's own buttons don't know the bar is 52pt tall; this tells them.
         .background(TrafficLights(barHeight: TitleBar.height))
 
+        .sheet(isPresented: $model.isShowingWelcome) {
+            WelcomeSheet(model: model) { model.dismissWelcome() }
+        }
         .sheet(isPresented: $model.isCreating) { NewSkillSheet(model: model) }
         .sheet(item: $model.askCLI) { cli in CopilotSheet(model: model, cli: cli) }
         .sheet(isPresented: $model.isAddingAssistantCLI) { AssistantCLIFormSheet(model: model, editing: nil) }
         .sheet(item: $model.editingCustomAssistantCLI) { entry in AssistantCLIFormSheet(model: model, editing: entry) }
         .sheet(item: $model.restoring) { _ in RestoreSkillSheet(model: model) }
         .sheet(item: $model.pendingProjectDisable) { _ in ProjectSkillWarningSheet(model: model) }
-        .alert("Move \(model.selected?.name ?? "") to the Trash?", isPresented: $model.isConfirmingDelete) {
+        // One alert for both kinds of destruction, not two chained ones. Two `.alert` modifiers on
+        // the same view is a thing SwiftUI does not promise: with a third attached here, an empty
+        // alert panel presented itself at launch with nobody asking. The question and the
+        // consequence still differ — a folder goes to the Trash, a server is lines out of a
+        // settings file — so the strings branch and the presentation does not.
+        .alert(destructiveTitle, isPresented: $model.isConfirmingDelete) {
             Button("Cancel", role: .cancel) {}
-            Button("Move to Trash", role: .destructive) { model.deleteSelected() }
+            if model.removesServerOnConfirm {
+                Button("Remove", role: .destructive) { model.removeSelectedServer() }
+            } else {
+                Button("Move to Trash", role: .destructive) { model.deleteSelected() }
+            }
         } message: {
-            Text("The folder moves to the Trash, and a copy stays in the Loadout backups.")
+            Text(destructiveMessage)
         }
         .alert(
             "Something went wrong",
@@ -137,6 +162,22 @@ struct ContentView: View {
         .id(themes.name)
     }
 
+    private var destructiveTitle: String {
+        let name = model.selected?.name ?? ""
+        return model.removesServerOnConfirm
+            ? "Remove \(name) from the assistant's settings?"
+            : "Move \(name) to the Trash?"
+    }
+
+    private var destructiveMessage: String {
+        model.removesServerOnConfirm
+            ? """
+            This server is a few lines inside the assistant's own settings rather than a file, so \
+            there is no Trash to take it back from. Loadout copies that file to its backups first.
+            """
+            : "The folder moves to the Trash, and a copy stays in the Loadout backups."
+    }
+
     /// The hairline between the columns, with a 12pt invisible grab strip straddling it: drag to
     /// resize the sidebar, clamped so neither column can be crushed.
     ///
@@ -150,9 +191,7 @@ struct ContentView: View {
                 Color.clear
                     .frame(width: 12)
                     .contentShape(Rectangle())
-                    .onHover { inside in
-                        if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
-                    }
+                    .hoverCursor(.resizeLeftRight)
                     .gesture(
                         DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.columnsSpace))
                             .updating($dragTranslation) { value, state, _ in

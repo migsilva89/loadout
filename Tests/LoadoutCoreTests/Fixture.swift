@@ -131,18 +131,56 @@ final class Fixture {
         write(json: root, to: paths.claudeJSON)
     }
 
+    /// The `.mcp.json` a repository commits so everyone who checks it out gets the same servers.
+    func repositoryMCP(_ repo: URL, servers: [String: String]) {
+        let entries = servers.mapValues { ["command": $0] }
+        write(json: ["mcpServers": entries], to: paths.projectMCPJSON(repo))
+    }
+
+    /// The settings a repository commits for its contributors, which Claude Code reads after `~/.claude`.
+    func repositorySettings(_ repo: URL, enabledPlugins: [String: Bool], local: Bool = false) {
+        let file = local ? paths.projectLocalSettings(repo) : paths.projectSettings(repo)
+        write(json: ["enabledPlugins": enabledPlugins], to: file)
+    }
+
+    /// Marks one of a repository's servers as approved on this machine, the way Claude Code does
+    /// once the question has been answered.
+    func approveRepositoryMCP(_ name: String, in repo: URL) {
+        answerRepositoryMCP(name, in: repo, key: "enabledMcpjsonServers")
+    }
+
+    /// Marks one of a repository's servers as refused on this machine, the way Claude Code does.
+    func declineRepositoryMCP(_ name: String, in repo: URL) {
+        answerRepositoryMCP(name, in: repo, key: "disabledMcpjsonServers")
+    }
+
+    private func answerRepositoryMCP(_ name: String, in repo: URL, key: String) {
+        var root: [String: Any] = [:]
+        if let data = try? Data(contentsOf: paths.claudeJSON),
+           let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            root = parsed
+        }
+        var projects = root["projects"] as? [String: Any] ?? [:]
+        var entry = projects[repo.path] as? [String: Any] ?? [:]
+        var listed = entry[key] as? [String] ?? []
+        listed.append(name)
+        entry[key] = listed
+        projects[repo.path] = entry
+        root["projects"] = projects
+        write(json: root, to: paths.claudeJSON)
+    }
+
     func settings(_ object: [String: Any], local: Bool = true) {
         write(json: object, to: local ? paths.localSettings : paths.settings)
     }
 
-    func projectsIndex(_ contents: String) {
-        try! fm.createDirectory(at: paths.projectsRoot, withIntermediateDirectories: true)
-        try! contents.write(to: paths.projectsIndex, atomically: true, encoding: .utf8)
-    }
 
     @discardableResult
     func projectRepo(_ relativePath: String, skills: [String] = []) -> URL {
         let repo = paths.projectsRoot.appendingPathComponent(relativePath)
+        // The `.claude` goes in whether or not the repo has skills: that folder is what makes the
+        // search call this a project, and a fixture that skips it is not a repository at all.
+        try! fm.createDirectory(at: repo.appendingPathComponent(".claude"), withIntermediateDirectories: true)
         for skill in skills {
             let folder = repo.appendingPathComponent(".claude/skills/\(skill)")
             try! fm.createDirectory(at: folder, withIntermediateDirectories: true)

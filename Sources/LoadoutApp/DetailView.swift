@@ -184,11 +184,13 @@ struct DetailView: View {
                 // the full height is the whole mechanism — no measuring, no state, and
                 // nothing that could feed a height back into what produced it.
                 HStack(alignment: .top, spacing: 12) {
-                    budgetCard(item).frame(maxWidth: .infinity, alignment: .top)
+                    if showsBudget(item) {
+                        budgetCard(item).frame(maxWidth: .infinity, alignment: .top)
+                    }
                     detailsCard(item).frame(maxWidth: .infinity, alignment: .top)
                 }
                 VStack(spacing: 12) {
-                    budgetCard(item)
+                    if showsBudget(item) { budgetCard(item) }
                     detailsCard(item)
                 }
             }
@@ -256,6 +258,7 @@ struct DetailView: View {
                     .font(.system(size: 11.5))
                     .foregroundStyle(V2.textDim)
                     .lineLimit(1)
+                    .help(subtitleHelp(item))
             }
             Spacer(minLength: 12)
             // Every skill has this switch now, whoever it belongs to: a plugin shipping 38 of them
@@ -264,7 +267,9 @@ struct DetailView: View {
                 Text(item.enabled ? "Enabled" : "Disabled")
                     .font(.system(size: 12.5))
                     .foregroundStyle(V2.textMid)
+                    .help(switchHelp(item))
                 MiniSwitch(on: item.enabled, width: 40, height: 24) { model.toggle(item) }
+                    .help(switchHelp(item))
             }
         }
     }
@@ -275,6 +280,32 @@ struct DetailView: View {
         if let size = fileSize(item) { parts.append(size) }
         if let modified = item.modified { parts.append("modified \(Usage.relative(modified))") }
         return parts.joined(separator: " · ")
+    }
+
+    /// The quiet line under the name reads as three facts run together, and only the first of them
+    /// says what it is. Named here rather than guessed at: the parts it prints are conditional, so
+    /// the tooltip names only the ones that are actually on screen.
+    private func subtitleHelp(_ item: Item) -> String {
+        var parts = ["where this \(item.kind.briefingNoun) lives"]
+        if fileSize(item) != nil { parts.append("how big its file is") }
+        if item.modified != nil { parts.append("when that file last changed") }
+        guard parts.count > 1 else { return "Where this \(item.kind.briefingNoun) lives" }
+        let listed = parts.dropLast().joined(separator: ", ") + " and " + parts[parts.count - 1]
+        return listed.prefix(1).uppercased() + listed.dropFirst()
+    }
+
+    /// What turning the one big switch off actually does — which is never delete anything, and is
+    /// worth saying, because a switch beside a file is read as one that might.
+    private func switchHelp(_ item: Item) -> String {
+        let noun = item.kind.briefingNoun
+        if item.kind == .mcp {
+            return item.enabled
+                ? "Turn off to lift this server out of the assistant's configuration, keeping what it said so you can put it back"
+                : "Turn on to put this server back into the assistant's configuration"
+        }
+        return item.enabled
+            ? "Turn off and no assistant loads this \(noun) — its files move aside on disk, so nothing is lost"
+            : "Turn on and assistants load this \(noun) again"
     }
 
     /// Where to send someone who wants to see this on disk: the folder for a skill, the file's
@@ -290,7 +321,12 @@ struct DetailView: View {
         if item.kind == .mcp {
             switch item.origin {
             case .personal: return "Personal MCP server"
-            case .project(let name): return "MCP server in \(name)"
+            // Two different things read as "MCP server in loadout": one your own config filed under
+            // that project, and one the repository ships for whoever checks it out. Only the second
+            // arrives with a pull, so the row says which it is.
+            case .project(let name):
+                return item.declaredByRepository
+                    ? "MCP server shipped by \(name)" : "MCP server in \(name)"
             case .plugin(let name): return "MCP server from the \(name) plugin"
             }
         }
@@ -352,6 +388,11 @@ struct DetailView: View {
     }
 
     // MARK: - Token budget card
+
+    /// The budget measures a document: a description that is in context every session and a body
+    /// that arrives on trigger. An MCP server has neither — it is a command line the assistant runs
+    /// — so the card was four bars resting at zero against limits that do not apply to it.
+    private func showsBudget(_ item: Item) -> Bool { item.kind != .mcp }
 
     private func budgetCard(_ item: Item) -> some View {
         V2Card {
@@ -439,9 +480,9 @@ struct DetailView: View {
                 cardHeader { V2CardCaption(text: "Details") }
                 // The way out of a repository is offered once, in the callout above, where it can
                 // be seen. Twice on one screen is not twice as findable.
-                detailRow(label: "Source", value: sourceText(item))
-                detailRow(label: "Usage", value: usageValue(item))
-                detailRow(label: "Last used", value: lastUsedValue(item))
+                detailRow(label: "Source", value: sourceText(item), help: sourceHelp(item))
+                detailRow(label: "Usage", value: usageValue(item), help: usesHelp(item))
+                detailRow(label: "Last used", value: lastUsedValue(item), help: lastUsedHelp(item))
                 // An MCP server has no file of its own: it is a few lines inside `~/.claude.json`,
                 // and pointing at the directory that file sits in named the home folder, which is
                 // not where anybody would go looking.
@@ -449,7 +490,8 @@ struct DetailView: View {
                     detailRow(
                         label: "Location", value: location, mono: true,
                         action: ("Reveal", { model.revealInFinder() }),
-                        actionHint: "Reveal \(location) in Finder"
+                        actionHint: "Reveal \(location) in Finder",
+                        help: locationHelp(item)
                     )
                 }
                 // Only for something that owns a folder. On a command or an agent this listed the
@@ -484,6 +526,7 @@ struct DetailView: View {
                 .font(.system(size: 12.5))
                 .foregroundStyle(Color.white.opacity(0.5))
                 .frame(width: 74, alignment: .leading)
+                .help("What else sits in this folder, beside the document")
             VStack(alignment: .leading, spacing: filesExpanded ? 8 : 0) {
                 Button {
                     withAnimation(.easeOut(duration: 0.16)) { filesExpanded.toggle() }
@@ -551,7 +594,8 @@ struct DetailView: View {
 
     private func detailRow(
         label: String, value: String, mono: Bool = false,
-        action: (String, () -> Void)? = nil, actionHint: String = ""
+        action: (String, () -> Void)? = nil, actionHint: String = "",
+        help: String? = nil
     ) -> some View {
         HStack(spacing: 12) {
             Text(label)
@@ -591,10 +635,20 @@ struct DetailView: View {
         .padding(.horizontal, 13)
         .padding(.vertical, 9)
         .overlay(alignment: .bottom) { Hairline(color: Color.white.opacity(0.06)) }
+        // The row's own explanation covers the label and the value; the action keeps the tooltip
+        // it already had, since a button has to say what it does rather than what it shows.
+        .help(help ?? "\(label): \(value)")
+    }
+
+    /// The chosen window without its article, for reading inside brackets and after "None in".
+    private var windowSuffix: String {
+        model.usageWindowLabel.replacingOccurrences(of: "the ", with: "")
     }
 
     private func usageValue(_ item: Item) -> String {
-        guard !item.usage.neverUsed else { return "Never used" }
+        // "Never used" claimed more than the numbers can: they cover the window chosen in Settings
+        // › Usage, not all time. So the value says which window it looked at.
+        guard !item.usage.neverUsed else { return "None in \(windowSuffix)" }
         return "\(uses(item.usage.count)) in \(count(item.usage.projectCount, of: "project"))"
     }
 
@@ -607,8 +661,50 @@ struct DetailView: View {
     }
 
     private func lastUsedValue(_ item: Item) -> String {
-        guard item.usage.count > 0, let last = item.usage.lastUsed else { return "— (last 90 days)" }
+        // The window is a setting, so writing 90 days here said 90 days to somebody who had chosen
+        // 30 — the row contradicting the preference that produced it.
+        guard item.usage.count > 0, let last = item.usage.lastUsed else {
+            return "— (\(windowSuffix))"
+        }
         return Usage.relative(last)
+    }
+
+    /// A date here is the newest activation the histories could prove, and a dash is not the same
+    /// thing as never: it can also mean no history Loadout can read covers this one.
+    private func lastUsedHelp(_ item: Item) -> String {
+        guard item.usage.count > 0, item.usage.lastUsed != nil else {
+            return "Nothing in \(model.usageWindowLabel) proves this ran. Settings › Usage says which histories could be read and which formats prove nothing."
+        }
+        return "The most recent time an assistant fired this \(item.kind.briefingNoun), out of \(model.usageWindowLabel)"
+    }
+
+    /// Where it lives decides where it works, which is the part the words "Personal", "in a
+    /// repository" and "from a plugin" leave out.
+    private func sourceHelp(_ item: Item) -> String {
+        let noun = item.kind.briefingNoun
+        switch item.origin {
+        case .personal:
+            return "Yours, in your home folder, so every project can load this \(noun)"
+        case .project(let name):
+            if item.declaredByRepository {
+                return """
+                Committed in \(name), so everyone who checks it out gets it. Switching it off is \
+                recorded in your own settings and changes nothing for anybody else
+                """
+            }
+            return "Lives inside \(name), so it loads only while you work in that repository"
+        case .plugin(let name):
+            return "Comes with the \(name) plugin, so updating the plugin can replace this \(noun)"
+        }
+    }
+
+    private func locationHelp(_ item: Item) -> String {
+        if item.kind == .mcp {
+            return "The settings file this server is defined in, a few lines among the assistant's other settings"
+        }
+        return item.directory == nil
+            ? "The folder on disk the file sits in"
+            : "The folder on disk that holds this \(item.kind.briefingNoun)"
     }
 
     private func fileSize(_ item: Item) -> String? {
@@ -658,6 +754,7 @@ struct DetailView: View {
                         Text("\(loaded) loaded of \(assistants.count)")
                             .font(.system(size: 11))
                             .foregroundStyle(V2.textFaint)
+                            .help("How many of the assistants below have this skill, out of the ones Loadout found on this Mac and Settings keeps in view")
                     }
                 }
                 // Four up is the design's shape, but only while a cell has room for a name and a
@@ -756,11 +853,20 @@ struct DetailView: View {
 
     // MARK: - Document card
 
+    /// Whether the bar above the document has anything in it. On a server the repository ships,
+    /// everything it can hold is gone — no Preview/Edit, no reader, no Ask, no budget chip, no
+    /// Remove — and drawing it anyway left an empty band with a hairline under it.
+    private func showsDocumentToolbar(_ item: Item) -> Bool {
+        item.kind != .mcp || model.canRemove(item)
+    }
+
     private func documentCard(_ item: Item, rendersBody: Bool) -> some View {
         V2Card {
             VStack(spacing: 0) {
-                documentToolbar(item)
-                Hairline(color: Color.white.opacity(0.08))
+                if showsDocumentToolbar(item) {
+                    documentToolbar(item)
+                    Hairline(color: Color.white.opacity(0.08))
+                }
                 if rendersBody {
                     documentBody(item)
                 } else {
@@ -786,17 +892,20 @@ struct DetailView: View {
     private func toolbarRow(_ item: Item, chip: Bool, shortcut: Bool) -> some View {
         HStack(spacing: 8) {
             // Reading or editing: one segmented switch, because they are the same document
-            // in two modes.
-            HStack(spacing: 1) {
-                viewModeTab("Preview", selected: model.showsPreview) { model.showsPreview = true }
-                // The dot is the unsaved marker the design asks for on the Edit segment
-                // itself, so the state is visible even while reading the preview.
-                viewModeTab(model.isDirty ? "Edit •" : "Edit", selected: !model.showsPreview) {
-                    model.showsPreview = false
+            // in two modes. A server has no document and nothing to edit, so it gets neither
+            // segment — offering Edit there was a control that could only disappoint.
+            if item.kind != .mcp {
+                HStack(spacing: 1) {
+                    viewModeTab("Preview", selected: model.showsPreview) { model.showsPreview = true }
+                    // The dot is the unsaved marker the design asks for on the Edit segment
+                    // itself, so the state is visible even while reading the preview.
+                    viewModeTab(model.isDirty ? "Edit •" : "Edit", selected: !model.showsPreview) {
+                        model.showsPreview = false
+                    }
                 }
+                .padding(2)
+                .background(V2.well, in: RoundedRectangle(cornerRadius: 7))
             }
-            .padding(2)
-            .background(V2.well, in: RoundedRectangle(cornerRadius: 7))
 
             // Reading before asking: Aa belongs with the Preview/Edit switch it modifies.
             if model.showsPreview, item.kind != .mcp {
@@ -809,8 +918,18 @@ struct DetailView: View {
 
             Spacer(minLength: 8)
 
-            if chip {
+            // Same reason the card above is gone on a server: there is no body to count lines of.
+            if chip, showsBudget(item) {
                 budgetChip(item)
+            }
+
+            // The one destructive thing a server has. It is here rather than only in the row's
+            // context menu because a menu nobody opens is not where a person looks for it.
+            if model.canRemove(item) {
+                Button("Remove") { model.isConfirmingDelete = true }
+                    .buttonStyle(V2ToolbarButtonStyle(prominent: false, enabled: true))
+                    .help("Take this server out of the assistant's settings. There is no Trash for it, so Loadout copies the file to its backups first")
+                    .pointingHand()
             }
 
             if item.isEditable {
@@ -818,7 +937,7 @@ struct DetailView: View {
                     .buttonStyle(V2ToolbarButtonStyle(prominent: false, enabled: model.isDirty))
                     .disabled(!model.isDirty)
                     .help("Throw away the unsaved changes and reload the file from disk")
-                    .pointingHand()
+                    .pointingHand(enabled: model.isDirty)
                 Button {
                     model.save()
                 } label: {
@@ -835,7 +954,7 @@ struct DetailView: View {
                 .disabled(!model.isDirty)
                 .keyboardShortcut("s", modifiers: .command)
                 .help("Write your changes to the file on disk (⌘S)")
-                .pointingHand()
+                .pointingHand(enabled: model.isDirty)
             }
         }
         .padding(.horizontal, 10)
@@ -892,14 +1011,15 @@ struct DetailView: View {
                 Button("A") { readerFontSize = max(13, readerFontSize - 1) }
                     .font(.system(size: 11))
                     .buttonStyle(V2ToolbarButtonStyle(prominent: false, enabled: readerFontSize > 13))
-                    .pointingHand()
+                    .pointingHand(enabled: readerFontSize > 13)
                 Slider(value: $readerFontSize, in: 13...20, step: 0.5)
                     .controlSize(.small)
                     .tint(V2.accent)
+                    .pointingHand()
                 Button("A") { readerFontSize = min(20, readerFontSize + 1) }
                     .font(.system(size: 15))
                     .buttonStyle(V2ToolbarButtonStyle(prominent: false, enabled: readerFontSize < 20))
-                    .pointingHand()
+                    .pointingHand(enabled: readerFontSize < 20)
                 Text("\(readerFontSize, specifier: "%.0f") pt")
                     .font(.system(size: 11.5))
                     .monospacedDigit()
@@ -908,11 +1028,13 @@ struct DetailView: View {
             }
             readerSegments(
                 options: [("system", "System"), ("serif", "Serif"), ("mono", "Mono")],
-                selection: $readerFont
+                selection: $readerFont,
+                help: "The typeface the document is read in"
             )
             readerSegments(
                 options: [("dark", "Dark"), ("darker", "Darker"), ("ink", "Ink")],
-                selection: $readerBackground
+                selection: $readerBackground,
+                help: "How dark the page behind the text is, Ink being the darkest"
             )
         }
         .padding(12)
@@ -920,13 +1042,18 @@ struct DetailView: View {
         .background(V2.popover)
     }
 
-    private func readerSegments(options: [(String, String)], selection: Binding<String>) -> some View {
+    private func readerSegments(
+        options: [(String, String)], selection: Binding<String>, help: String
+    ) -> some View {
         HStack(spacing: 1) {
             ForEach(options, id: \.0) { value, label in
                 V2SegmentTab(label: label, selected: selection.wrappedValue == value) {
                     selection.wrappedValue = value
                 }
                 .frame(maxWidth: .infinity)
+                // On each segment rather than the row: "Ink" and "Darker" name a shade nobody can
+                // rank on sight, and the row's own tooltip never reaches the segments' hit areas.
+                .help(help)
             }
         }
         .padding(2)
@@ -960,6 +1087,9 @@ struct DetailView: View {
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
+            // Inside the pill's padding on purpose: a borderless menu hit-tests only its own label,
+            // so the 10pt of pill either side is decoration, and the hand must not claim otherwise.
+            .pointingHand()
             .padding(.horizontal, 10)
             .frame(height: 24)
             .background(V2.button, in: RoundedRectangle(cornerRadius: 7))
@@ -992,7 +1122,12 @@ struct DetailView: View {
     @ViewBuilder
     private func documentBody(_ item: Item) -> some View {
         if item.kind == .mcp {
-            Text("This server is defined in ~/.claude.json, not in a separate file.")
+            // One of these is in a file of its own and the other is not, so the sentence cannot be
+            // the same. Saying "~/.claude.json" over a server that came out of a repository's
+            // `.mcp.json` pointed at the wrong file and read as the app not knowing where it was.
+            Text(item.declaredByRepository
+                ? "This server comes from the .mcp.json the repository commits, so everyone who checks it out gets it. Switching it off is recorded in your own settings and changes nothing for anybody else."
+                : "This server is defined in ~/.claude.json, not in a separate file.")
                 .font(.system(size: 12.5))
                 .foregroundStyle(V2.textMid)
                 .padding(16)
@@ -1061,9 +1196,11 @@ struct DetailView: View {
             Spacer(minLength: 6)
             Button("Accept all") { model.acceptAllReviewChanges() }
                 .buttonStyle(V2ToolbarButtonStyle(prominent: true, enabled: true))
+                .help("Take every proposed change into the document (you still have to save)")
                 .pointingHand()
             Button("Reject all") { model.rejectAllReviewChanges() }
                 .buttonStyle(V2ToolbarButtonStyle(prominent: false, enabled: true))
+                .help("Drop every proposed change and leave the file as it is")
                 .pointingHand()
         }
         .padding(.horizontal, 10)
@@ -1331,12 +1468,15 @@ struct DetailView: View {
 
     private func railMetadata(_ item: Item) -> some View {
         VStack(alignment: .leading, spacing: 7) {
-            railPair("Modified", item.modified.map { Usage.relative($0) } ?? "—")
             railPair(
-                "Uses", item.usage.neverUsed ? "Never used" : uses(item.usage.count),
+                "Modified", item.modified.map { Usage.relative($0) } ?? "—",
+                help: "When the file on disk last changed"
+            )
+            railPair(
+                "Uses", item.usage.neverUsed ? "None in \(windowSuffix)" : uses(item.usage.count),
                 help: usesHelp(item)
             )
-            railPair("Source", sourceText(item))
+            railPair("Source", sourceText(item), help: sourceHelp(item))
         }
     }
 
@@ -1384,10 +1524,12 @@ struct DetailView: View {
     private func railUsedIn(_ item: Item) -> some View {
         VStack(alignment: .leading, spacing: 7) {
             V2CardCaption(text: "Used in", size: 10.5, weight: .medium, color: V2.textFaint)
+                .help("The projects this fired in, busiest first, over \(model.usageWindowLabel)")
             if projectUsage.isEmpty {
                 Text("No recorded uses")
                     .font(.system(size: 11.5))
                     .foregroundStyle(Color.white.opacity(0.35))
+                    .help("No project in \(model.usageWindowLabel) has a record of this running. Settings › Usage says which histories could be read and which formats prove nothing.")
             } else {
                 ForEach(projectUsage) { usage in
                     railProjectRow(usage)
@@ -1399,6 +1541,7 @@ struct DetailView: View {
                         .font(.system(size: 11.5))
                         .foregroundStyle(Color.white.opacity(0.35))
                         .padding(.leading, 19)
+                        .help("The list stops at the eight projects that used it most")
                 }
             }
         }
@@ -1420,7 +1563,7 @@ struct DetailView: View {
                 .monospacedDigit()
                 .foregroundStyle(V2.textFaint)
         }
-        .help("\(uses(usage.count)) in \(usage.project)")
+        .help("\(uses(usage.count)) in \(usage.project), over \(model.usageWindowLabel)")
     }
 
     /// The design's editor footer: where the caret is, how big the buffer is, whether it is
@@ -1429,7 +1572,9 @@ struct DetailView: View {
         let liveBudget = Budget.measure(document: model.draft)
         return HStack(spacing: 14) {
             Text("Ln \(editorState.line), Col \(editorState.column)")
+                .help("Where the cursor is — line, then column")
             Text("\(model.draft.components(separatedBy: "\n").count) lines")
+                .help("Lines in the whole file, frontmatter included. The budget counts only the body, so its number is smaller.")
             Text("Markdown")
             Text("UTF-8")
             Spacer()
@@ -1440,8 +1585,12 @@ struct DetailView: View {
             }
             Text("~\(liveBudget.descriptionTokens) tok desc · \(liveBudget.bodyLines)/\(Budget.maxBodyLines) lines")
                 .foregroundStyle(liveBudget.isOverBudget ? V2.amber : V2.textDim)
+                .help("Measured on what is in the editor now, not on the saved file: the description's tokens, and body lines against the recommended limit")
             Text(model.isDirty ? "Edited" : "Saved")
                 .foregroundStyle(model.isDirty ? V2.amber : V2.textDim)
+                .help(model.isDirty
+                      ? "The editor holds changes that are not in the file yet"
+                      : "The file on disk matches what is in the editor")
         }
         .font(.system(size: 11))
         .monospacedDigit()

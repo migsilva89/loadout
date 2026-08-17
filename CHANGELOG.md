@@ -4,6 +4,66 @@ Notable changes, newest first. Dates are the day the work landed on `main`.
 
 The versions are what a release is tagged as; between tags, `main` is what is being used daily.
 
+## 0.2.0 — 2026-08-17
+
+### Added
+
+- **The servers a repository ships are visible at last.** A team shares MCP servers by committing a
+  `.mcp.json`, and Loadout read only your own `~/.claude.json` — so a repository could hand Claude
+  three servers and the app showed none of them. They now appear in that project's list, saying they
+  were shipped by the repository and pointing at the file that declares them. One that you have not
+  answered for yet reads as off, because Claude Code asks before it loads them and loads none until
+  you say yes; switching it on here is that yes.
+- **Switching one of them off never touches the team's file.** Cutting a line out of a committed
+  file would take the server away from everybody at their next pull. The refusal goes where Claude
+  Code already keeps it — in your own settings, under that project — so the repository is unchanged
+  for everyone else.
+- **A plugin a repository decides about says so.** A repository's own settings are read after yours,
+  which means they win. The row now reads `off in <project>` with the reason above it, and the switch
+  is disabled instead of appearing to work: your settings cannot overrule that file while you are
+  working there.
+- **Remove, for MCP servers of your own.** They were the one thing that could be switched off but
+  never deleted. The wording says what really happens — a few lines out of the assistant's settings,
+  with no Trash to take them back from — and the file is copied to the backups first.
+- **Where your projects live is now a question the app asks.** Settings › Projects holds the folders
+  Loadout looks in, and a first-run sheet states what was already found before asking for anything.
+  It replaces a generated file one person kept by hand, which everybody else opened the app without.
+- **Tooltips on the things that carry meaning.** Above all the numbers: what the count counts, which
+  assistants it includes, which window of time, and — where it applies — that a zero is a history
+  format that cannot prove an activation rather than disuse.
+
+### Changed
+
+- **The list opens compact.** At 83 skills the descriptions are what make the column a wall.
+- **A row says where it comes from when the scope does not.** Global holds your own things, except
+  MCP servers, which the assistant also files under project directories — so two servers called
+  `notion` from two repositories were two identical rows.
+- **Servers no longer pretend to be documents.** Gone from a server's pane: the token budget card,
+  the line-count chip and the Edit tab, all of which measured or offered something that does not
+  exist there.
+
+### Fixed
+
+- **Housekeeping could delete the only copy of a switched-off server.** A server switched off has
+  its entry lifted out of `~/.claude.json`, so Loadout's record is the whole of what is left of it.
+  The launch sweep asked which records "no longer appear anywhere" — a question that could only fire
+  when that file was unreadable, and then fired for every one of them at once. It now asks the
+  opposite and safe question, and an unreadable file is treated as unknown rather than as permission.
+- **Escape over a sheet closed Settings behind it.** The guard asked the key window for its attached
+  sheet, but while a sheet is up the sheet *is* the key window, so the key never reached it.
+- **A folder chosen twice was listed twice** in the first-run sheet, because the file panel returns a
+  trailing slash and raw path equality counts that as a different folder.
+- **Counting repositories no longer walks the disk on the main thread**, which it did on every redraw
+  and every tick of a checkbox.
+- **A run pointed at a fixture home cannot overwrite your real project folders.** It read them from
+  the environment and still saved to the account's preferences.
+- **The window of time is the one you chose.** Rows and details said "the last 90 days" regardless of
+  the setting, and "Never used" claimed more than counts over a window can.
+- **One confirmation, not three alerts.** Two destructive questions were two `.alert` modifiers on
+  one view, which SwiftUI does not promise: an empty alert panel presented itself at launch.
+- **The frosted pause no longer fades at its own edges.** The blur was cropped but never clamped, so
+  it sampled transparency past the border — the seam the crop was there to prevent.
+
 ## 0.1.2 — 2026-08-16
 
 ### Fixed

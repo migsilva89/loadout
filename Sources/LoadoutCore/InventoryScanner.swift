@@ -38,7 +38,13 @@ public struct InventoryScanner: Sendable {
             // The scope answers "what belongs to this project", not "what would load
             // there": mixing the global inventory in made a project with nothing of its
             // own look exactly like Global, which read as the scope being broken.
-            return Inventory(items: projectItems(project), plugins: plugins)
+            //
+            // Plugins are the exception, and read again with the project in hand: they are
+            // installed once for the machine, but a repository may have turned one off for whoever
+            // works in it, and that is the state this scope has to show.
+            return Inventory(
+                items: projectItems(project), plugins: installedPlugins(project: project)
+            )
         }
 
         return Inventory(items: items, plugins: plugins)
@@ -54,8 +60,10 @@ public struct InventoryScanner: Sendable {
     public func scanEverything(projects: [Project]) -> Inventory {
         let global = scanAll()
         var items = global.items
+        // Read once for the whole walk, not once per repository.
+        let claudeRoot = readClaudeRoot()
         for project in projects {
-            items += projectItems(project)
+            items += projectItems(project, claudeRoot: claudeRoot)
         }
         return Inventory(items: items, plugins: global.plugins)
     }
@@ -103,7 +111,9 @@ public struct InventoryScanner: Sendable {
         return byName.values.sorted { $0.name < $1.name }
     }
 
-    func projectItems(_ project: Project) -> [Item] {
+    /// `claudeRoot` lets a caller that walks many projects parse `~/.claude.json` once and hand the
+    /// same copy to each of them.
+    func projectItems(_ project: Project, claudeRoot: [String: Any]? = nil) -> [Item] {
         var items = skillFolders(in: paths.projectSkills(project.path))
             .map { skill(at: $0, origin: .project(project.name), enabled: true) }
         items += skillFolders(in: paths.projectSkillsOff(project.path))
@@ -122,7 +132,76 @@ public struct InventoryScanner: Sendable {
             in: paths.projectAgentsOff(project.path), kind: .agent,
             origin: .project(project.name), enabled: false
         )
+        items += repositoryServers(project, claudeRoot: claudeRoot)
         return items
+    }
+
+    /// The MCP servers a repository ships in its own `.mcp.json`, which is how a team hands
+    /// everybody the same servers.
+    ///
+    /// Read here and nowhere else: `~/.claude.json` holds your servers and the ones Claude filed
+    /// under a project, and it says nothing about this file. Without this pass a repository could
+    /// hand Claude three servers and the app would show none of them, which is the one thing it
+    /// promises not to do.
+    /// `claudeRoot` is the already-parsed `~/.claude.json` when the caller has it. That file is
+    /// large and holds every project's state, so parsing it once per project with a `.mcp.json` was
+    /// work repeated for no reason on a machine with many repositories.
+    func repositoryServers(_ project: Project, claudeRoot: [String: Any]? = nil) -> [Item] {
+        let file = paths.projectMCPJSON(project.path)
+        guard let data = try? Data(contentsOf: file),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let servers = root["mcpServers"] as? [String: Any]
+        else { return [] }
+
+        let answers = repositoryServerAnswers(
+            project: project.path.path, claudeRoot: claudeRoot ?? readClaudeRoot()
+        )
+        return servers.map { name, config in
+            var item = mcpItem(name: name, config: config, origin: .project(project.name))
+            // Its own id space: the same name can be in this file and in your own config under the
+            // same project, and one id for both would show a single row acting on the wrong file.
+            item.id = "mcp-repo:\(project.path.path):\(name)"
+            item.path = file
+            item.modified = modificationDate(file)
+            item.projectDirectory = project.path.path
+            item.declaredByRepository = true
+            if answers.declined.contains(name) {
+                item.enabled = false
+            } else if answers.approved.contains(name) {
+                item.enabled = true
+            } else {
+                // Never answered. Claude Code asks before it loads the servers a repository ships,
+                // and until that is answered it loads none of them — so showing this as on would be
+                // the app claiming something the assistant is not doing. Off, and said why.
+                item.enabled = false
+                item.warning = "Not approved yet, so Claude is not loading it. Turning it on here is the answer it is waiting for."
+            }
+            return item
+        }
+        .sorted { $0.name < $1.name }
+    }
+
+    /// What this machine has answered about the servers one repository ships, from
+    /// `enabledMcpjsonServers` and `disabledMcpjsonServers` in `~/.claude.json`.
+    ///
+    /// Claude Code keeps the answer to "do I trust the servers this repository ships?" in your own
+    /// config, per project. That is the only place it can live, because the file being answered
+    /// about belongs to the team.
+    private func repositoryServerAnswers(
+        project: String, claudeRoot: [String: Any]?
+    ) -> (approved: Set<String>, declined: Set<String>) {
+        guard let projects = claudeRoot?["projects"] as? [String: Any],
+              let entry = projects[project] as? [String: Any]
+        else { return ([], []) }
+        return (
+            Set(entry["enabledMcpjsonServers"] as? [String] ?? []),
+            Set(entry["disabledMcpjsonServers"] as? [String] ?? [])
+        )
+    }
+
+    func readClaudeRoot() -> [String: Any]? {
+        guard let data = try? Data(contentsOf: paths.claudeJSON) else { return nil }
+        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
     }
 
     /// Subdirectories that actually carry a `SKILL.md`. A stray folder is not a skill.
@@ -252,13 +331,16 @@ public struct InventoryScanner: Sendable {
 
     // MARK: - Plugins
 
-    public func installedPlugins() -> [PluginInfo] {
+    public func installedPlugins(project: Project? = nil) -> [PluginInfo] {
         guard let data = try? Data(contentsOf: paths.installedPlugins),
               let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let plugins = root["plugins"] as? [String: Any]
         else { return [] }
 
         let enabledMap = enabledPluginFlags()
+        // What the repository decided, read only when a repository is being looked at. Its answer
+        // is applied over yours because that is the order Claude Code reads the two files in.
+        let repositoryMap = project.map { repositoryPluginFlags(project: $0) } ?? [:]
         var result: [PluginInfo] = []
 
         for (key, value) in plugins {
@@ -279,10 +361,30 @@ public struct InventoryScanner: Sendable {
                 version: install["version"] as? String ?? "",
                 installPath: URL(fileURLWithPath: installPath),
                 // Absent from enabledPlugins means enabled: Claude Code opts in by default.
-                enabled: enabledMap[key] ?? true
+                enabled: repositoryMap[key] ?? enabledMap[key] ?? true,
+                repositoryChoice: repositoryMap[key]
             ))
         }
         return result.sorted { $0.name < $1.name }
+    }
+
+    /// `enabledPlugins` from the repository's own settings, the gitignored file last.
+    ///
+    /// This is the plugin half of what `.mcp.json` does for servers: a repository saying what its
+    /// contributors load. Reading only `~/.claude` showed a plugin as on while the repository had
+    /// it off, which is the app claiming something the assistant would not do.
+    func repositoryPluginFlags(project: Project) -> [String: Bool] {
+        var flags: [String: Bool] = [:]
+        for file in [paths.projectSettings(project.path), paths.projectLocalSettings(project.path)] {
+            guard let data = try? Data(contentsOf: file),
+                  let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let enabled = root["enabledPlugins"] as? [String: Any]
+            else { continue }
+            for (key, value) in enabled {
+                if let bool = value as? Bool { flags[key] = bool }
+            }
+        }
+        return flags
     }
 
     /// `enabledPlugins` can live in either settings file; the local one wins, as Claude Code does.

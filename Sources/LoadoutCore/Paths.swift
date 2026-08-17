@@ -99,7 +99,6 @@ public struct Paths: Sendable {
     }
     public var piSessions: URL { home.appendingPathComponent(".pi/agent/sessions") }
     public var cursorProjects: URL { home.appendingPathComponent(".cursor/projects") }
-    public var projectsIndex: URL { projectsRoot.appendingPathComponent("INDEX.md") }
 
     // MARK: Per-project
 
@@ -115,4 +114,18 @@ public struct Paths: Sendable {
     public func projectAgentsOff(_ repo: URL) -> URL {
         repo.appendingPathComponent(".claude/agents-off")
     }
+    /// A repository's own settings, committed for the whole team. Claude Code reads these after
+    /// your `~/.claude` ones, so what is here wins over what you chose — including which plugins
+    /// are on.
+    public func projectSettings(_ repo: URL) -> URL {
+        repo.appendingPathComponent(".claude/settings.json")
+    }
+    /// The same file for one person only, gitignored, and the last word of the two.
+    public func projectLocalSettings(_ repo: URL) -> URL {
+        repo.appendingPathComponent(".claude/settings.local.json")
+    }
+    /// The MCP servers a repository ships for everybody who checks it out. Committed, so it belongs
+    /// to the team rather than to whoever is reading it — the app shows what is in here and never
+    /// rewrites it.
+    public func projectMCPJSON(_ repo: URL) -> URL { repo.appendingPathComponent(".mcp.json") }
 }

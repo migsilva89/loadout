@@ -139,6 +139,102 @@ final class AgentAndServerTests: XCTestCase {
         XCTAssertThrowsError(try mutations.setServer(ghost, enabled: true))
     }
 
+    /// Removing one of your own servers takes its entry out of the file for good, leaves the rest of
+    /// that file alone, and copies it first — there being no Trash for a few lines of JSON.
+    func testRemovingYourOwnServerTakesItOutForGood() throws {
+        let fixture = Fixture()
+        fixture.mcpServer("notebooklm", command: "npx notebooklm-mcp")
+        fixture.mcpServer("paseo", command: "npx paseo-mcp")
+        let mutations = Mutations(paths: fixture.paths)
+
+        try mutations.removeServer(item("notebooklm", in: fixture, kind: .mcp))
+
+        let after = (try? JSONSerialization.jsonObject(
+            with: Data(contentsOf: fixture.paths.claudeJSON)
+        )) as? [String: Any] ?? [:]
+        let servers = after["mcpServers"] as? [String: Any] ?? [:]
+        XCTAssertNil(servers["notebooklm"], "gone")
+        XCTAssertNotNil(servers["paseo"], "the other one stayed")
+        XCTAssertNil(mutations.records.server(named: "notebooklm"), "and not kept as switched off")
+        let backups = (fm.enumerator(at: fixture.paths.backups, includingPropertiesForKeys: nil)?
+            .compactMap { ($0 as? URL)?.lastPathComponent } ?? [])
+        XCTAssertTrue(backups.contains(".claude.json"), "the copy before the write is the way back")
+
+        // Listing it again must not resurrect it: the entry and the record are both gone.
+        let listed = InventoryScanner(paths: fixture.paths).scanAll().items(kind: .mcp).map(\.name)
+        XCTAssertEqual(listed, ["paseo"])
+    }
+
+    /// A server that was switched off lives only in Loadout's record — its entry is already out of
+    /// the file. Removing it has to forget that record, or the row comes back on the next scan.
+    func testRemovingAServerThatWasSwitchedOffForgetsIt() throws {
+        let fixture = Fixture()
+        fixture.mcpServer("notebooklm", command: "npx notebooklm-mcp")
+        let mutations = Mutations(paths: fixture.paths)
+        try mutations.setServer(item("notebooklm", in: fixture, kind: .mcp), enabled: false)
+        let off = InventoryScanner(paths: fixture.paths).scanAll().items(kind: .mcp).first!
+        XCTAssertFalse(off.enabled)
+
+        try mutations.removeServer(off)
+
+        XCTAssertTrue(mutations.records.servers().isEmpty, "the record went with it")
+        XCTAssertTrue(
+            InventoryScanner(paths: fixture.paths).scanAll().items(kind: .mcp).isEmpty,
+            "and it does not come back on the next scan"
+        )
+    }
+
+    /// The team's file is not ours to cut lines out of, so a repository's server has no removal at
+    /// all — the switch is the whole of what this app does to it.
+    func testARepositoryServerCannotBeRemoved() throws {
+        let fixture = Fixture()
+        let repo = fixture.projectRepo("TGC/open-mercato")
+        fixture.repositoryMCP(repo, servers: ["linear": "npx linear-mcp"])
+        let project = Project(name: "open-mercato", relativePath: "TGC/open-mercato", path: repo)
+        let linear = InventoryScanner(paths: fixture.paths).scanAll(project: project)
+            .items(kind: .mcp).first!
+        let before = fixture.read(fixture.paths.projectMCPJSON(repo))
+
+        XCTAssertThrowsError(try Mutations(paths: fixture.paths).removeServer(linear))
+        XCTAssertEqual(fixture.read(fixture.paths.projectMCPJSON(repo)), before)
+    }
+
+    /// Switching off a server the repository ships must leave the repository's file untouched —
+    /// deleting the line there would take the server from the whole team at their next pull. The
+    /// refusal goes in the reader's own config, where Claude Code already keeps that answer.
+    func testDecliningARepositoryServerLeavesTheRepositoryFileAlone() throws {
+        let fixture = Fixture()
+        let repo = fixture.projectRepo("TGC/open-mercato")
+        fixture.repositoryMCP(repo, servers: ["linear": "npx linear-mcp"])
+        let file = fixture.paths.projectMCPJSON(repo)
+        let before = fixture.read(file)
+        let mutations = Mutations(paths: fixture.paths)
+        let project = Project(name: "open-mercato", relativePath: "TGC/open-mercato", path: repo)
+        let linear = InventoryScanner(paths: fixture.paths).scanAll(project: project)
+            .items(kind: .mcp).first { $0.name == "linear" }!
+
+        try mutations.setServer(linear, enabled: false)
+
+        XCTAssertEqual(fixture.read(file), before, "the team's file is untouched")
+        let after = (try? JSONSerialization.jsonObject(
+            with: Data(contentsOf: fixture.paths.claudeJSON)
+        )) as? [String: Any] ?? [:]
+        let entry = (after["projects"] as? [String: Any])?[repo.path] as? [String: Any] ?? [:]
+        XCTAssertEqual(entry["disabledMcpjsonServers"] as? [String], ["linear"])
+
+        // And back on: the refusal is lifted and the yes is explicit, so Claude stops asking.
+        var off = linear
+        off.enabled = false
+        try mutations.setServer(off, enabled: true)
+        let back = (try? JSONSerialization.jsonObject(
+            with: Data(contentsOf: fixture.paths.claudeJSON)
+        )) as? [String: Any] ?? [:]
+        let reopened = (back["projects"] as? [String: Any])?[repo.path] as? [String: Any] ?? [:]
+        XCTAssertEqual(reopened["disabledMcpjsonServers"] as? [String], [])
+        XCTAssertEqual(reopened["enabledMcpjsonServers"] as? [String], ["linear"])
+        XCTAssertEqual(fixture.read(file), before, "still untouched on the way back")
+    }
+
     func testTheFileIsSnapshottedBeforeItIsChanged() throws {
         let fixture = Fixture()
         fixture.mcpServer("notebooklm")

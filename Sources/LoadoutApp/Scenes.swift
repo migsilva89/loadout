@@ -43,7 +43,7 @@ enum Walkthrough {
 
     /// Every scene by the name `LOADOUT_SCENE` takes. `all` plays them in order, for one long
     /// recording; the rest are the short ones a web page can use on their own.
-    static let names = ["browse", "toggle", "plugin", "share", "ask", "mcp", "all", "switches", "tour", "lastswitches"]
+    static let names = ["browse", "toggle", "plugin", "share", "ask", "mcp", "all", "switches", "tour", "lastswitches", "settings"]
 
     static func steps(named name: String) -> [Step] {
         switch name {
@@ -57,6 +57,7 @@ enum Walkthrough {
         case "switches": return switches
         case "tour": return tour
         case "lastswitches": return lastSwitches
+        case "settings": return settings
         default: return []
         }
     }
@@ -325,6 +326,27 @@ enum Walkthrough {
                 guard let server = model.visibleItems.first else { return }
                 model.toggle(server)
             },
+        ]
+    }
+
+    /// Settings taking the pane, with the list beside it frosted over.
+    private static var settings: [Step] {
+        [
+            Step(hold: 1.4) { model in
+                model.selection = .skills
+                model.showsPreview = true
+                model.select(model.visibleItems.first?.id)
+            },
+            Step(hold: 2.6) { $0.showsSettings = true },
+            // Every section held long enough to be photographed: this screen is checked by a
+            // script far more often than by somebody sitting in front of it.
+            Step(hold: 2.2) { $0.settingsSection = "appearance" },
+            Step(hold: 2.0) { $0.settingsSection = "usage" },
+            Step(hold: 2.0) { $0.settingsSection = "assistants" },
+            Step(hold: 2.2) { $0.settingsSection = "storage" },
+            Step(hold: 2.0) { $0.settingsSection = "help" },
+            Step(hold: 1.6) { $0.settingsSection = "projects" },
+            Step(hold: 1.6) { $0.showsSettings = false },
         ]
     }
 

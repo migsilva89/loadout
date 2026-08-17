@@ -39,6 +39,39 @@ struct PluginManagerRow: View {
 
     private var isSelected: Bool { model.selectedPluginID == plugin.id }
 
+    /// The badge, in the three states it actually has: on, off, and on-a-selected-row. The third
+    /// is not a shade of the first — it sits on a different colour and has to be told so.
+    private var tileFill: Color {
+        if isSelected { return Color.white.opacity(0.22) }
+        return plugin.enabled ? V2.accent.opacity(0.2) : V2.offTile
+    }
+
+    private var glyphColor: Color {
+        if isSelected { return Color.white }
+        return plugin.enabled ? V2.accent : V2.offGlyph
+    }
+
+    /// In a project scope the inventory holds only the project's items, so a per-plugin count would
+    /// read a false 0 — plugins are global installs, and the row says so instead. Unless the
+    /// repository decided about this one, which is the more useful thing to know there.
+    private var subtitle: String {
+        if let repositoryChoice = plugin.repositoryChoice, let name = model.context?.name {
+            return "v\(plugin.version) · \(repositoryChoice ? "on" : "off") in \(name)"
+        }
+        return model.context == nil
+            ? "\(itemCount) \(itemCount == 1 ? "item" : "items") · v\(plugin.version)"
+            : "v\(plugin.version) · global"
+    }
+
+    /// Why the switch is not yours to flip here, or nil when it is.
+    private func repositoryVerdict(_ plugin: PluginInfo) -> String? {
+        guard let choice = plugin.repositoryChoice, let name = model.context?.name else { return nil }
+        return """
+        \(name) settles this one in its own settings, which Claude reads after yours, so it is \
+        \(choice ? "on" : "off") while you work there whatever you choose
+        """
+    }
+
     var body: some View {
         row
             .background(isSelected ? V2.accent : Color.clear, in: RoundedRectangle(cornerRadius: 7))
@@ -51,13 +84,16 @@ struct PluginManagerRow: View {
 
     private var row: some View {
         HStack(spacing: 10) {
+            // On a selected row the accent is the *background*, so an accent-tinted tile with an
+            // accent glyph in it vanished entirely — the row lost its icon the moment you clicked
+            // it. Selected rows wear white instead, which is what the name beside them already does.
             RoundedRectangle(cornerRadius: 8)
-                .fill(plugin.enabled ? V2.accent.opacity(0.2) : Color.white.opacity(0.06))
+                .fill(tileFill)
                 .frame(width: 32, height: 32)
                 .overlay {
                     Image(systemName: "puzzlepiece.extension")
                         .font(.system(size: 14))
-                        .foregroundStyle(plugin.enabled ? V2.accent : V2.textDim)
+                        .foregroundStyle(glyphColor)
                 }
             VStack(alignment: .leading, spacing: 2) {
                 Text(plugin.name)
@@ -66,21 +102,18 @@ struct PluginManagerRow: View {
                 // In a project scope the inventory holds only the project's items, so the
                 // per-plugin count would read a false 0 — plugins are global installs, and
                 // the row says so instead.
-                Text(
-                    model.context == nil
-                        ? "\(itemCount) \(itemCount == 1 ? "item" : "items") · v\(plugin.version)"
-                        : "v\(plugin.version) · global"
-                )
+                Text(subtitle)
                     .font(.system(size: 11.5))
                     .foregroundStyle(V2.textDim)
             }
             Spacer(minLength: 6)
             MiniSwitch(on: plugin.enabled) { model.togglePlugin(plugin) }
-                .help(
+                .disabled(plugin.repositoryChoice != nil)
+                .help(repositoryVerdict(plugin) ?? (
                     plugin.enabled
                         ? "Turn off the \(plugin.name) plugin so Claude stops loading what it ships"
                         : "Turn on the \(plugin.name) plugin so Claude loads what it ships"
-                )
+                ))
         }
         .padding(.horizontal, 9)
         .padding(.vertical, 7)
@@ -108,7 +141,13 @@ struct PluginDetailView: View {
             VStack(alignment: .leading, spacing: 16) {
                 header
                 if !plugin.enabled {
-                    Text("The whole plugin is off, so nothing here is loaded. The switches below are each item's own choice, kept for when you turn the plugin back on.")
+                    // The second sentence promises switches "below", which only exist when this
+                    // plugin has switchable items in the list on screen. In a project scope the list
+                    // holds only that repository's own things, so there was nothing below the
+                    // sentence pointing at it.
+                    Text(switchable.isEmpty
+                        ? "The whole plugin is off, so nothing it ships is loaded."
+                        : "The whole plugin is off, so nothing here is loaded. The switches below are each item's own choice, kept for when you turn the plugin back on.")
                         .font(.system(size: 12))
                         .foregroundStyle(V2.amber)
                         .fixedSize(horizontal: false, vertical: true)
@@ -131,6 +170,15 @@ struct PluginDetailView: View {
         .background(V2.window)
     }
 
+    /// The repository's word on this plugin, when it has one. Nil means the choice is yours.
+    private var repositorySettles: String? {
+        guard let choice = plugin.repositoryChoice, let name = model.context?.name else { return nil }
+        return """
+        \(name) keeps this plugin \(choice ? "on" : "off") in its own settings, which Claude reads \
+        after yours. Your switch cannot change it while you are working there.
+        """
+    }
+
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
@@ -138,11 +186,22 @@ struct PluginDetailView: View {
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(V2.text)
                 MiniSwitch(on: plugin.enabled, width: 40, height: 24) { model.togglePlugin(plugin) }
-                    .help(plugin.enabled ? "Turn the whole plugin off" : "Turn the whole plugin on")
+                    .disabled(plugin.repositoryChoice != nil)
+                    .help(repositorySettles ?? (
+                        plugin.enabled ? "Turn the whole plugin off" : "Turn the whole plugin on"
+                    ))
             }
             Text("v\(plugin.version)\(plugin.marketplace.isEmpty ? "" : " · from \(plugin.marketplace)")")
                 .font(.system(size: 12))
                 .foregroundStyle(V2.textDim)
+            // Said out loud rather than left to a tooltip: a switch that will not move needs a
+            // reason on screen, or the app looks broken.
+            if let repositorySettles {
+                Text(repositorySettles)
+                    .font(.system(size: 12))
+                    .foregroundStyle(V2.textMid)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
@@ -153,33 +212,48 @@ struct PluginDetailView: View {
                 .foregroundStyle(V2.textDim)
             VStack(spacing: 1) {
                 ForEach(items) { item in
-                    HStack(spacing: 10) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(item.name)
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundStyle(item.enabled ? V2.text : V2.textDim)
-                            Text(item.description)
-                                .font(.system(size: 11.5))
-                                .foregroundStyle(Color.white.opacity(0.42))
-                                .lineLimit(2)
-                                .multilineTextAlignment(.leading)
-                        }
-                        Spacer(minLength: 6)
-                        if switchable {
-                            MiniSwitch(on: item.enabled) { model.toggle(item) }
-                                .help(
-                                    item.enabled
-                                        ? "Disable just \(item.name), leaving the rest of the plugin alone"
-                                        : "Enable \(item.name) again"
-                                )
-                        }
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(V2.card, in: RoundedRectangle(cornerRadius: 7))
+                    itemRow(item, switchable: switchable)
                 }
             }
+        }
+    }
+
+    /// A row with a switch says what switching it off costs — the plugin keeps working, and the
+    /// choice is not undone the next time the plugin updates. A row without one has to say why
+    /// there is nothing to flip here, or it reads as a switch that failed to draw.
+    @ViewBuilder
+    private func itemRow(_ item: Item, switchable: Bool) -> some View {
+        let row = HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.name)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(item.enabled ? V2.text : V2.textDim)
+                Text(item.description)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Color.white.opacity(0.42))
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+            }
+            Spacer(minLength: 6)
+            if switchable {
+                MiniSwitch(on: item.enabled) { model.toggle(item) }
+                    .help(
+                        item.enabled
+                            ? "Stop Claude loading \(item.name), leaving the rest of the plugin on. "
+                                + "It stays off when the plugin updates."
+                            : "Let Claude load \(item.name) again. A plugin update leaves it on from now on."
+                    )
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(V2.card, in: RoundedRectangle(cornerRadius: 7))
+
+        if !switchable, item.kind == .agent {
+            row.help("Subagents are switched on the Agents tab, not here")
+        } else {
+            row
         }
     }
 }

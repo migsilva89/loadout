@@ -9,6 +9,9 @@ import LoadoutCore
 struct AskPanel: View {
     @Bindable var model: AppModel
     @State private var historyOpen = false
+    /// The box for a model name Loadout does not know, and what is being typed into it.
+    @State private var isTypingModel = false
+    @State private var typedModel = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -38,6 +41,11 @@ struct AskPanel: View {
             Text(model.ask.cli?.label ?? "Ask")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(V2.text)
+                .help(
+                    model.ask.cli.map {
+                        "\($0.label) is the assistant answering here, in a copy of this skill's folder"
+                    } ?? "The assistant that answers here"
+                )
             // A bare spinner at this size is almost invisible against the bar, so it says what it
             // is doing in words beside it.
             if model.ask.isRunning {
@@ -45,19 +53,20 @@ struct AskPanel: View {
                 Text("Working…")
                     .font(.system(size: 11))
                     .foregroundStyle(V2.link)
+                    .help("\(model.ask.cli?.label ?? "The assistant") is still working. Stop is beside the message box.")
             }
             Spacer(minLength: 6)
             Button("History") { historyOpen.toggle() }
                 .buttonStyle(V2ToolbarButtonStyle(prominent: false, enabled: !model.ask.history.isEmpty))
                 .disabled(model.ask.history.isEmpty)
                 .help("The earlier conversations about this skill")
-                .pointingHand()
+                .pointingHand(enabled: !model.ask.history.isEmpty)
                 .popover(isPresented: $historyOpen, arrowEdge: .bottom) { historyList }
             Button("New") { model.ask.startNewConversation() }
                 .buttonStyle(V2ToolbarButtonStyle(prominent: false, enabled: !model.ask.entries.isEmpty))
                 .disabled(model.ask.entries.isEmpty)
                 .help("Start a fresh conversation. This one is kept, under History.")
-                .pointingHand()
+                .pointingHand(enabled: !model.ask.entries.isEmpty)
             Button("Close") { model.showsAskPanel = false }
                 .buttonStyle(V2ToolbarButtonStyle(prominent: false, enabled: true))
                 .help("Hide the conversation. It is kept, and reopens where you left it.")
@@ -217,6 +226,13 @@ struct AskPanel: View {
                                     prominent: proposal.id == model.ask.focusedProposalID, enabled: true
                                 )
                             )
+                            .help(
+                                proposal.pending.isEmpty
+                                    ? "Show what changed in \(proposal.id)"
+                                    : "Show the \(proposal.pending.count) change"
+                                        + (proposal.pending.count == 1 ? "" : "s")
+                                        + " waiting in \(proposal.id)"
+                            )
                             .pointingHand()
                         }
                     }
@@ -251,9 +267,11 @@ struct AskPanel: View {
                         HStack(spacing: 6) {
                             Button("Accept all") { model.ask.acceptAll(in: focused.id) }
                                 .buttonStyle(V2ToolbarButtonStyle(prominent: true, enabled: true))
+                                .help("Take every change waiting in \(focused.id), and write it when you save")
                                 .pointingHand()
                             Button("Reject all") { model.ask.rejectAll(in: focused.id) }
                                 .buttonStyle(V2ToolbarButtonStyle(prominent: false, enabled: true))
+                                .help("Drop every change waiting in \(focused.id) and leave the file as it is")
                                 .pointingHand()
                         }
                     }
@@ -284,6 +302,7 @@ struct AskPanel: View {
                 .background(V2.well, in: RoundedRectangle(cornerRadius: 8))
 
             HStack(spacing: 6) {
+                modelPicker
                 Text(hint)
                     .font(.system(size: 10.5))
                     .foregroundStyle(V2.textFaint)
@@ -317,11 +336,107 @@ struct AskPanel: View {
                         .disabled(model.ask.draftMessage.trimmingCharacters(in: .whitespaces).isEmpty)
                         .keyboardShortcut(.return, modifiers: .command)
                         .help("Send this message (⌘↵)")
-                        .pointingHand()
+                        .pointingHand(
+                            enabled: !model.ask.draftMessage
+                                .trimmingCharacters(in: .whitespaces).isEmpty
+                        )
                 }
             }
         }
         .padding(12)
+    }
+
+    /// Which model answers, beside the message box where the decision is made.
+    ///
+    /// Absent entirely for an assistant Loadout cannot pass a model to, rather than shown greyed:
+    /// a control that can never be used is worse than no control, because it reads as broken.
+    ///
+    /// "Default" is first and is what a fresh install uses — Loadout does not pick a model on
+    /// anybody's behalf, it lets the CLI use whatever that person already configured. Under the
+    /// written list is a box for a name Loadout has not heard of, which is what keeps the list from
+    /// becoming a ceiling the day a new model ships.
+    @ViewBuilder
+    private var modelPicker: some View {
+        if let cli = model.ask.cli, AssistantModels.acceptsAModel(assistantID: cli.id) {
+            let known = AssistantModels.known(for: cli.id)
+            let chosen = model.ask.chosenModel
+            Menu {
+                Button {
+                    model.ask.chosenModel = nil
+                } label: {
+                    Label("Default", systemImage: chosen == nil ? "checkmark" : "")
+                }
+                Divider()
+                ForEach(known) { entry in
+                    Button {
+                        model.ask.chosenModel = entry.id
+                    } label: {
+                        Label(
+                            "\(entry.label) — \(entry.note)",
+                            systemImage: chosen == entry.id ? "checkmark" : ""
+                        )
+                    }
+                }
+                Divider()
+                Button("Another model…") { isTypingModel = true }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "cpu")
+                        .font(.system(size: 10))
+                    Text(modelLabel(for: cli, chosen: chosen))
+                        .font(.system(size: 10.5))
+                }
+                .foregroundStyle(chosen == nil ? V2.textFaint : V2.textMid)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("Which model \(cli.label) answers with. Default lets it use whatever you configured.")
+            .pointingHand()
+            .popover(isPresented: $isTypingModel) {
+                typedModelBox(cli: cli)
+            }
+        }
+    }
+
+    /// What the button reads: the friendly name when the model is one Loadout knows, the name
+    /// itself when it was typed, and "Default" when nothing was chosen.
+    private func modelLabel(for cli: AssistantCLI, chosen: String?) -> String {
+        guard let chosen, !chosen.isEmpty else { return "Default" }
+        return AssistantModels.known(for: cli.id).first { $0.id == chosen }?.label ?? chosen
+    }
+
+    private func typedModelBox(cli: AssistantCLI) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Model name")
+                .font(.system(size: 12, weight: .semibold))
+            Text("Passed to \(cli.label) exactly as you type it.")
+                .font(.system(size: 11))
+                .foregroundStyle(V2.textFaint)
+            TextField("", text: $typedModel)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 240)
+                .onSubmit { commitTypedModel() }
+            HStack {
+                Spacer()
+                Button("Cancel") { isTypingModel = false }
+                    .help("Close without changing which model answers")
+                    .pointingHand()
+                Button("Use") { commitTypedModel() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(typedModel.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .help("Ask \(cli.label) with this model from now on, until you change it")
+                    .pointingHand(enabled: !typedModel.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(14)
+    }
+
+    private func commitTypedModel() {
+        let trimmed = typedModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        model.ask.chosenModel = trimmed
+        typedModel = ""
+        isTypingModel = false
     }
 
     private var hint: String {
@@ -461,24 +576,30 @@ private struct AskBlockCard: View {
                 case .pending:
                     Button("Reject", action: reject)
                         .buttonStyle(V2ToolbarButtonStyle(prominent: false, enabled: true))
+                        .help("Leave these lines as they are and drop this change")
                         .pointingHand()
                     Button("Accept", action: accept)
                         .buttonStyle(V2ToolbarButtonStyle(prominent: true, enabled: true))
+                        .help("Take this change. It reaches the file when you save, and not before.")
                         .pointingHand()
                 case .accepted:
                     Button("Undo", action: reject)
                         .buttonStyle(V2ToolbarButtonStyle(prominent: false, enabled: true))
+                        .help("Take this change back out again")
                         .pointingHand()
                     Label("Accepted", systemImage: "checkmark")
                         .font(.system(size: 10))
                         .foregroundStyle(V2.ok)
+                        .help("Waiting to be written into the file when you save")
                 case .rejected:
                     Button("Accept", action: accept)
                         .buttonStyle(V2ToolbarButtonStyle(prominent: false, enabled: true))
+                        .help("Change your mind and take this change after all")
                         .pointingHand()
                     Text("Rejected")
                         .font(.system(size: 10))
                         .foregroundStyle(V2.textFaint)
+                        .help("Left out, so the file keeps the lines it has")
                 }
             }
 

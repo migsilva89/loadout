@@ -269,11 +269,9 @@ enum SelfCheck {
         try! FileManager.default.createDirectory(
             at: paths.projectsRoot, withIntermediateDirectories: true
         )
-        try! "| Path | Description |\n|---|---|\n| `APPS/loadout` | The app |\n".write(
-            to: paths.projectsIndex, atomically: true, encoding: .utf8
-        )
-
-        let projectModel = AppModel(paths: paths)
+        // The repository is a repository because it holds a `.claude`, which is what the search
+        // looks for — the same rule a real machine is judged by, rather than a listing file.
+        let projectModel = AppModel(paths: paths, roots: ProjectRoots(folders: [paths.projectsRoot]))
         projectModel.hasSeenProjectSkillWarning = false
         projectModel.changeContext(to: projectModel.projects.first)
         let fromRepo = projectModel.items.first { $0.name == "from-repo" }!

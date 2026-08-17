@@ -88,6 +88,13 @@ public struct Item: Identifiable, Equatable, Sendable {
     /// `~/personal/app` — so acting on the name alone would switch off a server belonging to the
     /// other one. Nil for a global server.
     public var projectDirectory: String?
+    /// True for an MCP server the repository itself ships in its `.mcp.json`, the file a team
+    /// commits so everyone gets the same servers.
+    ///
+    /// Worth a flag of its own because it changes who owns the thing: a server in `~/.claude.json`
+    /// is yours to remove, and one in here is the team's. Switching it off is recorded in your own
+    /// config as a server you declined, so nobody else's checkout changes.
+    public var declaredByRepository = false
 
     public init(
         id: String,
@@ -104,12 +111,14 @@ public struct Item: Identifiable, Equatable, Sendable {
         assistants: Set<String> = [],
         budget: Budget = Budget(),
         pluginID: String? = nil,
-        projectDirectory: String? = nil
+        projectDirectory: String? = nil,
+        declaredByRepository: Bool = false
     ) {
         self.assistants = assistants
         self.budget = budget
         self.pluginID = pluginID
         self.projectDirectory = projectDirectory
+        self.declaredByRepository = declaredByRepository
         self.id = id
         self.name = name
         self.kind = kind
@@ -157,7 +166,7 @@ public struct ProjectUsage: Identifiable, Equatable, Hashable, Sendable {
     }
 }
 
-/// A repo the user works in, read from `~/Projects/INDEX.md`.
+/// A repository the owner works in, found inside one of the folders they pointed Loadout at.
 public struct Project: Identifiable, Equatable, Hashable, Sendable {
     public var id: String { path.path }
     public var name: String
@@ -179,15 +188,28 @@ public struct PluginInfo: Identifiable, Equatable, Sendable {
     public var marketplace: String
     public var version: String
     public var installPath: URL
+    /// What is actually in effect, which in a project scope can be the repository's decision rather
+    /// than yours.
     public var enabled: Bool
+    /// What the repository being looked at says about this plugin, and nil when it says nothing.
+    ///
+    /// Claude Code reads a repository's `.claude/settings.json` after your own settings, so this
+    /// overrules you. Worth carrying separately because the switch in the app writes to *your*
+    /// settings: against a repository that decided, flipping it would change a file and nothing
+    /// else, and the app has to say so instead of appearing to work.
+    public var repositoryChoice: Bool?
 
-    public init(id: String, name: String, marketplace: String, version: String, installPath: URL, enabled: Bool) {
+    public init(
+        id: String, name: String, marketplace: String, version: String, installPath: URL,
+        enabled: Bool, repositoryChoice: Bool? = nil
+    ) {
         self.id = id
         self.name = name
         self.marketplace = marketplace
         self.version = version
         self.installPath = installPath
         self.enabled = enabled
+        self.repositoryChoice = repositoryChoice
     }
 }
 

@@ -35,10 +35,37 @@ enum ThemeCheck {
                 luminance($0.0) > luminance($0.1)
             }
 
+            // A switched-off badge — the Plugins list's puzzle tile is the one on screen most —
+            // has to read as quiet rather than as missing. Both the glyph against its own tile and
+            // the tile against the sidebar it sits on, because the icon vanished once by being too
+            // close to the first and the tile by being too close to the second.
+            let offTile = composite(.white, over: palette.side, alpha: 0.05)
+            let offGlyph = mix(rgb(.white), over: offTile, alpha: 0.62)
+            let glyphOnTile = contrast(offGlyph, offTile)
+            let tileOnSidebar = contrast(offTile, rgb(palette.side))
+
+            // And the same badge on a selected row, where the accent is the background: an
+            // accent-tinted tile there disappeared completely, so the row lost its icon the moment
+            // it was clicked. White on the accent is the treatment, measured like everything else.
+            let selectedTile = composite(.white, over: palette.accent, alpha: 0.22)
+            let glyphOnSelected = contrast(rgb(.white), selectedTile)
+
             return [
                 (
                     "\(name): body text on the window reads at \(rounded(onWindow)):1",
                     onWindow >= minimumContrast
+                ),
+                (
+                    "\(name): a badge on a selected row reads at \(rounded(glyphOnSelected)):1",
+                    glyphOnSelected >= 3.0
+                ),
+                (
+                    "\(name): a switched-off glyph reads on its tile at \(rounded(glyphOnTile)):1",
+                    glyphOnTile >= minimumContrast
+                ),
+                (
+                    "\(name): a switched-off tile is visible on the sidebar at \(rounded(tileOnSidebar)):1",
+                    tileOnSidebar >= 1.08
                 ),
                 (
                     "\(name): white on the accent reads at \(rounded(onAccent)):1",
@@ -72,6 +99,20 @@ enum ThemeCheck {
             t.r * alpha + b.r * (1 - alpha),
             t.g * alpha + b.g * (1 - alpha),
             t.b * alpha + b.b * (1 - alpha)
+        )
+    }
+
+    /// The same flattening, when what is behind is already measured components rather than a
+    /// `Color` — a glyph over a translucent tile over a surface is two composites deep.
+    private static func mix(
+        _ top: (r: Double, g: Double, b: Double),
+        over bottom: (r: Double, g: Double, b: Double),
+        alpha: Double
+    ) -> (r: Double, g: Double, b: Double) {
+        (
+            top.r * alpha + bottom.r * (1 - alpha),
+            top.g * alpha + bottom.g * (1 - alpha),
+            top.b * alpha + bottom.b * (1 - alpha)
         )
     }
 

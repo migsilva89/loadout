@@ -180,6 +180,70 @@ final class InventoryTests: XCTestCase {
         XCTAssertEqual(server?.description, "npx notebooklm-mcp")
     }
 
+    /// A repository can turn a plugin off for whoever works in it, in its own `.claude/settings.json`.
+    /// Claude Code reads that after `~/.claude`, so showing the reader's own choice there was the app
+    /// claiming a plugin was on while the assistant had it off.
+    func testARepositoryOverrulesYourOwnPluginChoice() {
+        let fixture = Fixture()
+        fixture.plugin("vercel", marketplace: "mkt", skills: ["deploy"], enabled: true)
+        let repo = fixture.projectRepo("TGC/open-mercato")
+        fixture.repositorySettings(repo, enabledPlugins: ["vercel@mkt": false])
+        let project = Project(name: "open-mercato", relativePath: "TGC/open-mercato", path: repo)
+        let scanner = InventoryScanner(paths: fixture.paths)
+
+        let mine = scanner.installedPlugins().first
+        XCTAssertEqual(mine?.enabled, true, "yours says on")
+        XCTAssertNil(mine?.repositoryChoice, "and no repository is in the question")
+
+        let scoped = scanner.scanAll(project: project).plugins.first
+        XCTAssertEqual(scoped?.enabled, false, "the repository's answer is the one in effect")
+        XCTAssertEqual(scoped?.repositoryChoice, false, "and the row can say who decided")
+    }
+
+    /// A repository that ships servers in its own `.mcp.json` must show them. Reading only
+    /// `~/.claude.json` left a team's servers invisible, which is the app's one promise broken.
+    func testServersARepositoryShipsAreListedUnderThatProject() {
+        let fixture = Fixture()
+        let repo = fixture.projectRepo("TGC/open-mercato")
+        fixture.repositoryMCP(repo, servers: ["linear": "npx linear-mcp", "sentry": "npx sentry-mcp"])
+        let project = Project(name: "open-mercato", relativePath: "TGC/open-mercato", path: repo)
+
+        let items = InventoryScanner(paths: fixture.paths).scanAll(project: project)
+            .items(kind: .mcp)
+
+        XCTAssertEqual(items.map(\.name), ["linear", "sentry"])
+        XCTAssertEqual(items.first?.description, "npx linear-mcp")
+        XCTAssertEqual(items.first?.origin, .project("open-mercato"))
+        XCTAssertTrue(items.allSatisfy(\.declaredByRepository))
+        // Neither approved nor refused yet: Claude Code asks before it loads what a repository
+        // ships, and until that is answered it loads none of them. Off, with the reason on the item.
+        XCTAssertFalse(items.contains(where: \.enabled))
+        XCTAssertEqual(
+            items.first?.warning,
+            "Not approved yet, so Claude is not loading it. Turning it on here is the answer it is waiting for."
+        )
+        // Points at the repository's own file, not at the reader's config.
+        XCTAssertEqual(items.first?.path, fixture.paths.projectMCPJSON(repo))
+        XCTAssertFalse(items.contains { $0.isEditable }, "the team's file is never ours to delete")
+    }
+
+    /// The two answers a person can have given: approved reads as on, refused reads as off, and
+    /// both live in the reader's own config so the repository's file is the same for everybody.
+    func testAnApprovedRepositoryServerIsOnAndARefusedOneIsOff() {
+        let fixture = Fixture()
+        let repo = fixture.projectRepo("TGC/open-mercato")
+        fixture.repositoryMCP(repo, servers: ["linear": "npx linear-mcp", "sentry": "npx sentry-mcp"])
+        fixture.approveRepositoryMCP("linear", in: repo)
+        fixture.declineRepositoryMCP("sentry", in: repo)
+        let project = Project(name: "open-mercato", relativePath: "TGC/open-mercato", path: repo)
+
+        let items = InventoryScanner(paths: fixture.paths).scanAll(project: project)
+            .items(kind: .mcp)
+
+        XCTAssertEqual(items.first { $0.name == "linear" }?.enabled, true)
+        XCTAssertEqual(items.first { $0.name == "sentry" }?.enabled, false)
+    }
+
     func testProjectItemsAppearOnlyWhenAProjectIsInContext() {
         let fixture = Fixture()
         let repo = fixture.projectRepo("PERSONAL/APPS/imark", skills: ["imark-dev"])
@@ -211,35 +275,26 @@ final class InventoryTests: XCTestCase {
 
     // MARK: AC1.6
 
-    func testProjectsComeFromTheGeneratedIndex() {
+    /// Projects come from looking, not from a listing. The nested layout matters: repositories
+    /// live at all sorts of depths under the folder somebody points at.
+    func testProjectsComeFromLookingInsideTheChosenFolder() {
         let fixture = Fixture()
-        fixture.projectsIndex("""
-        # Índice de Projetos
+        fixture.projectRepo("PERSONAL/imark")
+        fixture.projectRepo("TGC/open-mercato")
 
-        | Path | Description |
-        |---|---|
-        | `PERSONAL/APPS/imark` | Markdown review |
-        | `TGC/open-mercato` | Plataforma |
+        let projects = ProjectRoots(folders: [fixture.paths.projectsRoot])
+            .discover(home: fixture.paths.home)
 
-        ## Another section
-
-        | Path | Description |
-        |---|---|
-        | `PERSONAL/APPS/imark` | Duplicado, deve ser ignorado |
-        """)
-
-        let projects = ProjectsIndex(paths: fixture.paths).load()
-        XCTAssertEqual(projects.map(\.relativePath), ["PERSONAL/APPS/imark", "TGC/open-mercato"])
+        XCTAssertEqual(projects.map(\.relativePath), ["PERSONAL/imark", "TGC/open-mercato"])
         XCTAssertEqual(projects.first?.name, "imark")
-        XCTAssertEqual(
-            projects.first?.path.path,
-            fixture.paths.projectsRoot.appendingPathComponent("PERSONAL/APPS/imark").path
-        )
     }
 
-    func testMissingProjectsIndexIsNotAnError() {
+    func testAFolderWithNoRepositoriesIsNotAnError() {
         let fixture = Fixture()
-        XCTAssertEqual(ProjectsIndex(paths: fixture.paths).load(), [])
+        XCTAssertTrue(
+            ProjectRoots(folders: [fixture.paths.projectsRoot])
+                .discover(home: fixture.paths.home).isEmpty
+        )
     }
 
     // MARK: AC2.4
@@ -410,13 +465,8 @@ extension InventoryTests {
         fixture.skill("mine")
         fixture.projectRepo("APPS/loadout", skills: ["from-loadout"])
         fixture.projectRepo("TGC/open-mercato", skills: ["from-mercato"])
-        fixture.projectsIndex("""
-        | Path | Description |
-        |---|---|
-        | `APPS/loadout` | A app |
-        | `TGC/open-mercato` | A plataforma |
-        """)
-        let projects = ProjectsIndex(paths: fixture.paths).load()
+        let projects = ProjectRoots(folders: [fixture.paths.projectsRoot])
+            .discover(home: fixture.paths.home)
 
         let items = InventoryScanner(paths: fixture.paths).scanEverything(projects: projects).items
             .filter { $0.kind == .skill }
@@ -434,13 +484,8 @@ extension InventoryTests {
         let fixture = Fixture()
         fixture.projectRepo("APPS/loadout", skills: ["deploy"])
         fixture.projectRepo("TGC/open-mercato", skills: ["deploy"])
-        fixture.projectsIndex("""
-        | Path | Description |
-        |---|---|
-        | `APPS/loadout` | A app |
-        | `TGC/open-mercato` | A plataforma |
-        """)
-        let projects = ProjectsIndex(paths: fixture.paths).load()
+        let projects = ProjectRoots(folders: [fixture.paths.projectsRoot])
+            .discover(home: fixture.paths.home)
 
         let deploys = InventoryScanner(paths: fixture.paths).scanEverything(projects: projects).items
             .filter { $0.name == "deploy" }
