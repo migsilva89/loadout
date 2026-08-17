@@ -228,6 +228,10 @@ private struct SettingsEscape: NSViewRepresentable {
         coordinator.stop()
     }
 
+    /// Declared main-actor because that is where it actually lives: SwiftUI makes it on the main
+    /// thread, the monitor's handler runs there, and the teardown is called there. Saying so once
+    /// here is what lets the handler read `NSApp` without smuggling anything across a boundary.
+    @MainActor
     final class Coordinator {
         var onEscape: () -> Void
         private var monitor: Any?
@@ -238,21 +242,33 @@ private struct SettingsEscape: NSViewRepresentable {
 
         func start() {
             guard monitor == nil else { return }
-            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
                 // 53 is Escape. Compared by code rather than by character so a keyboard layout
                 // cannot change what it means.
-                guard event.keyCode == 53, let self else { return event }
-                // A sheet over the pane owns Escape — cancelling the sheet is what the key means
-                // then, and closing Settings underneath it would take the sheet with it.
-                //
-                // Asking the key window for its `attachedSheet` asked the wrong window: while a
-                // sheet is up, the sheet *is* the key window, its own `attachedSheet` is nil, and
-                // the guard passed — so Escape over a sheet closed Settings behind it and never
-                // reached the sheet. The question is whether the key window is a sheet, or has one.
-                let key = NSApp.keyWindow
-                guard key?.attachedSheet == nil, key?.isSheet == false else { return event }
-                onEscape()
-                return nil
+                guard event.keyCode == 53 else { return event }
+                // The monitor's handler is always called on the main thread, but its closure is not
+                // declared as main-actor — so reading `NSApp` in it built here and failed on CI,
+                // where the toolchain checks isolation strictly. Stated rather than worked around:
+                // this really is the main actor.
+                let handled = MainActor.assumeIsolated { [weak self] () -> Bool in
+                    guard let self else { return false }
+                    // A sheet over the pane owns Escape — cancelling the sheet is what the key
+                    // means then, and closing Settings underneath it would take the sheet with it.
+                    //
+                    // Asking the key window for its `attachedSheet` asked the wrong window: while a
+                    // sheet is up, the sheet *is* the key window, its own `attachedSheet` is nil,
+                    // and the guard passed — so Escape over a sheet closed Settings behind it and
+                    // never reached the sheet. The question is whether the key window is a sheet,
+                    // or has one.
+                    let key = NSApp.keyWindow
+                    guard key?.attachedSheet == nil, key?.isSheet == false else { return false }
+                    onEscape()
+                    return true
+                }
+                // The event itself never crosses the boundary — only the decision does, which is a
+                // Bool. `NSEvent` is not Sendable, and returning one out of an isolated block is
+                // exactly the kind of thing the compiler is right to refuse.
+                return handled ? nil : event
             }
         }
 
@@ -261,6 +277,10 @@ private struct SettingsEscape: NSViewRepresentable {
             monitor = nil
         }
 
-        deinit { stop() }
+        // No `deinit { stop() }`: a deinitializer is not on any actor, and calling a main-actor
+        // method from one is a race the compiler is right to refuse. `dismantleNSView` is the hook
+        // SwiftUI guarantees on the main thread when the pane goes away, and it already calls this.
+        // Losing the monitor would mean Escape stayed swallowed after Settings closed, so this is
+        // worth being explicit about rather than leaving to whenever the object happens to die.
     }
 }
