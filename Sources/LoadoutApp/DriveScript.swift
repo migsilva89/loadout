@@ -130,6 +130,22 @@ enum DriveScript {
             }
             model.setAssistant(assistant, on: item, present: verb == "share")
             return "ok"
+        case "details":
+            // The fold, through the preference all three of its controls write to.
+            switch argument {
+            case "hide": UserDefaults.standard.set(true, forKey: DetailsDisclosure.key)
+            case "show": UserDefaults.standard.set(false, forKey: DetailsDisclosure.key)
+            case "": DetailsDisclosure.toggle()
+            default: return "hide, show or nothing"
+            }
+            return "ok"
+        case "shot":
+            // A photograph of the window as it stands, for the steps whose whole result is a
+            // layout: a dump can say the cards are folded, and only a picture can say the document
+            // moved up. Same capture the recorder uses, so it needs no screen-recording permission.
+            guard !argument.isEmpty else { return "shot needs a path" }
+            return WindowRecorder.writeWindow(to: URL(fileURLWithPath: argument))
+                ? "ok" : "nothing to photograph"
         case "make-global":
             guard let item = target(argument, model: model) else { return "nothing selected" }
             model.makeGlobal(item)
@@ -191,6 +207,10 @@ enum DriveScript {
             "order": model.order.rawValue,
             "listed": model.visibleItems.prefix(12).map(\.name),
             "plugins": model.plugins.count,
+            // What the detail pane's chrome measures at right now. Folding the cards is a claim
+            // about height, and this is the number that either backs it or doesn't.
+            "chromeHeight": Double(round(model.reportedChromeHeight * 10) / 10),
+            "detailsCollapsed": UserDefaults.standard.bool(forKey: DetailsDisclosure.key),
         ]
         if let error = model.errorMessage { state["error"] = error }
         if let status = model.statusMessage { state["status"] = status }

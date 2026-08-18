@@ -43,6 +43,12 @@ struct DetailView: View {
     /// left, which is what put a second scroller around the whole page.
     @State private var chromeHeight: CGFloat = 380
 
+    /// Whether the three fact cards are folded away, leaving the summary strip in their place.
+    ///
+    /// One answer for the whole app, and remembered: it is a preference about how somebody reads,
+    /// like the reading size below, not state belonging to one skill. See DetailsDisclosure.
+    @AppStorage(DetailsDisclosure.key) private var detailsCollapsed = false
+
     /// Whether the Details card is listing what sits beside the document. Shut by default, and
     /// deliberately not remembered between selections: opening it on one skill should not make
     /// every other skill's card taller before you have even looked at it.
@@ -173,6 +179,31 @@ struct DetailView: View {
             if case .project(let repository) = item.origin, item.kind != .mcp {
                 projectCallout(item, repository: repository)
             }
+            if detailsCollapsed {
+                DetailsSummaryStrip(summary: summary(item)) { toggleDetails() }
+            } else {
+                factCards(item)
+            }
+            // The seam belongs to this block, not to the document below it, for two reasons: it is
+            // the bottom edge of the thing it folds, and being inside the measured block means the
+            // document's height is worked out from a number that already includes it.
+            DetailsSeam(collapsed: detailsCollapsed) { toggleDetails() }
+        }
+        // Safe to read back into a height the document uses: nothing in here is sized from the
+        // document, so the measurement can't chase what it caused.
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { height in
+            chromeHeight = height
+            // Reported outwards for the driver that photographs this pane: the check that the
+            // document really rose by what the cards vacated is a subtraction of two of these, and
+            // a number the view measured is the only honest source for it. See DriveScript.
+            model.reportChromeHeight(height)
+        }
+    }
+
+    /// Token budget, Details and Assistants — the three the fold is about.
+    @ViewBuilder
+    private func factCards(_ item: Item) -> some View {
+        VStack(alignment: .leading, spacing: Self.sectionGap) {
             // The two fact cards share a row while the pane is wide and stack when it
             // isn't — same content either way.
             ViewThatFits(in: .horizontal) {
@@ -194,14 +225,49 @@ struct DetailView: View {
                     detailsCard(item)
                 }
             }
-            if item.kind == .skill || item.kind == .command,
-               item.origin == .personal, item.enabled {
+            if showsAssistants(item) {
                 assistantsCard(item)
             }
         }
-        // Safe to read back into a height the document uses: nothing in here is sized from the
-        // document, so the measurement can't chase what it caused.
-        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { chromeHeight = $0 }
+        // Folded and unfolded are the same content at two heights, so the collapse is a move rather
+        // than a cross-fade: the cards slide up under the header instead of dissolving through it.
+        .transition(.move(edge: .top).combined(with: .opacity))
+        .clipped()
+    }
+
+    /// Who the Assistants card is for: your own skills and commands, while they are switched on.
+    private func showsAssistants(_ item: Item) -> Bool {
+        (item.kind == .skill || item.kind == .command) && item.origin == .personal && item.enabled
+    }
+
+    /// The one gesture behind all three controls — the chip, the seam and ⌥⌘I — so they cannot
+    /// drift into meaning three slightly different things.
+    private func toggleDetails() {
+        withAnimation(DetailsDisclosure.easing) { detailsCollapsed.toggle() }
+    }
+
+    /// The strip's line, built from the very strings the cards print above it.
+    private func summary(_ item: Item) -> DetailsSummary {
+        DetailsSummary(
+            source: sourceText(item),
+            usage: summaryUsage(item),
+            tokens: showsBudget(item)
+                ? "~\(item.budget.descriptionTokens) / ~\(Budget.estimatedTokens(characters: Budget.maxDescriptionCharacters)) tok"
+                : nil,
+            lines: showsBudget(item) ? "\(item.budget.bodyLines) / \(Budget.maxBodyLines) lines" : nil,
+            overBudget: item.budget.isOverBudget,
+            assistants: showsAssistants(item)
+                ? model.visibleAssistants.filter { item.assistants.contains($0.id) }
+                : []
+        )
+    }
+
+    /// "14 uses · 6 projects" — the Details card's sentence with the strip's own separator, and the
+    /// same window named when there is nothing to count, because "no uses" alone claims more than
+    /// the index knows.
+    private func summaryUsage(_ item: Item) -> String {
+        guard !item.usage.neverUsed else { return "No uses in \(windowSuffix)" }
+        return "\(uses(item.usage.count)) · \(count(item.usage.projectCount, of: "project"))"
     }
 
     /// The height the document card's body is given: the pane, less what the header and the
@@ -254,11 +320,14 @@ struct DetailView: View {
                     .font(.system(size: 19, weight: .semibold))
                     .foregroundStyle(V2.text)
                     .lineLimit(1)
-                Text(subtitle(item))
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(V2.textDim)
-                    .lineLimit(1)
-                    .help(subtitleHelp(item))
+                HStack(spacing: 8) {
+                    Text(subtitle(item))
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(V2.textDim)
+                        .lineLimit(1)
+                        .help(subtitleHelp(item))
+                    DetailsChip(collapsed: detailsCollapsed) { toggleDetails() }
+                }
             }
             Spacer(minLength: 12)
             // Every skill has this switch now, whoever it belongs to: a plugin shipping 38 of them

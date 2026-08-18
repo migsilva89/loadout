@@ -48,23 +48,46 @@ final class WindowRecorder {
         if let timer { RunLoop.main.add(timer, forMode: .common) }
     }
 
-    private func capture() {
-        // The window itself, never an attached sheet: a sheet's content is drawn by a layer tree
-        // this cannot read, and capturing it produced blank white frames — worse than the window
-        // underneath, which at least shows something true.
+    /// The window as PNG bytes, or nil when there is no window worth reading yet.
+    ///
+    /// The window itself, never an attached sheet: a sheet's content is drawn by a layer tree this
+    /// cannot read, and capturing it produced blank white frames — worse than the window underneath,
+    /// which at least shows something true.
+    ///
+    /// Static, because one-off photographs want it too: a driven step whose whole result is a layout
+    /// — the fact cards folding and the document rising into the space — can only be checked by
+    /// looking, and re-implementing the capture beside this one is how the two drift apart.
+    static func windowPNG() -> Data? {
         let candidates = NSApp.windows.filter { $0.isVisible && $0.contentView != nil }
         guard let window = candidates.first(where: { $0.isKeyWindow && $0.attachedSheet == nil })
                 ?? candidates.first,
               let view = window.contentView,
               view.bounds.width > 1, view.bounds.height > 1
-        else { return }
+        else { return nil }
 
-        guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+        guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return nil }
         rep.size = view.bounds.size
         view.cacheDisplay(in: view.bounds, to: rep)
+        return rep.representation(using: NSBitmapImageRep.FileType.png, properties: [:])
+    }
 
-        guard let data = rep.representation(using: NSBitmapImageRep.FileType.png, properties: [:])
-        else { return }
+    /// One frame, to a path somebody named. True when a picture was written.
+    @discardableResult
+    static func writeWindow(to url: URL) -> Bool {
+        guard let data = windowPNG() else { return false }
+        try? FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true
+        )
+        do {
+            try data.write(to: url)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private func capture() {
+        guard let data = Self.windowPNG() else { return }
         let name = String(format: "frame-%04d.png", frame)
         try? data.write(to: directory.appendingPathComponent(name))
         timings.append(String(format: "%@ %.3f", name, Date().timeIntervalSince(started)))

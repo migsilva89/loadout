@@ -776,6 +776,15 @@ final class AppModel {
         makeGlobalError = nil
     }
 
+    /// What the detail pane last measured its chrome at — header, callouts, cards, seam.
+    ///
+    /// Held here only so a run driven from outside can read it: the check that folding the cards
+    /// really gave the document their height is the difference between two of these, and the view is
+    /// the only thing that knows the real number. Nothing in the interface is laid out from it.
+    private(set) var reportedChromeHeight: CGFloat = 0
+
+    func reportChromeHeight(_ height: CGFloat) { reportedChromeHeight = height }
+
     /// Where the copy landed, once it has. Non-nil is what turns the dialog into its receipt.
     private(set) var makeGlobalDestination: String?
     /// Why it didn't, in the same dialog.

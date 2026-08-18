@@ -13,6 +13,8 @@ struct LoadoutApp: App {
     /// The reading size, shared with the pane and the Aa popover through the same stored key — the
     /// menu is another way to set the one preference, not a second copy of it.
     @AppStorage("readerFontSize") private var readerFontSize = LoadoutApp.defaultReadingSize
+    /// The fold's one preference, read here so the menu item can name the direction it will move.
+    @AppStorage(DetailsDisclosure.key) private var detailsCollapsed = false
 
     /// The same bounds the Aa popover's slider works in.
     static let readingSizes: ClosedRange<Double> = 13...20
@@ -105,6 +107,14 @@ struct LoadoutApp: App {
             // owns the typeface and the background; this is only the size, which is the one of the
             // three the hand reaches for mid-sentence.
             CommandGroup(before: .toolbar) {
+                // In the View menu, with a shortcut, because the seam and the chip are both things
+                // you have to see before you can use them — and the menu is also where the state is
+                // legible without looking at the pane: the item names the direction it will move.
+                Button(detailsCollapsed ? "Show Details" : "Hide Details") {
+                    withAnimation(DetailsDisclosure.easing) { detailsCollapsed.toggle() }
+                }
+                .keyboardShortcut("i", modifiers: [.option, .command])
+                Divider()
                 Button("Bigger Text") { readerFontSize = min(Self.readingSizes.upperBound, readerFontSize + 1) }
                     .keyboardShortcut("+", modifiers: .command)
                     .disabled(readerFontSize >= Self.readingSizes.upperBound)
