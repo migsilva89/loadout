@@ -11,6 +11,10 @@
 </p>
 
 <p align="center">
+  <a href="https://loadout.migsilva.dev"><strong>loadout.migsilva.dev</strong></a> — what it does, guides and download
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/macOS-15%2B-blue?style=flat-square" alt="macOS 15 or later">
   <img src="https://img.shields.io/badge/Swift-6-orange?style=flat-square" alt="Swift 6">
   <img src="https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square" alt="MIT license">
@@ -39,7 +43,7 @@
 
 ## Install
 
-1. Download the latest DMG from [**Releases**](../../releases/latest).
+1. Download the latest DMG from [**Releases**](../../releases/latest) (or start at the [website](https://loadout.migsilva.dev)).
 2. Open it and drag **Loadout** to **Applications**.
 
 Requires macOS 15 or newer. The build is signed and notarised, so it opens without a warning and
