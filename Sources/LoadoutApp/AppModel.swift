@@ -144,6 +144,9 @@ final class AppModel {
     var restoring: RestoringSkill?
     /// A project skill waiting on the one-time "this will show up in your repository" warning.
     var pendingProjectDisable: Item?
+    /// A repository's item waiting on the one-time "you'll have two of them" note. Non-nil is what
+    /// shows the sheet, the same way `pendingProjectDisable` works.
+    var pendingMakeGlobal: Item?
     /// The plugin whose detail the Plugins tab is showing.
     var selectedPluginID: String?
 
@@ -203,6 +206,7 @@ final class AppModel {
         get { mutations.records.hasSeenProjectWarning }
         set { if newValue { try? mutations.records.rememberProjectWarning() } }
     }
+
 
     /// Assistants Settings › Assistants has hidden from the rows and the detail panel.
     /// Stored under the same UserDefaults key the Settings tab reads with `@AppStorage`, so
@@ -740,10 +744,51 @@ final class AppModel {
     /// The project keeps its own, so nobody else loses anything; from then on the two are separate
     /// files with separate lives, which is said out loud rather than left to be discovered.
     func makeGlobal(_ item: Item) {
-        let noun = item.kind.briefingNoun
-        perform("Copied \(item.name) to your \(noun)s. The project keeps its own.") {
-            try mutations.makeGlobal(item)
+        // The one dialog carries both halves: what you are about to end up with, and then what
+        // actually happened and where it went. A click whose only answer was a grey line in the
+        // opposite corner of the window read as a click that did nothing, and the second one
+        // failed with "already exists".
+        pendingMakeGlobal = item
+        makeGlobalDestination = nil
+        makeGlobalError = nil
+    }
+
+    /// The note was read; take the copy, and keep the dialog up to say how it went.
+    func confirmMakeGlobal() {
+        guard let item = pendingMakeGlobal else { return }
+        do {
+            let destination = try mutations.makeGlobal(item)
+            makeGlobalDestination = readablePath(destination)
+            statusMessage = "Copied \(item.name) to your \(item.kind.briefingNoun)s. The project keeps its own."
+            errorMessage = nil
+            reload()
+        } catch {
+            // Said inside the dialog that asked, not in the app-wide alert: the answer belongs to
+            // the question, and an alert stacked over an open sheet is the thing SwiftUI handles
+            // worst here anyway.
+            makeGlobalError = (error as? LoadoutError)?.errorDescription ?? error.localizedDescription
         }
+    }
+
+    func dismissMakeGlobal() {
+        pendingMakeGlobal = nil
+        makeGlobalDestination = nil
+        makeGlobalError = nil
+    }
+
+    /// Where the copy landed, once it has. Non-nil is what turns the dialog into its receipt.
+    private(set) var makeGlobalDestination: String?
+    /// Why it didn't, in the same dialog.
+    private(set) var makeGlobalError: String?
+
+    /// Whether you already have your own copy of a repository's item.
+    ///
+    /// What the callout reads to stop offering a copy it already took: offering "Make global" a
+    /// second time, and then failing with "already exists", is the app forgetting what it did.
+    func hasGlobalCopy(of item: Item) -> Bool { mutations.hasGlobalCopy(of: item) }
+
+    private func readablePath(_ url: URL) -> String {
+        url.path.replacingOccurrences(of: paths.home.path, with: "~")
     }
 
     /// A command is a file beside its neighbours, so there is nowhere to choose on the way back:

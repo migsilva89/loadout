@@ -313,6 +313,26 @@ public struct Mutations: Sendable {
     /// The other direction, global into a repository, is deliberately absent: putting a skill in a
     /// repository hands it to the team, and that is a decision to make on purpose in the Finder,
     /// not a button beside a switch.
+    /// Where your own copy of a repository's item lives, or would live.
+    public func globalLocation(of item: Item) -> URL? {
+        guard let source = item.directory ?? item.path else { return nil }
+        switch item.kind {
+        case .skill: return paths.skills.appendingPathComponent(source.lastPathComponent)
+        case .command: return paths.commands.appendingPathComponent(source.lastPathComponent)
+        case .agent: return paths.agents.appendingPathComponent(source.lastPathComponent)
+        default: return nil
+        }
+    }
+
+    /// Whether you already have your own copy of a repository's item, by name.
+    ///
+    /// What the button beside it reads from: offering "Make global" for the second time, and then
+    /// failing with "already exists", is the app forgetting what it did a moment ago.
+    public func hasGlobalCopy(of item: Item) -> Bool {
+        guard case .project = item.origin, let destination = globalLocation(of: item) else { return false }
+        return fm.fileExists(atPath: destination.path)
+    }
+
     @discardableResult
     public func makeGlobal(_ item: Item) throws -> URL {
         guard case .project = item.origin else { throw LoadoutError.notEditable(item.name) }

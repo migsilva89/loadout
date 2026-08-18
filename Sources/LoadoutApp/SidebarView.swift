@@ -717,7 +717,11 @@ struct SidebarRow: View {
             // Only from a repository outwards. The other direction hands a file to a team, which
             // is not a thing to do from a context menu.
             if case .project = item.origin, item.kind != .mcp {
-                Button("Make global") { model.makeGlobal(item) }
+                // Gone once your copy exists, like the button in the detail pane: a menu that offers
+                // the same copy twice is a menu that lies the second time.
+                if !model.hasGlobalCopy(of: item) {
+                    Button("Make global") { model.makeGlobal(item) }
+                }
             }
             Button("Show in Finder") {
                 model.select(item.id)

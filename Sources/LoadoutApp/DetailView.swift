@@ -345,33 +345,44 @@ struct DetailView: View {
     /// person to go looking for it walked past it twice. So it says what the limit is and offers
     /// the way out in the same breath, once, on the items where it is true.
     private func projectCallout(_ item: Item, repository: String) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: "folder.badge.gearshape")
+        // Once your copy exists there is nothing left to offer here, so the button goes and the row
+        // is left saying what is true: this one belongs to the repository. Where the copy went was
+        // said by the dialog that made it, path and all — leaving a live button beside a copy that
+        // was already taken is how "Make global" came to be clicked twice.
+        let copied = model.hasGlobalCopy(of: item)
+        return HStack(spacing: 12) {
+            Image(systemName: copied ? "checkmark.circle.fill" : "folder.badge.gearshape")
                 .font(.system(size: 15))
-                .foregroundStyle(V2.accent)
+                .foregroundStyle(copied ? V2.ok : V2.accent)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Only works inside \(repository)")
+                Text(copied ? "You have your own copy of this" : "Only works inside \(repository)")
                     .font(.system(size: 12.5, weight: .medium))
                     .foregroundStyle(V2.text)
-                Text("Make a copy of your own and it works in every project. The repository keeps its own, so nobody else loses it.")
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(V2.textMid)
-                    .fixedSize(horizontal: false, vertical: true)
+                Text(
+                    copied
+                        ? "Yours works in every project. This one is \(repository)'s, and the two are separate files."
+                        : "Make a copy of your own and it works in every project. The repository keeps its own, so nobody else loses it."
+                )
+                .font(.system(size: 11.5))
+                .foregroundStyle(V2.textMid)
+                .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 8)
-            Button {
-                model.makeGlobal(item)
-            } label: {
-                Text("Make global")
-                    .font(.system(size: 12.5, weight: .medium))
-                    .foregroundStyle(Color.white)
-                    .padding(.horizontal, 12)
-                    .frame(height: 28)
-                    .background(V2.accent, in: RoundedRectangle(cornerRadius: 7))
+            if !copied {
+                Button {
+                    model.makeGlobal(item)
+                } label: {
+                    Text("Make global")
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundStyle(Color.white)
+                        .padding(.horizontal, 12)
+                        .frame(height: 28)
+                        .background(V2.accent, in: RoundedRectangle(cornerRadius: 7))
+                }
+                .buttonStyle(.plain)
+                .help("Copy \(item.name) into your own \(item.kind.briefingNoun)s, leaving the repository's copy where it is")
+                .pointingHand()
             }
-            .buttonStyle(.plain)
-            .help("Copy \(item.name) into your own \(item.kind.briefingNoun)s, leaving the repository's copy where it is")
-            .pointingHand()
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)

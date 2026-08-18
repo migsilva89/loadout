@@ -288,14 +288,31 @@ enum SelfCheck {
                 atPath: repo.appendingPathComponent(".claude/skills-off/from-repo/SKILL.md").path
             )
         )
-        // Out of the repository and into your own, as a copy: the project keeps what it had.
-        projectModel.makeGlobal(projectModel.items.first { $0.name == "from-repo" }!)
+        // Out of the repository and into your own, as a copy: the project keeps what it had. The
+        // first one asks before copying, because from then on there are two files, not one.
+        let repoCopy = projectModel.items.first { $0.name == "from-repo" }!
+        projectModel.makeGlobal(repoCopy)
+        check("making something global asks first", projectModel.pendingMakeGlobal?.name == "from-repo")
+        check(
+            "and nothing was copied while the note was up",
+            !FileManager.default.fileExists(
+                atPath: paths.skills.appendingPathComponent("from-repo/SKILL.md").path
+            )
+        )
+        projectModel.confirmMakeGlobal()
         check(
             "making a project skill global copies it to your own",
             FileManager.default.fileExists(
                 atPath: paths.skills.appendingPathComponent("from-repo/SKILL.md").path
             )
         )
+        check("the callout knows the copy is there", projectModel.hasGlobalCopy(of: repoCopy))
+        check(
+            "and the dialog says where it landed",
+            projectModel.makeGlobalDestination?.hasSuffix("/.claude/skills/from-repo") == true
+        )
+        projectModel.dismissMakeGlobal()
+        check("closing it clears the dialog", projectModel.pendingMakeGlobal == nil)
         check(
             "and the project keeps its own",
             FileManager.default.fileExists(

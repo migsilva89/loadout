@@ -813,6 +813,91 @@ struct RestoreSkillSheet: View {
 /// Loadout runs no git commands and knows nothing about version control. It moves a folder — but
 /// that folder lives inside a repository, so the change lands next to whatever work is in progress
 /// and could be committed without anyone meaning to. Worth saying once; not worth saying twice.
+/// Taking a copy out of a repository, asked and answered in one place.
+///
+/// Two states, one dialog: the question — you are about to have two of these, and yours stops
+/// following theirs — and then the receipt, with the path the copy actually landed on. The receipt
+/// is the point: the copy used to happen behind a click that changed nothing on screen.
+struct MakeGlobalWarningSheet: View {
+    @Bindable var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+
+    private var item: Item? { model.pendingMakeGlobal }
+    private var done: Bool { model.makeGlobalDestination != nil || model.makeGlobalError != nil }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                if done {
+                    Image(systemName: model.makeGlobalError == nil ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .foregroundStyle(model.makeGlobalError == nil ? Color.green : Color.orange)
+                }
+                Text(title)
+                    .font(.title3.weight(.semibold))
+            }
+            Text(message)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let destination = model.makeGlobalDestination {
+                Text(destination)
+                    .font(.system(size: 11.5, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .lineLimit(2)
+                    .truncationMode(.middle)
+            }
+            HStack {
+                Spacer()
+                if done {
+                    Button("Done") { close() }
+                        .keyboardShortcut(.defaultAction)
+                        .help("Close this")
+                        .pointingHand()
+                } else {
+                    Button("Cancel") { close() }
+                        .keyboardShortcut(.cancelAction)
+                        .help("Leave it where it is, working only inside that repository")
+                        .pointingHand()
+                    Button("Make Global") { model.confirmMakeGlobal() }
+                        .keyboardShortcut(.defaultAction)
+                        .help("Copy it into your own folder, where every project sees it")
+                        .pointingHand()
+                }
+            }
+        }
+        .padding(20)
+        .frame(width: 440)
+    }
+
+    private func close() {
+        model.dismissMakeGlobal()
+        dismiss()
+    }
+
+    private var title: String {
+        if model.makeGlobalError != nil { return "Couldn't copy it" }
+        if model.makeGlobalDestination != nil { return "It's yours now" }
+        return "You'll have two of these"
+    }
+
+    private var message: String {
+        if let error = model.makeGlobalError { return error }
+        guard let item else { return "" }
+        let noun = item.kind.briefingNoun
+        let repository: String
+        if case .project(let name) = item.origin { repository = name } else { repository = "the repository" }
+        if model.makeGlobalDestination != nil {
+            return "\(item.name) is one of your \(noun)s from now on, so every project sees it. \(repository) keeps the one it had, and the two are separate files."
+        }
+        return """
+            \(item.name) is copied into your own \(noun)s, where every project sees it. \(repository) \
+            keeps the one it has, so nobody else loses anything — but the two are separate files from \
+            now on: their changes stop reaching your copy, and yours never touch theirs.
+            """
+    }
+}
+
 struct ProjectSkillWarningSheet: View {
     @Bindable var model: AppModel
     @Environment(\.dismiss) private var dismiss

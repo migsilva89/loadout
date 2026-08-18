@@ -129,6 +129,9 @@ struct ContentView: View {
         .sheet(item: $model.editingCustomAssistantCLI) { entry in AssistantCLIFormSheet(model: model, editing: entry) }
         .sheet(item: $model.restoring) { _ in RestoreSkillSheet(model: model) }
         .sheet(item: $model.pendingProjectDisable) { _ in ProjectSkillWarningSheet(model: model) }
+        // A sheet, not a third `.alert`: two on this view is already as far as SwiftUI is willing
+        // to go here, and the note has a "don't tell me again" of its own to hold anyway.
+        .sheet(item: $model.pendingMakeGlobal) { _ in MakeGlobalWarningSheet(model: model) }
         // One alert for both kinds of destruction, not two chained ones. Two `.alert` modifiers on
         // the same view is a thing SwiftUI does not promise: with a third attached here, an empty
         // alert panel presented itself at launch with nobody asking. The question and the

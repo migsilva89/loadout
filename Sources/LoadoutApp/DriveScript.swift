@@ -113,9 +113,16 @@ enum DriveScript {
             model.restoring = restoring
             return "ok"
         case "confirm-warning":
-            guard model.pendingProjectDisable != nil else { return "no warning was up" }
-            model.confirmProjectDisable(rememberChoice: argument == "remember")
-            return "ok"
+            let remember = argument == "remember"
+            if model.pendingProjectDisable != nil {
+                model.confirmProjectDisable(rememberChoice: remember)
+                return "ok"
+            }
+            if model.pendingMakeGlobal != nil {
+                model.confirmMakeGlobal()
+                return "ok"
+            }
+            return "no warning was up"
         case "share", "unshare":
             guard let item = model.selected else { return "nothing selected" }
             guard let assistant = model.assistants.first(where: { $0.id == argument }) else {
