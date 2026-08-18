@@ -704,6 +704,86 @@ public struct Mutations: Sendable {
         try writeJSON(root, to: file)
     }
 
+    /// Uninstalls a plugin: its files to the Trash, its entry out of Claude Code's register, and
+    /// its flag out of your settings.
+    ///
+    /// Three records, and leaving any of them behind is its own kind of lie: the folder without the
+    /// entry is a plugin Claude Code still lists and cannot load, the entry without the folder is a
+    /// row in this app pointing at nothing, and a stale `enabledPlugins` flag is a decision about
+    /// something that no longer exists.
+    ///
+    /// What it deliberately does not touch: the marketplace under `plugins/marketplaces`. One
+    /// marketplace serves many plugins, so removing it with one of them would uninstall the others
+    /// by surprise — reinstalling is `/plugin` in Claude Code, and it needs the marketplace there.
+    ///
+    /// The Trash, never a delete, and a snapshot first: this is somebody's tree of files, and the
+    /// same rule the rest of the app follows for a folder it did not write.
+    public func removePlugin(_ plugin: PluginInfo) throws {
+        // The install path comes out of a JSON file this app does not own. Refusing anything outside
+        // the plugin cache is what keeps a hand-edited or corrupted register from pointing the Trash
+        // at a home directory.
+        let cache = paths.pluginCache.standardizedFileURL.path
+        let target = plugin.installPath.standardizedFileURL
+        guard target.path.hasPrefix(cache + "/") else {
+            throw LoadoutError.io(
+                "\(plugin.name) is recorded as living at \(target.path), which is outside the plugin cache. Nothing was changed."
+            )
+        }
+        guard fm.fileExists(atPath: paths.installedPlugins.path) else {
+            throw LoadoutError.notFound("Claude Code's plugin register")
+        }
+
+        // The register first, and only then the files: an app killed between the two leaves a plugin
+        // that is gone from the list with its folder still on disk, which is recoverable by hand. The
+        // other order leaves Claude Code loading a folder that has moved to the Trash.
+        try backups.snapshot(paths.installedPlugins)
+        var register: [String: Any] = [:]
+        if let data = try? Data(contentsOf: paths.installedPlugins),
+           let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            register = parsed
+        }
+        guard var plugins = register["plugins"] as? [String: Any], plugins[plugin.id] != nil else {
+            throw LoadoutError.notFound(plugin.id)
+        }
+        plugins.removeValue(forKey: plugin.id)
+        register["plugins"] = plugins
+        try writeJSON(register, to: paths.installedPlugins)
+
+        // The flag in your own settings, if there is one. Left behind, it is an answer about a
+        // plugin that no longer exists — and the one that comes back the day it is reinstalled.
+        for file in [paths.settings, paths.localSettings] {
+            guard let data = try? Data(contentsOf: file),
+                  var root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  var flags = root["enabledPlugins"] as? [String: Any],
+                  flags[plugin.id] != nil
+            else { continue }
+            try backups.snapshot(file)
+            flags.removeValue(forKey: plugin.id)
+            root["enabledPlugins"] = flags
+            try writeJSON(root, to: file)
+        }
+
+        if fm.fileExists(atPath: target.path) {
+            try backups.snapshot(target)
+            do {
+                try fm.trashItem(at: target, resultingItemURL: nil)
+            } catch {
+                throw LoadoutError.io(
+                    "The register is updated, but the folder wouldn't move to the Trash: \(error.localizedDescription)"
+                )
+            }
+            // The folder above it is `cache/<marketplace>/<plugin>`, one level per version. Emptied
+            // of versions it is scaffolding, and left there it makes the cache read as holding
+            // plugins it does not.
+            let versions = target.deletingLastPathComponent()
+            if versions.deletingLastPathComponent().standardizedFileURL.path != cache,
+               let remaining = try? fm.contentsOfDirectory(atPath: versions.path),
+               remaining.filter({ $0 != ".DS_Store" }).isEmpty {
+                try? fm.trashItem(at: versions, resultingItemURL: nil)
+            }
+        }
+    }
+
     private func writeJSON(_ object: [String: Any], to file: URL) throws {
         do {
             let data = try JSONSerialization.data(

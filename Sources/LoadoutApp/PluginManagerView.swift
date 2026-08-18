@@ -155,6 +155,7 @@ struct PluginDetailView: View {
                 if !switchable.isEmpty {
                     section("Skills and commands", items: switchable, switchable: true)
                 }
+                whereItLives
                 if !rest.isEmpty {
                     // Subagents have no per-item switch inside a plugin's detail — the Agents tab
                     // is where they are switched — so they are listed without one. MCP servers are
@@ -203,6 +204,80 @@ struct PluginDetailView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+
+    /// Where the plugin actually is, what it brought, and the two things you can do to the whole of
+    /// it — open it, or take it out.
+    ///
+    /// The page used to be a switch, a version and a list of names: nothing about where those files
+    /// live, nothing about what installed them, and no way to remove one — so "how do I get rid of
+    /// this?" had no answer on the screen that was about it.
+    private var whereItLives: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("THE PLUGIN ITSELF")
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundStyle(V2.textDim)
+            VStack(spacing: 1) {
+                factRow("From", plugin.marketplace.isEmpty ? "an unnamed marketplace" : plugin.marketplace)
+                factRow("Version", plugin.version.isEmpty ? "not recorded" : "v\(plugin.version)")
+                factRow("Ships", model.pluginContents(plugin))
+                factRow("Location", model.readablePath(of: plugin), mono: true) {
+                    Button("Reveal") { model.revealPlugin(plugin) }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(V2.link)
+                        .help("Show \(plugin.name)'s own folder in the Finder")
+                        .pointingHand()
+                }
+            }
+            HStack(spacing: 10) {
+                Button {
+                    model.removePlugin(plugin)
+                } label: {
+                    Text("Remove plugin…")
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundStyle(V2.issue)
+                        .padding(.horizontal, 12)
+                        .frame(height: 28)
+                        .background(V2.issue.opacity(0.12), in: RoundedRectangle(cornerRadius: 7))
+                        .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(V2.issue.opacity(0.35), lineWidth: 0.5))
+                }
+                .buttonStyle(.plain)
+                .help("Uninstall \(plugin.name): its folder to the Trash and its entry out of Claude Code's register")
+                .pointingHand()
+                // Said beside the button, not only inside the dialog it opens: switching off and
+                // removing are two different things, and somebody who only wants the plugin quiet
+                // should be able to tell before pressing anything.
+                Text("Switching it off above keeps the files. This takes them away.")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(V2.textFaint)
+            }
+            .padding(.top, 2)
+        }
+    }
+
+    private func factRow<Trailing: View>(
+        _ label: String, _ value: String, mono: Bool = false,
+        @ViewBuilder trailing: () -> Trailing = { EmptyView() }
+    ) -> some View {
+        HStack(spacing: 12) {
+            Text(label)
+                .font(.system(size: 12.5))
+                .foregroundStyle(Color.white.opacity(0.5))
+                .frame(width: 74, alignment: .leading)
+            Text(value)
+                .font(mono ? .system(size: 11.5, design: .monospaced) : .system(size: 12.5))
+                .foregroundStyle(mono ? V2.textMid : Color.white.opacity(0.88))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            trailing()
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(V2.card, in: RoundedRectangle(cornerRadius: 8))
     }
 
     private func section(_ title: String, items: [Item], switchable: Bool) -> some View {

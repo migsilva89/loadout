@@ -149,6 +149,9 @@ final class AppModel {
     var pendingMakeGlobal: Item?
     /// The plugin whose detail the Plugins tab is showing.
     var selectedPluginID: String?
+    /// A plugin waiting on the "this is what will happen" note before it is uninstalled. Non-nil is
+    /// what shows the sheet, and it stays non-nil afterwards to say how it went.
+    var pendingPluginRemoval: PluginInfo?
 
     let paths: Paths
     /// Re-made on every reload rather than kept for the life of the app: it discovers the
@@ -1015,6 +1018,57 @@ final class AppModel {
         }
     }
 
+    /// Opens the note that precedes uninstalling a plugin.
+    func removePlugin(_ plugin: PluginInfo) {
+        pendingPluginRemoval = plugin
+        pluginRemovalDone = false
+        pluginRemovalError = nil
+    }
+
+    /// The note was read; take the plugin out and keep the sheet up to say what happened.
+    func confirmRemovePlugin() {
+        guard let plugin = pendingPluginRemoval else { return }
+        do {
+            try mutations.removePlugin(plugin)
+            pluginRemovalDone = true
+            statusMessage = "Removed the \(plugin.name) plugin. Its folder is in the Trash."
+            errorMessage = nil
+            if selectedPluginID == plugin.id { selectedPluginID = nil }
+            reload()
+        } catch {
+            // In the sheet that asked, not in the app-wide alert: a half-done uninstall has to be
+            // read beside the thing it was about, and this one can fail after the register is
+            // already written.
+            pluginRemovalError = (error as? LoadoutError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    func dismissPluginRemoval() {
+        pendingPluginRemoval = nil
+        pluginRemovalDone = false
+        pluginRemovalError = nil
+    }
+
+    private(set) var pluginRemovalDone = false
+    private(set) var pluginRemovalError: String?
+
+    /// What a plugin ships, counted by kind, for the line that says what removing it takes away.
+    func pluginContents(_ plugin: PluginInfo) -> String {
+        let items = itemsOfPlugin(plugin)
+        let counts: [(ItemKind, String)] = [(.skill, "skill"), (.command, "command"), (.agent, "subagent")]
+        let parts = counts.compactMap { kind, noun -> String? in
+            let total = items.filter { $0.kind == kind }.count
+            guard total > 0 else { return nil }
+            return "\(total) \(noun)\(total == 1 ? "" : "s")"
+        }
+        guard !parts.isEmpty else { return "nothing this app can see" }
+        guard parts.count > 1 else { return parts[0] }
+        return parts.dropLast().joined(separator: ", ") + " and " + parts[parts.count - 1]
+    }
+
+    /// A plugin's folder written the way a person reads it.
+    func readablePath(of plugin: PluginInfo) -> String { readablePath(plugin.installPath) }
+
     func togglePlugin(_ plugin: PluginInfo) {
         // The switch is already disabled where a repository has decided; this is the same answer for
         // anything that reaches here another way, because writing your settings would change a file
@@ -1168,6 +1222,12 @@ final class AppModel {
         } else if let folder = item.directory {
             NSWorkspace.shared.activateFileViewerSelecting([folder])
         }
+    }
+
+    /// A plugin's own folder in the Finder. Its own call: `revealInFinder` works off the selected
+    /// *item*, and on the Plugins tab there is no item selected — only a plugin.
+    func revealPlugin(_ plugin: PluginInfo) {
+        NSWorkspace.shared.activateFileViewerSelecting([plugin.installPath])
     }
 
     func revealBackups() {

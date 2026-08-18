@@ -130,6 +130,18 @@ enum DriveScript {
             }
             model.setAssistant(assistant, on: item, present: verb == "share")
             return "ok"
+        case "remove-plugin":
+            guard let plugin = model.plugins.first(where: { $0.name == argument })
+                ?? model.selectedPlugin
+            else { return "no such plugin" }
+            model.removePlugin(plugin)
+            return "ok"
+        case "confirm-remove-plugin":
+            guard model.pendingPluginRemoval != nil else { return "nothing was asked" }
+            model.confirmRemovePlugin()
+            let failed = model.pluginRemovalError
+            model.dismissPluginRemoval()
+            return failed ?? "ok"
         case "details":
             // The fold, through the preference all three of its controls write to.
             switch argument {

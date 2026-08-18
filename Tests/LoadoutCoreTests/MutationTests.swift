@@ -88,6 +88,59 @@ final class MutationTests: XCTestCase {
         XCTAssertEqual(InventoryScanner(paths: fixture.paths).installedPlugins().first?.enabled, false)
     }
 
+    // MARK: Removing a whole plugin
+
+    func testRemovingAPluginTakesTheFolderTheEntryAndTheFlag() throws {
+        let fixture = Fixture()
+        fixture.plugin("vercel", marketplace: "official", skills: ["deploy"], enabled: false)
+        fixture.plugin("remotion", marketplace: "official", skills: ["render"])
+        let mutations = Mutations(paths: fixture.paths)
+        let scanner = InventoryScanner(paths: fixture.paths)
+        let plugin = scanner.installedPlugins().first { $0.name == "vercel" }!
+
+        try mutations.removePlugin(plugin)
+
+        XCTAssertFalse(fixture.exists(plugin.installPath), "the folder is gone from the cache")
+        let register = try JSONSerialization.jsonObject(
+            with: Data(contentsOf: fixture.paths.installedPlugins)
+        ) as! [String: Any]
+        let plugins = register["plugins"] as! [String: Any]
+        XCTAssertNil(plugins["vercel@official"], "the entry leaves Claude Code's register")
+        XCTAssertNotNil(plugins["remotion@official"], "and the other plugin is untouched")
+        let settings = try JSONSerialization.jsonObject(
+            with: Data(contentsOf: fixture.paths.localSettings)
+        ) as! [String: Any]
+        let flags = settings["enabledPlugins"] as? [String: Any] ?? [:]
+        XCTAssertNil(flags["vercel@official"], "the stale on/off answer goes with it")
+        XCTAssertEqual(
+            scanner.installedPlugins().count, 1, "and the app stops listing it"
+        )
+    }
+
+    /// The install path comes out of a file this app does not write. Pointed anywhere outside the
+    /// plugin cache it must refuse, or a corrupted register aims the Trash at a home directory.
+    func testRemovingRefusesAnInstallPathOutsideThePluginCache() throws {
+        let fixture = Fixture()
+        fixture.plugin("vercel", marketplace: "official", skills: ["deploy"])
+        let outside = fixture.root.appendingPathComponent("Documents/precious")
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        let plugin = PluginInfo(
+            id: "vercel@official", name: "vercel", marketplace: "official", version: "1.0.0",
+            installPath: outside, enabled: true
+        )
+        let mutations = Mutations(paths: fixture.paths)
+
+        XCTAssertThrowsError(try mutations.removePlugin(plugin))
+        XCTAssertTrue(fixture.exists(outside), "nothing outside the cache is touched")
+        let register = try JSONSerialization.jsonObject(
+            with: Data(contentsOf: fixture.paths.installedPlugins)
+        ) as! [String: Any]
+        XCTAssertNotNil(
+            (register["plugins"] as! [String: Any])["vercel@official"],
+            "and it refuses before writing the register"
+        )
+    }
+
     // MARK: AC4.6
 
     /// A plugin's files stay read-only. Its skills *can* now be switched off one by one, but only

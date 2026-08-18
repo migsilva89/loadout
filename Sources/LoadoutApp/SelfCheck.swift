@@ -178,6 +178,46 @@ enum SelfCheck {
             "switching it back on forgets it, so updates leave it alone",
             model.mutations.records.pluginSkills(of: "vercel@official").isEmpty
         )
+        // The page also has to say what the plugin *is*: where its folder is and what it brought.
+        // Without those, "how do I get rid of this?" had no answer on the screen that was about it.
+        check("the page can say what the plugin ships", {
+            guard let plugin = model.selectedPlugin else { return false }
+            return model.pluginContents(plugin).contains("skill")
+                && model.readablePath(of: plugin).contains("plugins/cache/official/vercel")
+        }())
+        // Removing a whole plugin, on a second one installed for the purpose — the checks after this
+        // one need a plugin to still be there, and a test that eats the fixture other tests read is
+        // a test that breaks its neighbours.
+        let doomed = paths.pluginCache.appendingPathComponent("official/doomed/1.2.0")
+        let doomedSkill = doomed.appendingPathComponent("skills/doomed-skill")
+        try! FileManager.default.createDirectory(at: doomedSkill, withIntermediateDirectories: true)
+        try! "---\nname: doomed-skill\ndescription: Installed to be removed.\n---\n\nBody.".write(
+            to: doomedSkill.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8
+        )
+        try! JSONSerialization.data(withJSONObject: [
+            "version": 2,
+            "plugins": [
+                "vercel@official": [["scope": "user", "installPath": install.path, "version": "0.45.1"]],
+                "doomed@official": [["scope": "user", "installPath": doomed.path, "version": "1.2.0"]],
+            ],
+        ]).write(to: paths.installedPlugins)
+        model.reload()
+
+        if let plugin = model.plugins.first(where: { $0.name == "doomed" }) {
+            model.removePlugin(plugin)
+            check("removing a plugin asks first", model.pendingPluginRemoval?.id == "doomed@official")
+            check(
+                "and nothing left while the note was up",
+                FileManager.default.fileExists(atPath: doomed.path)
+            )
+            model.confirmRemovePlugin()
+            check("confirming takes the folder away", !FileManager.default.fileExists(atPath: doomed.path))
+            check("the entry leaves the register", !model.plugins.contains { $0.name == "doomed" })
+            check("and the other plugin stays", model.plugins.contains { $0.name == "vercel" })
+            check("with the dialog saying so", model.pluginRemovalDone && model.pluginRemovalError == nil)
+            model.dismissPluginRemoval()
+            check("closing it clears the dialog", model.pendingPluginRemoval == nil)
+        }
 
         // Handing a command to the other assistant, through the same call the dot on the row makes.
         // Codex keeps its own in ~/.codex/prompts, so this is a link into one file rather than a

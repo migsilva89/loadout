@@ -813,6 +813,94 @@ struct RestoreSkillSheet: View {
 /// Loadout runs no git commands and knows nothing about version control. It moves a folder — but
 /// that folder lives inside a repository, so the change lands next to whatever work is in progress
 /// and could be committed without anyone meaning to. Worth saying once; not worth saying twice.
+/// Uninstalling a plugin, asked and answered in one place — the same two-state dialog the
+/// make-global note uses, for the same reason: the click has consequences in three files, and the
+/// only honest place to report them is the thing that asked.
+struct RemovePluginSheet: View {
+    @Bindable var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+
+    private var plugin: PluginInfo? { model.pendingPluginRemoval }
+    private var done: Bool { model.pluginRemovalDone || model.pluginRemovalError != nil }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                if done {
+                    Image(systemName: model.pluginRemovalError == nil ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .foregroundStyle(model.pluginRemovalError == nil ? Color.green : Color.orange)
+                }
+                Text(title)
+                    .font(.title3.weight(.semibold))
+            }
+            Text(message)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let plugin, !done {
+                Text(model.readablePath(of: plugin))
+                    .font(.system(size: 11.5, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .lineLimit(2)
+                    .truncationMode(.middle)
+            }
+            HStack {
+                Spacer()
+                if done {
+                    Button("Done") { close() }
+                        .keyboardShortcut(.defaultAction)
+                        .pointingHand()
+                } else {
+                    Button("Cancel") { close() }
+                        .keyboardShortcut(.cancelAction)
+                        .help("Leave the plugin installed")
+                        .pointingHand()
+                    Button("Move to Trash") { model.confirmRemovePlugin() }
+                        .keyboardShortcut(.defaultAction)
+                        .help("Uninstall it: folder to the Trash, entry out of Claude Code's register")
+                        .pointingHand()
+                }
+            }
+        }
+        .padding(20)
+        .frame(width: 460)
+    }
+
+    private func close() {
+        model.dismissPluginRemoval()
+        dismiss()
+    }
+
+    private var title: String {
+        if model.pluginRemovalError != nil { return "Couldn't finish removing it" }
+        if model.pluginRemovalDone { return "It's out" }
+        return "Remove the \(plugin?.name ?? "") plugin?"
+    }
+
+    private var message: String {
+        if let error = model.pluginRemovalError { return error }
+        guard let plugin else { return "" }
+        if model.pluginRemovalDone {
+            return """
+                \(plugin.name) is out of Claude Code's register and its folder is in the Trash, with a \
+                copy in the Loadout backups. The \(plugin.marketplace) marketplace stays, so /plugin in \
+                Claude Code can install it again. A session already running still has it loaded until \
+                it restarts.
+                """
+        }
+        let marketplace = plugin.marketplace.isEmpty
+            ? "Its marketplace"
+            : "The \(plugin.marketplace) marketplace"
+        return """
+            This takes away \(model.pluginContents(plugin)). The folder moves to the Trash, the entry \
+            leaves Claude Code's plugin register, and your on/off choice for it goes with them — a copy \
+            of everything goes to the Loadout backups first. \(marketplace) is left alone, so /plugin \
+            in Claude Code can install it again.
+            """
+    }
+}
+
 /// Taking a copy out of a repository, asked and answered in one place.
 ///
 /// Two states, one dialog: the question — you are about to have two of these, and yours stops
