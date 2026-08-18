@@ -4,6 +4,43 @@ Notable changes, newest first. Dates are the day the work landed on `main`.
 
 The versions are what a release is tagged as; between tags, `main` is what is being used daily.
 
+## 0.3.0 — 2026-08-18
+
+### Added
+
+- **The fact cards fold, so the document gets the room.** Token budget, Details and Assistants sat
+  above the markdown, and on a 1000pt window the thing you opened the pane to read started in the
+  bottom third. They fold into one strip that still carries every number they were showing — where
+  it comes from, its uses and projects, the description's tokens, the body's lines — with the marks
+  of the assistants that load it at the end. Hiding them outright would have taken away the figures
+  the pane gets opened for; the strip keeps them and is also the way back. Fold it from the chip
+  beside the name, from the seam between the cards and the document, or with ⌥⌘I. The choice is one
+  for the whole app and it is remembered: per skill, the pane would change height as you moved down
+  the list.
+- **A plugin's page says what the plugin is, and a plugin can be removed.** It used to be a name, a
+  version and a list of what it ships — nothing about where those files live, and no way to take one
+  out. It now names the marketplace that installed it, counts what it brings, shows the folder it
+  occupies with a Reveal beside it, and offers Remove plugin. Removing takes the entry out of Claude
+  Code's register, your on/off answer out of your settings, and the folder to the Trash, with a copy
+  of each in the backups first. The marketplace stays, because one marketplace serves many plugins
+  and it is what `/plugin` needs to install this one again. A session already running keeps the
+  plugin loaded until it restarts, and the dialog says so.
+
+### Changed
+
+- **Making something global says what it did.** Copying a skill, command or subagent out of a
+  repository happened behind one click: nothing said before, nothing said after, the button still
+  offering the copy it had just taken, and a second click failing with "already exists". It now asks
+  first — you are about to have two of these, and yours stops following the repository's — and the
+  same dialog then reports where the copy landed, path and all. Once your copy exists the offer goes
+  from the callout and from the row's menu.
+
+### Fixed
+
+- **The window can photograph itself for one frame.** The recorder that writes the README's
+  animation now exposes a single capture, which is what let the folding cards be checked by looking
+  at the two states rather than by trusting a number.
+
 ## 0.2.0 — 2026-08-17
 
 ### Added
