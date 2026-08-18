@@ -2,6 +2,8 @@
 
 App Mac para ver e gerir a configuração do Claude Code: skills, comandos, agentes, plugins e MCP servers, com o uso real de cada um.
 
+**Website:** [loadout.migsilva.dev](https://loadout.migsilva.dev) — guides and download.
+
 *Loadout* é o equipamento que se leva para uma missão — que é o que a app mostra: o que o Claude leva para uma sessão, e o que ficou em casa.
 
 ## O que faz
@@ -12,6 +14,10 @@ App Mac para ver e gerir a configuração do Claude Code: skills, comandos, agen
 - **Gestão.** Criar, editar, apagar e desativar. Desativar uma skill é movê-la para `~/.claude/skills-off/`; desativar um plugin escreve o `enabledPlugins`.
 - **Rede de segurança.** Antes de qualquer escrita fica uma cópia em `~/.claude/.loadout-backups/<data>/`. Se a cópia falhar, não se escreve. Apagar vai para o Lixo, nunca é `rm`.
 - **Copiloto.** O botão "Pedir ao Claude" corre `claude -p` na pasta da skill. Usa a subscrição que já tens, e nada é escrito sem confirmares.
+
+## Download
+
+A versão assinada e notarizada está nas [releases](https://github.com/migsilva89/loadout/releases/latest); o site, [loadout.migsilva.dev](https://loadout.migsilva.dev), explica o que a app faz e traz os guias.
 
 ## Construir
 
