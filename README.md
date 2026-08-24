@@ -43,11 +43,15 @@
 
 ## Install
 
-1. Download the latest DMG from [**Releases**](../../releases/latest) (or start at the [website](https://loadout.migsilva.dev)).
-2. Open it and drag **Loadout** to **Applications**.
+```bash
+brew install --cask migsilva89/loadout/loadout
+```
 
-Requires macOS 15 or newer. The build is signed and notarised, so it opens without a warning and
-without a trip through System Settings.
+Or download the [latest release](../../releases/latest) — the [website](https://loadout.migsilva.dev)
+points at the same file — and drag `Loadout.app` into `/Applications`. The disk image is signed and
+notarised, so it opens without a Gatekeeper warning and without a trip through System Settings.
+
+macOS 15 or later.
 
 Or build it yourself, which needs Xcode:
 
