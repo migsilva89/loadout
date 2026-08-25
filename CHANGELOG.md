@@ -4,6 +4,16 @@ Notable changes, newest first. Dates are the day the work landed on `main`.
 
 The versions are what a release is tagged as; between tags, `main` is what is being used daily.
 
+## 0.3.1 — 2026-08-25
+
+### Fixed
+
+- **Settings › Assistants shows your assistants again.** The sidebar counted them and the page
+  beside it was blank, so the one screen where an assistant is switched on or off, and where the
+  CLI behind "Ask" is set, could not be used at all. It was the last section still drawn as a list
+  asking for unlimited height inside a scrolling page, which renders nothing; it is now built like
+  every other section. Adding a CLI of your own is the last row of that card.
+
 ## 0.3.0 — 2026-08-18
 
 ### Added

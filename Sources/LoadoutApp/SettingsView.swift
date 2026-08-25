@@ -385,43 +385,51 @@ private struct UsageSourceRow: View {
 
 // MARK: - Assistants
 
+/// The pane behind Settings › Assistants.
+///
+/// Written as `SettingsGroup` cards like every other section: this was a `List` with an infinite
+/// height, and a list that asks for all the height there is renders nothing at all inside the
+/// pane's scroll view — the section counted 12 assistants in the sidebar and then showed an empty
+/// page.
 struct AssistantsTab: View {
     @Bindable var model: AppModel
 
     var body: some View {
-        List {
-            Section {
-                ForEach(model.assistants) { assistant in
-                    AssistantSettingsRow(model: model, assistant: assistant)
-                }
-            } header: {
-                Text("A checked assistant shows up in the list rows and the detail panel, and its sessions count towards \"uses\". Unchecking one does both: it disappears from the list and stops counting. Nothing is deleted — check it again and the same numbers come back. Sharing and syncing keep working either way.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .textCase(nil)
-            }
-
-            Section {
-                ForEach(model.assistantCLIs) { cli in
-                    AskCLIRow(model: model, cli: cli)
-                }
-            } header: {
-                HStack {
-                    Text("Ask CLIs")
-                    Spacer()
-                    Button("Add…") { model.isAddingAssistantCLI = true }
-                        .buttonStyle(.link)
-                        .font(.caption)
-                        .pointingHand()
-                }
-            } footer: {
-                Text("What \"Ask\" in a skill's detail runs. The four built-ins show up on their own once installed; add anything else by hand.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        SettingsGroup(
+            title: "Assistants",
+            note: "A checked assistant shows up in the list rows and the detail panel, and its "
+                + "sessions count towards \"uses\". Unchecking one does both: it disappears from "
+                + "the list and stops counting.",
+            footnote: "Nothing is deleted — check it again and the same numbers come back. Sharing "
+                + "and syncing keep working either way."
+        ) {
+            ForEach(Array(model.assistants.enumerated()), id: \.element.id) { index, assistant in
+                AssistantSettingsRow(
+                    model: model,
+                    assistant: assistant,
+                    dividing: index < model.assistants.count - 1
+                )
             }
         }
-        .scrollContentBackground(.hidden)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+
+        SettingsGroup(
+            title: "Ask CLIs",
+            note: "What \"Ask\" in a skill's detail runs. The four built-ins show up on their own "
+                + "once installed; add anything else by hand."
+        ) {
+            ForEach(model.assistantCLIs) { cli in
+                AskCLIRow(model: model, cli: cli)
+            }
+            SettingsRow(
+                label: "Add a CLI of your own",
+                sub: "Point Loadout at any command that takes a prompt",
+                dividing: false
+            ) {
+                Button("Add…") { model.isAddingAssistantCLI = true }
+                    .buttonStyle(V2ToolbarButtonStyle(prominent: false, enabled: true))
+                    .pointingHand()
+            }
+        }
     }
 }
 
@@ -479,7 +487,11 @@ private struct AskCLIRow: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(.vertical, 3)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .overlay(alignment: .bottom) {
+            Hairline(color: Color.white.opacity(0.06)).padding(.leading, 14)
+        }
     }
 
     private func test() {
@@ -512,6 +524,8 @@ private struct AskCLIRow: View {
 private struct AssistantSettingsRow: View {
     @Bindable var model: AppModel
     let assistant: Assistant
+    /// The last row in a card draws no separator — a line under it would point at nothing.
+    var dividing = true
 
     private var skillCount: Int {
         model.items.filter { $0.kind == .skill && $0.assistants.contains(assistant.id) }.count
@@ -551,7 +565,11 @@ private struct AssistantSettingsRow: View {
             )
             .pointingHand()
         }
-        .padding(.vertical, 3)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .overlay(alignment: .bottom) {
+            if dividing { Hairline(color: Color.white.opacity(0.06)).padding(.leading, 14) }
+        }
     }
 }
 
