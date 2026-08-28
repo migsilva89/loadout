@@ -23,11 +23,14 @@ public final class Copilot: @unchecked Sendable {
     ///   - prompt: what to ask.
     ///   - directory: the working directory, normally the skill's own folder.
     ///   - timeout: hard ceiling; the child is killed when it expires (AC7.4).
+    ///   - environment: what the child runs with. The default widens `PATH` so a CLI that is a
+    ///     script can find its own interpreter — see `AssistantCLIEnvironment`. Tests override it.
     public func run(
         cli: AssistantCLI?,
         prompt: String,
         in directory: URL,
-        timeout: TimeInterval = 180
+        timeout: TimeInterval = 180,
+        environment: [String: String]? = nil
     ) throws -> Result {
         guard let cli else { throw LoadoutError.claudeNotFound }
 
@@ -35,10 +38,14 @@ public final class Copilot: @unchecked Sendable {
         task.executableURL = cli.executable
         task.arguments = cli.arguments(for: prompt)
         task.currentDirectoryURL = directory
-        task.environment = cli.environment
+        task.environment = environment ?? cli.environment
         let pipe = Pipe()
         task.standardOutput = pipe
         task.standardError = pipe
+        // The question is an argument, never something typed in. `codex exec` reads stdin when it
+        // is not a terminal and waits for EOF, so an inherited stdin that never closes would hang
+        // the run until the timeout kills it.
+        task.standardInput = FileHandle.nullDevice
 
         lock.lock()
         process = task

@@ -9,12 +9,12 @@ final class AssistantCLITests: XCTestCase {
     func testArgvForEachOfTheFourBuiltInShapes() {
         let executable = URL(fileURLWithPath: "/usr/local/bin/thing")
         let claude = AssistantCLI(id: "claude", label: "Claude Code", executable: executable, argumentTemplate: "-p {prompt}", isCustom: false)
-        let codex = AssistantCLI(id: "codex", label: "Codex", executable: executable, argumentTemplate: "exec {prompt}", isCustom: false)
+        let codex = AssistantCLI(id: "codex", label: "Codex", executable: executable, argumentTemplate: "exec --skip-git-repo-check {prompt}", isCustom: false)
         let cursor = AssistantCLI(id: "cursor-agent", label: "Cursor", executable: executable, argumentTemplate: "-p --output-format text {prompt}", isCustom: false)
         let opencode = AssistantCLI(id: "opencode", label: "opencode", executable: executable, argumentTemplate: "run {prompt}", isCustom: false)
 
         XCTAssertEqual(claude.arguments(for: "hello"), ["-p", "hello"])
-        XCTAssertEqual(codex.arguments(for: "hello"), ["exec", "hello"])
+        XCTAssertEqual(codex.arguments(for: "hello"), ["exec", "--skip-git-repo-check", "hello"])
         XCTAssertEqual(cursor.arguments(for: "hello"), ["-p", "--output-format", "text", "hello"])
         XCTAssertEqual(opencode.arguments(for: "hello"), ["run", "hello"])
     }
