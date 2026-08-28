@@ -4,7 +4,7 @@ Notable changes, newest first. Dates are the day the work landed on `main`.
 
 The versions are what a release is tagged as; between tags, `main` is what is being used daily.
 
-## Unreleased
+## 0.3.4 — 2026-08-28
 
 ### Fixed
 
