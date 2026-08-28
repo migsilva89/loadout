@@ -93,18 +93,38 @@ public struct InventoryScanner: Sendable {
         return byName.values.sorted { $0.name < $1.name }
     }
 
-    /// Everything parked in a `skills-off`, wherever it is parked.
+    /// Everything parked in a `skills-off`, wherever it is parked, minus whatever the matching
+    /// live `skills` directory still provides.
     ///
-    /// One per assistant plus the shared store, because a disabled skill stays with its owner: a
-    /// Codex skill waits in `~/.codex/skills-off`, and reading only Claude's would make it look
-    /// deleted.
+    /// One pair of directories per assistant plus the shared store, because a disabled skill stays
+    /// with its owner: a Codex skill waits in `~/.codex/skills-off`, and reading only Claude's
+    /// would make it look deleted.
+    ///
+    /// Within one assistant, though, the same skill can be readable in both of its directories at
+    /// once — disabling copies the folder aside, and a re-enable that leaves the copy behind makes
+    /// it turn up twice. Both readings are the same skill and carry the same id, so listing both
+    /// put two rows with one identity into the list: `ForEach` draws one of them and leaves an
+    /// empty slot the size of the other, and every count is one too high. The live folder is what
+    /// decides whether anything loads the skill, so that is the reading kept.
+    ///
+    /// The check is per assistant on purpose. A skill live in Codex and parked in Claude is two
+    /// different things wearing one name, and the parked one still needs its row — that is the
+    /// only row from which it can be put back.
     func disabledSkills() -> [Item] {
-        var roots = assistants.map { $0.skillsRoot.deletingLastPathComponent().appendingPathComponent("skills-off") }
-        roots.append(paths.sharedSkills.deletingLastPathComponent().appendingPathComponent("skills-off"))
+        var roots = assistants.map {
+            (live: $0.skillsRoot,
+             off: $0.skillsRoot.deletingLastPathComponent().appendingPathComponent("skills-off"))
+        }
+        roots.append(
+            (live: paths.sharedSkills,
+             off: paths.sharedSkills.deletingLastPathComponent().appendingPathComponent("skills-off"))
+        )
 
         var byName: [String: Item] = [:]
         for root in roots {
-            for folder in skillFolders(in: root) where byName[folder.lastPathComponent] == nil {
+            let live = Set(skillFolders(in: root.live).map(\.lastPathComponent))
+            for folder in skillFolders(in: root.off) where byName[folder.lastPathComponent] == nil {
+                guard !live.contains(folder.lastPathComponent) else { continue }
                 byName[folder.lastPathComponent] = skill(at: folder, origin: .personal, enabled: false)
             }
         }
