@@ -44,13 +44,13 @@ enum SelfCheck {
         }
 
         // Create
-        model.createSkill(name: "auto-teste", description: "Created by the self-check.")
-        check("creates a skill", model.items.contains { $0.name == "auto-teste" })
-        check("selects it", model.selected?.name == "auto-teste")
-        check("loads the file in the editor", model.draft.contains("name: auto-teste"))
+        model.createSkill(name: "self-check-skill", description: "Created by the self-check.")
+        check("creates a skill", model.items.contains { $0.name == "self-check-skill" })
+        check("selects it", model.selected?.name == "self-check-skill")
+        check("loads the file in the editor", model.draft.contains("name: self-check-skill"))
 
         // Edit and save
-        model.draft = "---\nname: auto-teste\ndescription: New résumé.\n---\n\nNew body."
+        model.draft = "---\nname: self-check-skill\ndescription: New résumé.\n---\n\nNew body."
         model.isDirty = true
         model.save()
         check("saves the edit", model.selected?.description == "New résumé.")
@@ -70,21 +70,21 @@ enum SelfCheck {
         model.loadDraft()
 
         // A mutation elsewhere must not wipe an edit in progress either.
-        model.draft = "---\nname: auto-teste\ndescription: Half edited.\n---\n\nBody."
+        model.draft = "---\nname: self-check-skill\ndescription: Half edited.\n---\n\nBody."
         model.isDirty = true
         model.reload()
         check("a reload keeps the dirty draft on the same item", model.draft.contains("Half edited"))
         model.loadDraft()
 
         // Disable and enable
-        let created = model.items.first { $0.name == "auto-teste" }!
+        let created = model.items.first { $0.name == "self-check-skill" }!
         let selectionBeforeToggle = model.selectedID
         model.toggle(created)
         check("toggling keeps the selection", model.selectedID == selectionBeforeToggle)
         check(
             "disabling moves it to skills-off",
             FileManager.default.fileExists(
-                atPath: paths.skillsOff.appendingPathComponent("auto-teste/SKILL.md").path
+                atPath: paths.skillsOff.appendingPathComponent("self-check-skill/SKILL.md").path
             )
         )
         model.selection = .skills
@@ -93,24 +93,24 @@ enum SelfCheck {
 
         // Switching on is a question now: which assistants load it again is the one thing the
         // app cannot decide for someone, so the switch opens a sheet instead of guessing.
-        let parked = model.items.first { $0.name == "auto-teste" }!
+        let parked = model.items.first { $0.name == "self-check-skill" }!
         model.toggle(parked)
-        check("enabling asks where it goes", model.restoring?.item.name == "auto-teste")
+        check("enabling asks where it goes", model.restoring?.item.name == "self-check-skill")
         check("the sheet proposes what was recorded", model.restoring?.chosen == ["claude"])
         check("and says the proposal is remembered", model.restoring?.remembered == true)
         model.confirmRestore()
         check(
             "confirming brings it back",
             FileManager.default.fileExists(
-                atPath: paths.skills.appendingPathComponent("auto-teste/SKILL.md").path
+                atPath: paths.skills.appendingPathComponent("self-check-skill/SKILL.md").path
             )
         )
 
         // Commands: made here rather than by hand in the Finder, switched off without deleting,
         // and no amber banner about a `name` field they are not supposed to have.
         model.selection = .commands
-        model.createCommand(name: "auto-comando", description: "Feito pelo self-check.")
-        let madeCommand = model.items.first { $0.kind == .command && $0.name == "auto-comando" }
+        model.createCommand(name: "self-check-command", description: "Created by the self-check.")
+        let madeCommand = model.items.first { $0.kind == .command && $0.name == "self-check-command" }
         check("creates a command", madeCommand != nil)
         check("with no false warning on it", madeCommand?.warning == nil)
         check("and no name field in the file", !(model.draft.contains("name:")))
@@ -118,16 +118,16 @@ enum SelfCheck {
         check(
             "disabling a command moves it next door",
             FileManager.default.fileExists(
-                atPath: paths.claude.appendingPathComponent("commands-off/auto-comando.md").path
+                atPath: paths.claude.appendingPathComponent("commands-off/self-check-command.md").path
             )
         )
-        let parkedCommand = model.items.first { $0.kind == .command && $0.name == "auto-comando" }!
+        let parkedCommand = model.items.first { $0.kind == .command && $0.name == "self-check-command" }!
         check("it stays in the list, switched off", !parkedCommand.enabled)
         model.toggle(parkedCommand)
         check(
             "enabling it asks nothing and puts it back",
             model.restoring == nil && FileManager.default.fileExists(
-                atPath: paths.commands.appendingPathComponent("auto-comando.md").path
+                atPath: paths.commands.appendingPathComponent("self-check-command.md").path
             )
         )
         model.selection = .skills
@@ -430,7 +430,7 @@ enum SelfCheck {
         // The conversation's changes reaching the document. No CLI is run here — what is being
         // checked is the part Loadout owns: a change accepted in a copy of the folder becomes an
         // unsaved edit, and only Save writes it, with the snapshot every write takes.
-        model.select(model.items.first { $0.name == "auto-teste" }?.id)
+        model.select(model.items.first { $0.name == "self-check-skill" }?.id)
         let skill = model.selected!
         let folder = skill.path!.deletingLastPathComponent()
         let workspaces = AskWorkspaces(paths: paths)
@@ -499,9 +499,9 @@ enum SelfCheck {
         model.showsAskPanel = false
 
         // Delete
-        model.select(model.items.first { $0.name == "auto-teste" }?.id)
+        model.select(model.items.first { $0.name == "self-check-skill" }?.id)
         model.deleteSelected()
-        check("deleting removes it from the list", !model.items.contains { $0.name == "auto-teste" })
+        check("deleting removes it from the list", !model.items.contains { $0.name == "self-check-skill" })
 
         print(failures.isEmpty
               ? "\nAll good: \(total) checks passed."

@@ -410,7 +410,7 @@ public final class UsageIndex: @unchecked Sendable {
     }
 
     /// Attaches usage to a scanned inventory. Items never seen keep `Usage.none`, which is what
-    /// makes "nunca usada" visible in the list.
+    /// makes "never used" visible in the list.
     public func annotate(_ items: [Item], assistants: Set<String>? = nil) -> [Item] {
         var byKind: [ItemKind: [String: Usage]] = [:]
         for kind in ItemKind.allCases { byKind[kind] = usage(kind: kind, assistants: assistants) }

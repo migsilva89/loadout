@@ -36,7 +36,7 @@ if not stamps:
     stamps = [(f, i * 0.13) for i, f in enumerate(frames)]
 
 if not stamps:
-    print("sem fotogramas em", folder)
+    print("no frames in", folder)
     sys.exit(1)
 
 # The first frames of a recording can be a different size from the rest: the window is captured
@@ -54,7 +54,7 @@ for path, _ in stamps:
 common = max(sizes, key=sizes.get)
 dropped = [path for path, _ in stamps if size(path) != common]
 if dropped:
-    print("→ %d fotogramas de outro tamanho, postos de lado" % len(dropped))
+    print("→ %d frames of another size, set aside" % len(dropped))
     stamps = [(path, at) for path, at in stamps if size(path) == common]
 
 lines = []
@@ -73,4 +73,4 @@ lines.append("file '%s'" % stamps[-1][0])
 with open(os.path.join(folder, "list.txt"), "w") as handle:
     handle.write("\n".join(lines) + "\n")
 
-print("→ %d fotogramas, %.1f s" % (len(stamps), total))
+print("→ %d frames, %.1f s" % (len(stamps), total))
