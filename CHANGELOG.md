@@ -4,6 +4,31 @@ Notable changes, newest first. Dates are the day the work landed on `main`.
 
 The versions are what a release is tagged as; between tags, `main` is what is being used daily.
 
+## 0.3.2 — 2026-08-28
+
+### Fixed
+
+- **Ask reaches the Codex CLI again.** An app opened from the Finder inherits a bare `PATH` with no
+  `node` in it, so the `codex` script installed by nvm died before it started. The launched
+  executable's own directory now leads the child's `PATH`, `codex exec` is told not to insist on a
+  git repository — a skill folder is not one — and its input is closed rather than left waiting.
+- **A skill kept in two places is listed once.** One sitting both in a live skills folder and in
+  the same assistant's disabled folder was drawn twice under the same identity: one row appeared,
+  a hole the size of the other was left beside it, and the count at the top was wrong. The live
+  copy wins.
+- **The app no longer offers a removal it would refuse.** Taking an item out of the only assistant
+  that has it would delete it, so the click raised an error afterwards. That assistant's remove
+  action is now dimmed and says why when you point at it; the check stays, because the item is
+  still there.
+- **An offline app stops claiming to be up to date.** The update check could not tell "you have the
+  latest" from "I could not ask", and said the first for both.
+
+### Added
+
+- **Settings › Updates.** The version you are running, a switch for the check, and a button to ask
+  now with the answer on the page. The check at launch happens at most once a day, and a failed
+  check does not count against that.
+
 ## 0.3.1 — 2026-08-25
 
 ### Fixed
