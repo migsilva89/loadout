@@ -165,6 +165,8 @@ See `spec/spec-flow-agents-mcp-frontmatter.md`. Every kind Loadout lists can now
 - **AC9.4** `[M]` The app has an icon of its own in the Dock and in the Finder.
 - **AC9.5** `[M]` No user path is hardcoded in the code; everything derives from `FileManager.homeDirectoryForCurrentUser` or from configuration.
 - **AC9.6** `[M]` A README covering what it is, how to build it, and how to run the tests.
+- **AC9.7** `[T]` `Scripts/test-update.sh` passes against the assembled bundle: Sparkle is embedded, it and its installer are signed, the app can find it, and the feed address and signing key are in the Info.plist.
+- **AC9.8** `[M]` An installed copy offered a signed update downloads and installs it itself, and reopens on the new version.
 
 ---
 
