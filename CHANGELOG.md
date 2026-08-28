@@ -16,6 +16,12 @@ The versions are what a release is tagged as; between tags, `main` is what is be
   has nothing written about it in the changelog is now refused, rather than published with an
   empty page to show.
 
+### Changed
+
+- **The self-check writes English names.** Running it created a skill called `auto-teste` and a
+  command called `auto-comando`, described in Portuguese, on the disk of whoever ran it. They are
+  now `self-check-skill` and `self-check-command`.
+
 ## 0.3.3 — 2026-08-28
 
 ### Changed
