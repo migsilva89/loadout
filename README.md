@@ -134,6 +134,11 @@ with a product's promise of support.
 Releases are built by `./Scripts/release.sh`, which refuses to run from a dirty tree, an untagged
 commit or a branch other than `main`, and runs the tests before signing anything.
 
+Loadout updates itself. A release publishes three files together — the disk image, an identical
+copy named `Loadout-<version>-update.dmg`, and a signed `appcast.xml` that points installed copies
+at it. The app only accepts an update signed with the key it was built with. `release.sh` will not
+print the publish command unless that signed feed exists.
+
 ## License
 
 [MIT](LICENSE).

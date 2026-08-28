@@ -31,8 +31,20 @@ BINARY="$(swift build -c "$CONFIG" --product LoadoutApp --show-bin-path)/Loadout
 
 echo "→ Assembling the bundle"
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
 cp "$BINARY" "$APP/Contents/MacOS/Loadout"
+
+# Sparkle is what installs the next version, so it travels inside the app. `ditto` rather than
+# `cp -R` because a framework is a bundle of symlinks and cp flattens them, which produces a
+# framework that looks right and will not load.
+SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
+BUILT_SPARKLE="$(dirname "$BINARY")/Sparkle.framework"
+[[ -d "$BUILT_SPARKLE" ]] || { echo "no Sparkle.framework beside $BINARY — run 'swift package resolve'"; exit 1; }
+rm -rf "$SPARKLE"
+ditto "$BUILT_SPARKLE" "$SPARKLE"
+# Loadout is not sandboxed. Sparkle's XPC services exist only to carry the installer across a
+# sandbox boundary, so keeping them ships two executables and two signatures that can never run.
+rm -rf "$SPARKLE/Versions/B/XPCServices" "$SPARKLE/XPCServices"
 
 if [[ -f "$ROOT/Resources/Loadout.icns" ]]; then
   cp "$ROOT/Resources/Loadout.icns" "$APP/Contents/Resources/Loadout.icns"
@@ -57,22 +69,54 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSHumanReadableCopyright</key><string>Miguel Silva</string>
+
+    <!-- Sparkle. Loadout updates itself: it downloads the new version and replaces this copy.
+         The feed lives on the "latest" release, which is one address that never changes as
+         versions come and go. SUPublicEDKey is the public half of the key the release is signed
+         with — its private half is in this machine's login keychain under the account "loadout"
+         and is not in this repository. An update that is not signed with it is refused, which is
+         what stops a man in the middle handing the app a different Loadout.
+
+         SUAllowsAutomaticUpdates is false on purpose: Loadout asks before it replaces itself.
+         Installing silently under somebody working in the app is not a decision to take for them. -->
+    <key>SUFeedURL</key><string>https://github.com/migsilva89/loadout/releases/latest/download/appcast.xml</string>
+    <key>SUPublicEDKey</key><string>lUaE3YVkBVqKzXHSQ5Kuex3WtTnffdZtNfHTFbA85ts=</string>
+    <key>SURequireSignedFeed</key><true/>
+    <key>SUVerifyUpdateBeforeExtraction</key><true/>
+    <key>SUEnableAutomaticChecks</key><true/>
+    <key>SUAllowsAutomaticUpdates</key><false/>
+    <key>SUScheduledCheckInterval</key><integer>86400</integer>
+    <key>SUSendProfileInfo</key><false/>
 </dict>
 </plist>
 PLIST
 
 plutil -lint "$APP/Contents/Info.plist" > /dev/null
 
+# Inside out, and never with --deep. --deep is deprecated and applies the outer bundle's options
+# to nested code, which is exactly wrong here: Autoupdate and Updater.app are separate programs
+# that must each carry their own signature and the hardened runtime. Signing the app first and the
+# framework after would also be pointless — changing anything inside a bundle invalidates the
+# signature wrapped around it.
+#
+# This is the part that fails quietly. A wrongly signed Sparkle still notarises and still ships;
+# it only breaks when somebody accepts an update, and then the installer cannot launch and the app
+# just never updates. Scripts/test-update.sh checks the assembled bundle for that.
 if [[ -n "$SIGN_IDENTITY" ]]; then
   echo "→ Signing with Developer ID"
-  # No --deep: it is deprecated and signs nested code with the wrong options. There is nothing
-  # nested here anyway — one binary in one bundle.
-  codesign --force --sign "$SIGN_IDENTITY" --options runtime --timestamp "$APP"
-  codesign --verify --strict --verbose=1 "$APP" 2>&1 | tail -1
+  SIGN=("$SIGN_IDENTITY" --options runtime --timestamp)
 else
   echo "→ Signing (ad hoc — only runs on this machine)"
-  codesign --force --sign - "$APP" 2>/dev/null
+  # No hardened runtime and no timestamp: an ad hoc signature cannot carry either, and asking for
+  # them makes codesign refuse rather than warn.
+  SIGN=(- --timestamp=none)
 fi
+
+codesign --force --sign "${SIGN[@]}" "$SPARKLE/Versions/B/Autoupdate" 2>/dev/null
+codesign --force --sign "${SIGN[@]}" "$SPARKLE/Versions/B/Updater.app" 2>/dev/null
+codesign --force --sign "${SIGN[@]}" "$SPARKLE" 2>/dev/null
+codesign --force --sign "${SIGN[@]}" "$APP" 2>/dev/null
+codesign --verify --deep --strict --verbose=1 "$APP" 2>&1 | tail -1
 
 # Make sure Finder and the Dock pick the new icon up rather than a cached one.
 touch "$APP"

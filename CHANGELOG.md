@@ -4,6 +4,22 @@ Notable changes, newest first. Dates are the day the work landed on `main`.
 
 The versions are what a release is tagged as; between tags, `main` is what is being used daily.
 
+## Unreleased
+
+### Changed
+
+- **Loadout updates itself.** Instead of telling you a new version exists and sending you to a
+  download page, the app now fetches the new version and installs it — you are asked, it does the
+  work, and it reopens on the new version. No dragging anything into Applications again.
+
+  An update is only accepted if it was signed with the key the running copy was built with, and it
+  is verified before it is unpacked, so a download that was tampered with in transit is refused
+  rather than installed. Nothing about your machine is sent when it checks.
+
+  The check runs about once a day and Settings › Updates still holds the switch, the version you
+  are running, when it last checked, and a button to ask now. The switch you set in 0.3.2 is
+  carried over, so if you turned checks off they stay off.
+
 ## 0.3.2 — 2026-08-28
 
 ### Fixed

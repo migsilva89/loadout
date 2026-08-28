@@ -69,9 +69,10 @@ struct LoadoutApp: App {
         Window("Loadout", id: "main") {
             ContentView(model: model)
                 .frame(minWidth: 824, minHeight: 640)
-                // After the window is up and the inventory has been read, so a version check can
-                // never be the reason a launch feels slow.
-                .task { UpdateNotice.checkOnLaunch() }
+                // After the window is up and the inventory has been read, so starting the
+                // updater can never be the reason a launch feels slow. Sparkle owns the schedule
+                // from here: it decides when the next check is due, not this line.
+                .task { Updates.start() }
                 // After the inventory has been read, so the welcome can state what was found
                 // rather than open on zeroes.
                 .task { model.showWelcomeIfNeeded() }
@@ -87,7 +88,7 @@ struct LoadoutApp: App {
             // Directly under "About Loadout", where every Mac app puts it and where a hand
             // looking for it goes first.
             CommandGroup(after: .appInfo) {
-                Button("Check for Updates…") { UpdateNotice.checkNow() }
+                Button("Check for Updates…") { Updates.checkNow() }
                 Divider()
                 Button(model.showsSettings ? "Hide Settings" : "Settings…") {
                     model.showsSettings.toggle()

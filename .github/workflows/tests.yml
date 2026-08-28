@@ -14,3 +14,8 @@ jobs:
         run: swift test
       - name: Build the app bundle
         run: ./Scripts/build-app.sh
+      # Whether Sparkle is embedded, signed and pointed at the right feed cannot be answered by
+      # swift test, because none of it exists until the app is assembled — and getting it wrong
+      # fails silently, months later, on the first update somebody accepts.
+      - name: Check the app can update itself
+        run: ./Scripts/test-update.sh
