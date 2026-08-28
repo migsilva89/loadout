@@ -37,16 +37,24 @@ public enum UpdateCheck {
         return raw
     }
 
-    /// Asks GitHub what the newest release is, and answers with it only when it is newer than what
-    /// is running. Any failure — offline, rate-limited, GitHub down — answers nil: a version check
-    /// that interrupts somebody because their café wifi dropped is worse than no version check.
+    /// What asking GitHub can end in. "Up to date" and "could not ask" are different facts and are
+    /// kept apart here, because telling somebody they are on the latest version when the question
+    /// never left the machine is the one lie this whole file exists to avoid.
+    public enum Outcome: Equatable, Sendable {
+        case available(Available)
+        case upToDate
+        /// Offline, rate-limited, non-200, a payload that changed shape — every way of not knowing.
+        case unreachable
+    }
+
+    /// Asks GitHub what the newest release is and says which of the three it is. Nothing throws its
+    /// way out to the person using the app: a failure is a state to report, not an error to raise.
     ///
-    /// - Parameter current: defaults to the running bundle's version.
-    public static func newerRelease(
-        than current: String? = runningVersion(),
+    /// - Parameter current: the running version, "0.3.1" or "v0.3.1".
+    public static func check(
+        against current: String,
         session: URLSession = .shared
-    ) async -> Available? {
-        guard let current else { return nil }
+    ) async -> Outcome {
         var request = URLRequest(url: latestReleaseAPI)
         // GitHub asks for these two by name and answers unversioned requests less predictably.
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
@@ -56,9 +64,25 @@ public enum UpdateCheck {
         guard let (data, response) = try? await session.data(for: request),
               let http = response as? HTTPURLResponse, http.statusCode == 200,
               let release = try? JSONDecoder().decode(Release.self, from: data)
-        else { return nil }
+        else { return .unreachable }
 
-        return available(from: release, current: current)
+        return available(from: release, current: current).map(Outcome.available) ?? .upToDate
+    }
+
+    /// The older shape of the same question, for callers that only act when there is something to
+    /// download. A failed check and an up-to-date app both answer nil here, which is why anything
+    /// that has to tell a person what happened should ask `check(against:)` instead.
+    ///
+    /// - Parameter current: defaults to the running bundle's version.
+    public static func newerRelease(
+        than current: String? = runningVersion(),
+        session: URLSession = .shared
+    ) async -> Available? {
+        guard let current else { return nil }
+        guard case .available(let update) = await check(against: current, session: session) else {
+            return nil
+        }
+        return update
     }
 
     /// The decision itself, split out from the network so it can be tested without one.
