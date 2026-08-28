@@ -4,6 +4,18 @@ Notable changes, newest first. Dates are the day the work landed on `main`.
 
 The versions are what a release is tagged as; between tags, `main` is what is being used daily.
 
+## Unreleased
+
+### Fixed
+
+- **The update dialog says what changed.** It announced that a new version was available and then
+  showed an empty page, so the only way to find out what you were about to install was to go and
+  look the changelog up yourself — and pressing Install without knowing is what people actually
+  did. The feed now carries that version's own changelog section, set to be read in the small
+  window it appears in and following the Mac's light or dark appearance. A release whose version
+  has nothing written about it in the changelog is now refused, rather than published with an
+  empty page to show.
+
 ## 0.3.3 — 2026-08-28
 
 ### Changed
