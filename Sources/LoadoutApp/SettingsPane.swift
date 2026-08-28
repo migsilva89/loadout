@@ -25,7 +25,7 @@ struct SettingsPane: View {
     }
 
     enum Section: String, CaseIterable, Identifiable {
-        case projects, appearance, usage, assistants, storage, help
+        case projects, appearance, usage, assistants, storage, updates, help
 
         var id: String { rawValue }
 
@@ -36,6 +36,7 @@ struct SettingsPane: View {
             case .usage: return "Usage"
             case .assistants: return "Assistants"
             case .storage: return "Storage"
+            case .updates: return "Updates"
             case .help: return "Help"
             }
         }
@@ -47,6 +48,7 @@ struct SettingsPane: View {
             case .usage: return "chart.bar"
             case .assistants: return "person.2"
             case .storage: return "internaldrive"
+            case .updates: return "arrow.down.circle"
             case .help: return "questionmark.circle"
             }
         }
@@ -191,6 +193,7 @@ struct SettingsPane: View {
                 case .usage: UsageTab(model: model)
                 case .assistants: AssistantsTab(model: model)
                 case .storage: StorageSettings(model: model)
+                case .updates: UpdatesTab()
                 case .help: HelpTab(model: model)
                 }
             }

@@ -866,51 +866,71 @@ struct DetailView: View {
     private var cardWidth: CGFloat { paneWidth - Self.cardMargins * 2 }
     private static let cardMargins: CGFloat = 24
 
+    @ViewBuilder
     private func assistantCell(_ assistant: Assistant, item: Item) -> some View {
         let has = item.assistants.contains(assistant.id)
         let none = !has && !assistant.hasSkillsFolder
-        return Button {
-            model.setAssistant(assistant, on: item, present: !has)
-        } label: {
-            HStack(spacing: 9) {
-                AssistantMark(assistant: assistant, present: has || !none, size: 20)
-                Text(assistant.label)
-                    .font(.system(size: 12.5))
-                    .foregroundStyle(Color.white.opacity(none ? 0.4 : 0.88))
-                    .lineLimit(1)
-                    .fixedSize()
-                // Beside the name, not out in the state column: it belongs to this assistant,
-                // and against the column it read as part of the word next to it.
-                if let count = assistantUsage[assistant.id], count > 0 {
-                    Text("\(count)")
-                        .font(.system(size: 11))
-                        .monospacedDigit()
-                        .foregroundStyle(V2.textFaint)
-                        .fitsOnOneLine()
-                }
-                Spacer(minLength: 6)
-                // One glyph per state, all the same size and shape, so the column reads as a
-                // column. Colour still carries the meaning at a distance — the healthy hue for
-                // carried, the link hue for available, grey for nothing to carry it with — and
-                // the words move to the tooltip, where the space is free. It also stops "loaded"
-                // from stacking into three letters when the grid squeezes to four up.
-                Image(systemName: has ? "checkmark.circle.fill" : (none ? "minus.circle" : "plus.circle"))
-                    .font(.system(size: 13))
-                    .foregroundStyle(has ? V2.ok : (none ? V2.muted : V2.link))
+        // The one assistant that holds the last copy: unlinking there would take the skill with
+        // it, so the row never becomes a click. `Mutations.unshare` refuses the same thing, but
+        // refusing after the click means the app offered something it could not do. Read off the
+        // live item, so the moment a second assistant loads the skill this row is a button again.
+        let onlyCopy = has && item.assistants.count == 1
+
+        if onlyCopy {
+            // Still reads as loaded — the check is true and worth seeing. Only the removal is
+            // gone, dimmed the way a disabled control is.
+            assistantRow(assistant, has: has, none: none)
+                .help("Only copy — removing it would delete the skill. Disable it instead.")
+                .opacity(0.55)
+                .spotlight(Spotlight.assistant(assistant.id))
+        } else {
+            Button {
+                model.setAssistant(assistant, on: item, present: !has)
+            } label: {
+                assistantRow(assistant, has: has, none: none)
+                    // On the content, not on the Button around it. A plain-styled button hands its
+                    // tracking area to the label, and a tooltip hung outside that never fires —
+                    // which is why no cell in this grid had one, whatever it showed.
+                    .help(assistantHelp(assistant, has: has))
             }
-            .padding(.horizontal, 13)
-            .padding(.vertical, 9)
-            .overlay(alignment: .bottom) { Hairline(color: Color.white.opacity(0.06)) }
-            .overlay(alignment: .trailing) { Hairline(color: Color.white.opacity(0.06), vertical: true) }
-            .contentShape(Rectangle())
-            // On the content, not on the Button around it. A plain-styled button hands its
-            // tracking area to the label, and a tooltip hung outside that never fires — which is
-            // why no cell in this grid had one, whatever it showed.
-            .help(assistantHelp(assistant, has: has))
+            .buttonStyle(.plain)
+            .pointingHand()
+            .spotlight(Spotlight.assistant(assistant.id))
         }
-        .buttonStyle(.plain)
-        .pointingHand()
-        .spotlight(Spotlight.assistant(assistant.id))
+    }
+
+    private func assistantRow(_ assistant: Assistant, has: Bool, none: Bool) -> some View {
+        HStack(spacing: 9) {
+            AssistantMark(assistant: assistant, present: has || !none, size: 20)
+            Text(assistant.label)
+                .font(.system(size: 12.5))
+                .foregroundStyle(Color.white.opacity(none ? 0.4 : 0.88))
+                .lineLimit(1)
+                .fixedSize()
+            // Beside the name, not out in the state column: it belongs to this assistant,
+            // and against the column it read as part of the word next to it.
+            if let count = assistantUsage[assistant.id], count > 0 {
+                Text("\(count)")
+                    .font(.system(size: 11))
+                    .monospacedDigit()
+                    .foregroundStyle(V2.textFaint)
+                    .fitsOnOneLine()
+            }
+            Spacer(minLength: 6)
+            // One glyph per state, all the same size and shape, so the column reads as a
+            // column. Colour still carries the meaning at a distance — the healthy hue for
+            // carried, the link hue for available, grey for nothing to carry it with — and
+            // the words move to the tooltip, where the space is free. It also stops "loaded"
+            // from stacking into three letters when the grid squeezes to four up.
+            Image(systemName: has ? "checkmark.circle.fill" : (none ? "minus.circle" : "plus.circle"))
+                .font(.system(size: 13))
+                .foregroundStyle(has ? V2.ok : (none ? V2.muted : V2.link))
+        }
+        .padding(.horizontal, 13)
+        .padding(.vertical, 9)
+        .overlay(alignment: .bottom) { Hairline(color: Color.white.opacity(0.06)) }
+        .overlay(alignment: .trailing) { Hairline(color: Color.white.opacity(0.06), vertical: true) }
+        .contentShape(Rectangle())
     }
 
     private func assistantHelp(_ assistant: Assistant, has: Bool) -> String {

@@ -126,6 +126,34 @@ final class InventoryTests: XCTestCase {
         XCTAssertEqual(items.first { $0.name == "ativa" }?.enabled, true)
     }
 
+    /// A skill can be readable in both places at once: disabling copies the folder into
+    /// `skills-off`, and a re-enable that leaves the copy behind makes the same skill turn up
+    /// twice. Both readings carry the same id, so the list held two rows with one identity —
+    /// which the list draws as one row followed by an empty slot the size of the other, and
+    /// counts as two skills.
+    func testSkillPresentInBothPlacesIsListedOnceAsEnabled() {
+        let fixture = Fixture()
+        fixture.skill("alone")
+        fixture.skill("in-both")
+        fixture.skill("in-both", disabled: true)
+        fixture.skill("parked", disabled: true)
+
+        let skills = InventoryScanner(paths: fixture.paths).scanAll().items.filter { $0.kind == .skill }
+
+        XCTAssertEqual(skills.map(\.id).count, Set(skills.map(\.id)).count, "the list holds one row per skill")
+        XCTAssertEqual(skills.map(\.name).sorted(), ["alone", "in-both", "parked"])
+
+        // The live folder is what decides whether anything loads it, so that is the reading kept:
+        // enabled, and pointing at the file the detail pane opens and the switch acts on.
+        let both = skills.first { $0.name == "in-both" }
+        XCTAssertEqual(both?.enabled, true)
+        XCTAssertEqual(
+            both?.directory?.resolvingSymlinksInPath(),
+            fixture.paths.skills.appendingPathComponent("in-both").resolvingSymlinksInPath()
+        )
+        XCTAssertEqual(skills.first { $0.name == "parked" }?.enabled, false)
+    }
+
     // MARK: AC1.4
 
     func testPluginSkillsAreAttributedToTheirPlugin() {

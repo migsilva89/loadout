@@ -19,6 +19,8 @@ struct SettingsView: View {
                 .tabItem { Label("Assistants", systemImage: "person.2") }
             StorageTab(model: model)
                 .tabItem { Label("Storage", systemImage: "internaldrive") }
+            UpdatesTab()
+                .tabItem { Label("Updates", systemImage: "arrow.down.circle") }
             HelpTab(model: model)
                 .tabItem { Label("Help", systemImage: "questionmark.circle") }
         }
@@ -379,6 +381,98 @@ private struct UsageSourceRow: View {
             return "There is history here, but nothing in it proves a skill was used, so it "
                 + "contributes nothing rather than a misleading zero."
         case .error(let message): return message
+        }
+    }
+}
+
+// MARK: - Updates
+
+/// The visible half of the update check: which version is running, whether the daily check is on,
+/// and a button that answers now.
+///
+/// The answer lands in the pane rather than in a window, because somebody who pressed a button in
+/// Settings is already looking at the place the answer belongs — and a pane cannot block the app
+/// the way an alert can. The question itself is the same one the menu item asks: UpdateCheck.
+struct UpdatesTab: View {
+    @AppStorage(UpdateNotice.automaticKey) private var checksAutomatically = true
+    @State private var isChecking = false
+    @State private var answer: Answer?
+
+    /// What the pane can say: UpdateCheck's three outcomes, plus the one this side decides — a
+    /// build run from source, which has no version to compare in the first place.
+    private enum Answer {
+        case outcome(UpdateCheck.Outcome, running: String)
+        case unreleasedBuild
+    }
+
+    var body: some View {
+        Form {
+            LabeledContent("Version", value: UpdateCheck.runningVersion() ?? "Unreleased build")
+
+            Toggle("Check for a new version once a day", isOn: $checksAutomatically)
+                .help(
+                    "Asks github.com for the latest release number, at most once a day. "
+                        + "No files, no identifiers — and off means Loadout makes no network calls at all."
+                )
+
+            HStack {
+                if isChecking {
+                    ProgressView().controlSize(.small)
+                    Text("Checking…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Check now") { check() }
+                    .disabled(isChecking)
+                    .help("Ask GitHub right now, whether or not the daily check is on")
+                    .pointingHand()
+            }
+
+            if let answer, !isChecking {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(message(for: answer))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if case .outcome(.available(let update), _) = answer {
+                        Button("Open release page") { NSWorkspace.shared.open(update.page) }
+                            .pointingHand()
+                    }
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    /// Loadout never installs anything for you, so the new-version line says what to do next
+    /// rather than pretending a button here could do it — and a check that never reached GitHub
+    /// says so, instead of passing itself off as good news.
+    private func message(for answer: Answer) -> String {
+        switch answer {
+        case .outcome(.available(let update), _):
+            "Loadout \(update.version) is out. Download it and drag it over the copy in Applications."
+        case .outcome(.upToDate, let running):
+            "Loadout \(running) is the latest version."
+        case .outcome(.unreachable, _):
+            "Couldn't check for updates — GitHub could not be reached. Try again in a moment."
+        case .unreleasedBuild:
+            "This build has no version number, so there is nothing to compare — version checks only work on a released build."
+        }
+    }
+
+    private func check() {
+        isChecking = true
+        Task {
+            if let running = UpdateCheck.runningVersion() {
+                let outcome = await UpdateCheck.check(against: running)
+                // The launch notice must not raise this same version later: it has been shown.
+                if case .available(let update) = outcome { UpdateNotice.noteShown(update.version) }
+                answer = .outcome(outcome, running: running)
+            } else {
+                answer = .unreleasedBuild
+            }
+            isChecking = false
         }
     }
 }

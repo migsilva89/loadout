@@ -57,16 +57,26 @@ public struct AssistantCLI: Identifiable, Hashable, Sendable {
     /// The CLI's own directory goes first, because an nvm-installed codex sits in the same folder
     /// as the node that has to run it, and the usual install locations follow.
     public var environment: [String: String] {
-        var environment = ProcessInfo.processInfo.environment
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        environment(
+            base: ProcessInfo.processInfo.environment,
+            home: FileManager.default.homeDirectoryForCurrentUser
+        )
+    }
+
+    /// The same rule, with the two things it reads from the machine passed in, so a test can
+    /// reproduce the bare `PATH` a Finder-launched app inherits without touching the real one.
+    public func environment(base: [String: String], home: URL) -> [String: String] {
+        var environment = base
         var directories = [executable.deletingLastPathComponent().path]
-        directories += (environment["PATH"] ?? "").split(separator: ":").map(String.init)
+        directories += (base["PATH"] ?? "").split(separator: ":").map(String.init)
         directories += [
-            "\(home)/.local/bin", "\(home)/.opencode/bin",
+            "\(home.path)/.local/bin", "\(home.path)/.opencode/bin",
             "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin",
         ]
         var seen = Set<String>()
-        environment["PATH"] = directories.filter { seen.insert($0).inserted }.joined(separator: ":")
+        environment["PATH"] = directories
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
+            .joined(separator: ":")
         return environment
     }
 
@@ -143,7 +153,14 @@ public enum AssistantCLIRegistry {
     /// Verified non-interactive syntax for each, as of the CLIs on this machine today.
     private static let builtins: [Builtin] = [
         Builtin(id: "claude", binaryName: "claude", label: "Claude Code", argumentTemplate: "-p {prompt}"),
-        Builtin(id: "codex", binaryName: "codex", label: "Codex", argumentTemplate: "exec {prompt}"),
+        // `--skip-git-repo-check` is not optional: `codex exec` refuses to start in a directory
+        // that is neither a git repository nor listed as trusted in `~/.codex/config.toml`, and a
+        // skill folder is normally neither. Without it every Ask ends in "Not inside a trusted
+        // directory and --skip-git-repo-check was not specified."
+        Builtin(
+            id: "codex", binaryName: "codex", label: "Codex",
+            argumentTemplate: "exec --skip-git-repo-check {prompt}"
+        ),
         Builtin(
             id: "cursor-agent", binaryName: "cursor-agent", label: "Cursor",
             argumentTemplate: "-p --output-format text {prompt}"
@@ -212,6 +229,11 @@ public enum AssistantCLIRegistry {
         ]
         if let nvmDirs = try? fm.contentsOfDirectory(atPath: "\(home)/.nvm/versions/node") {
             candidates += nvmDirs.map { "\(home)/.nvm/versions/node/\($0)/bin/\(name)" }
+        }
+        // Last resort for Codex: the ChatGPT app ships its own native `codex`. A machine with the
+        // app but no npm install still gets an Ask target, and that copy needs no Node at all.
+        if name == "codex" {
+            candidates.append("/Applications/ChatGPT.app/Contents/Resources/codex")
         }
         for candidate in candidates where fm.isExecutableFile(atPath: candidate) {
             return URL(fileURLWithPath: candidate)
