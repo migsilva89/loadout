@@ -111,6 +111,9 @@ public struct ProjectRoots: Sendable {
         let base = folder.standardizedFileURL.path
         let path = url.standardizedFileURL.path
         if path.hasPrefix(base + "/") { return String(path.dropFirst(base.count + 1)) }
+        // The chosen folder is the project itself: it reads as its own name, not as the whole
+        // path to it, which is what the row already sits under.
+        if path == base { return url.lastPathComponent }
         return abbreviate(url, home: home)
     }
 
@@ -121,31 +124,45 @@ public struct ProjectRoots: Sendable {
     /// Hidden folders are skipped, which keeps this out of `.git` internals, and `node_modules` is
     /// skipped by name because it is deep, enormous, and never a project of yours.
     ///
-    /// The folder somebody *chose* is never itself the answer, even when it looks like a
-    /// repository. A real `~/Projects` had a `.claude` of its own — house instructions for the
-    /// whole tree — and the search stopped dead on it and reported one project where there were
-    /// ninety. What you point at is a place to look inside; only something nested can be the thing
-    /// found.
+    /// What somebody chose is first of all a place to look *inside*. A real `~/Projects` had a
+    /// `.claude` of its own — house instructions for the whole tree — and an earlier search
+    /// stopped dead on it and reported one project where there were ninety.
+    ///
+    /// It can also be the project. Somebody who points the app straight at the repository they
+    /// work in was told "no repositories found in here" while standing in their own checkout —
+    /// and the `.git` that proves otherwise is hidden, so the picker would not let them choose it
+    /// instead. So a chosen folder under git is that project, full stop: what is nested inside a
+    /// checkout is its submodules and packages, not other projects of yours.
+    ///
+    /// A chosen folder with only a `.claude` stays a place to look inside, and is taken as the
+    /// project just when nothing turned up in there. That is the `~/Projects` shape: house
+    /// instructions for a whole tree read as a project once, and hid ninety.
     static func repositories(under folder: URL, depth: Int = searchDepth, isRoot: Bool = true) -> [URL] {
         guard depth >= 0, isDirectory(folder) else { return [] }
         if !isRoot, isRepository(folder) { return [folder] }
-        guard depth > 0 else { return [] }
+        if isRoot, hasGit(folder) { return [folder] }
+        guard depth > 0 else { return isRoot && isRepository(folder) ? [folder] : [] }
 
         let fm = FileManager.default
         guard let children = try? fm.contentsOfDirectory(
             at: folder, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]
-        ) else { return [] }
+        ) else { return isRoot && isRepository(folder) ? [folder] : [] }
 
-        return children
+        let nested = children
             .filter { isDirectory($0) && $0.lastPathComponent != "node_modules" }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
             .flatMap { repositories(under: $0, depth: depth - 1, isRoot: false) }
+        if isRoot, nested.isEmpty, isRepository(folder) { return [folder] }
+        return nested
     }
 
     static func isRepository(_ folder: URL) -> Bool {
-        isDirectory(folder.appendingPathComponent(".git"))
-            || FileManager.default.fileExists(atPath: folder.appendingPathComponent(".git").path)
-            || isDirectory(folder.appendingPathComponent(".claude"))
+        hasGit(folder) || isDirectory(folder.appendingPathComponent(".claude"))
+    }
+
+    /// A `.git` directory, or the file a worktree or submodule leaves in its place.
+    static func hasGit(_ folder: URL) -> Bool {
+        FileManager.default.fileExists(atPath: folder.appendingPathComponent(".git").path)
     }
 
     static func isDirectory(_ url: URL) -> Bool {

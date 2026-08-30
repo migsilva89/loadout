@@ -26,7 +26,8 @@ struct ProjectsSettings: View {
             // The depth is interpolated, not spelled out: the sentence said two while the search
             // went three deep, and the row below it printed the real number two lines away.
             note: "Loadout looks inside these for repositories — anything with a .git or a .claude "
-                + "inside, up to \(ProjectRoots.searchDepth) levels down.",
+                + "inside, up to \(ProjectRoots.searchDepth) levels down. A folder that is itself a "
+                + "repository counts as one, so you can point straight at the project you work in.",
             footnote: "A project's own skills and commands appear once you pick it from the scope "
                 + "button above the list."
         ) {
@@ -59,7 +60,7 @@ struct ProjectsSettings: View {
                     .buttonStyle(V2ToolbarButtonStyle(
                         prominent: model.projectRoots.folders.isEmpty, enabled: true
                     ))
-                    .help("Choose a folder Loadout should look in for repositories")
+                    .help("Choose a folder that holds your repositories, or a repository itself")
                     .pointingHand()
             }
         }
@@ -117,7 +118,7 @@ struct ProjectsSettings: View {
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = true
         panel.prompt = "Use folder"
-        panel.message = "Choose a folder Loadout should look in for repositories."
+        panel.message = "Choose a folder that holds your repositories — or a repository itself."
         guard panel.runModal() == .OK else { return }
         // Appended rather than replacing, and a folder chosen twice is not added twice.
         var folders = model.projectRoots.folders
