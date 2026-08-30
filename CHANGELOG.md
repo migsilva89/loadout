@@ -4,6 +4,18 @@ Notable changes, newest first. Dates are the day the work landed on `main`.
 
 The versions are what a release is tagged as; between tags, `main` is what is being used daily.
 
+## Unreleased
+
+### Fixed
+
+- **Pointing Loadout at the repository you work in now finds it.** Choosing a project folder — one
+  with a `.git` and an `.opencode` in it — answered "no repositories found in here", because the
+  folder you chose was only ever a place to look *inside*, and the `.git` that proves it is a
+  repository is hidden and cannot be chosen in the picker either. A chosen folder under git is now
+  that project. A chosen folder with only a `.claude` still means look inside — that is
+  `~/Projects` with house instructions at the top — and becomes the project only when there is
+  nothing under it. Reported after install by somebody with one repository and no `~/Projects`.
+
 ## 0.3.4 — 2026-08-28
 
 ### Fixed

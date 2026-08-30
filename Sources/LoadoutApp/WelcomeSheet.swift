@@ -233,7 +233,8 @@ struct WelcomeSheet: View {
             }
 
             if offered.isEmpty {
-                Text("Nothing obvious found — point Loadout at a folder and it will look inside.")
+                Text("Nothing obvious found — point Loadout at a folder it should look inside, or at a "
+                    + "repository itself.")
                     .font(.system(size: 12))
                     .foregroundStyle(V2.textMid)
             } else {
@@ -391,7 +392,7 @@ struct WelcomeSheet: View {
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = true
         panel.prompt = "Use folder"
-        panel.message = "Choose a folder Loadout should look in for repositories."
+        panel.message = "Choose a folder that holds your repositories — or a repository itself."
         guard panel.runModal() == .OK else { return }
         // Compared standardized, the way Settings › Projects does it. Raw `URL` equality counts
         // `~/Projects` and `~/Projects/` as two different folders, and the panel hands back the

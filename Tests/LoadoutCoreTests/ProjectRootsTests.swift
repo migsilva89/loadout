@@ -112,6 +112,50 @@ final class ProjectRootsTests: XCTestCase {
         XCTAssertFalse(found.contains { $0.name == "Projects" }, "the folder you chose is not a project")
     }
 
+    /// Pointing straight at the repository you work in finds it, instead of an empty list.
+    ///
+    /// Reported by somebody who chose their own project folder — a checkout with a `.git` and an
+    /// `.opencode` in it — and was told there were no repositories in there. The `.git` that would
+    /// have proved otherwise is hidden, so the picker would not let them choose it either.
+    func testChoosingARepositoryItselfFindsThatRepository() {
+        repo("dev/opencode-thing")
+        try! fm.createDirectory(
+            at: home.appendingPathComponent("dev/opencode-thing/.opencode"),
+            withIntermediateDirectories: true
+        )
+
+        let found = roots(["dev/opencode-thing"]).discover(home: home)
+
+        XCTAssertEqual(found.map(\.name), ["opencode-thing"])
+        XCTAssertEqual(found.map(\.relativePath), ["opencode-thing"], "shown by its name, not its path")
+    }
+
+    /// And a chosen repository that also has repositories inside it still reads as one project,
+    /// rather than becoming its own submodules.
+    func testAChosenRepositoryDoesNotBecomeItsSubmodules() {
+        repo("dev/monorepo")
+        repo("dev/monorepo/packages/web")
+
+        XCTAssertEqual(roots(["dev/monorepo"]).discover(home: home).map(\.name), ["monorepo"])
+    }
+
+    /// House instructions for a whole tree — a `.claude` at the top of `~/Projects` — lose to the
+    /// repositories underneath, which is the shape that made this rule in the first place.
+    func testAChosenFolderWithHouseInstructionsLosesToWhatIsInsideIt() {
+        try! fm.createDirectory(
+            at: home.appendingPathComponent("Projects/.claude"), withIntermediateDirectories: true
+        )
+        repo("Projects/brain-box")
+
+        XCTAssertEqual(roots(["Projects"]).discover(home: home).map(\.name), ["brain-box"])
+    }
+
+    /// An empty folder that is not a repository is still empty — the fallback does not invent one.
+    func testAnOrdinaryEmptyFolderStillFindsNothing() {
+        try! fm.createDirectory(at: home.appendingPathComponent("empty"), withIntermediateDirectories: true)
+        XCTAssertTrue(roots(["empty"]).discover(home: home).isEmpty)
+    }
+
     /// Three levels down, which two was not: `~/Projects/PERSONAL/APPS/loadout` is a real path on a
     /// real machine, and a shallower limit found none of them while reporting success.
     func testARepositoryThreeLevelsDownIsFound() {

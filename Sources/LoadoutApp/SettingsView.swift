@@ -213,7 +213,7 @@ struct ProjectsTab: View {
 
                 HStack {
                     Button("Add folder…") { add() }
-                        .help("Choose a folder Loadout should look in for repositories")
+                        .help("Choose a folder that holds your repositories, or a repository itself")
                         .pointingHand()
                     Spacer()
                     Text(found)
@@ -225,7 +225,8 @@ struct ProjectsTab: View {
             } footer: {
                 Text(
                     "Loadout looks inside these for repositories — a folder with a .git or a "
-                    + ".claude in it — up to two levels down. Each project's own skills and "
+                    + ".claude in it — up to \(ProjectRoots.searchDepth) levels down, and a folder "
+                    + "that is one itself counts. Each project's own skills and "
                     + "commands then show up when you pick it from the scope button at the top of "
                     + "the list."
                 )
@@ -252,7 +253,7 @@ struct ProjectsTab: View {
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = true
         panel.prompt = "Use folder"
-        panel.message = "Choose a folder Loadout should look in for repositories."
+        panel.message = "Choose a folder that holds your repositories — or a repository itself."
         guard panel.runModal() == .OK else { return }
         // Appended rather than replacing, and a folder chosen twice is not added twice.
         var folders = model.projectRoots.folders
