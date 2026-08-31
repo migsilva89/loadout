@@ -1,0 +1,48 @@
+name: Tell the site
+
+# The site prints the version and the download size from a file in its own
+# repository, so it asks GitHub nothing while it builds. Something has to keep
+# that file current, and until now the site asked: a schedule that reads this
+# repository's latest release every half hour.
+#
+# GitHub does not honour that schedule. On a repository with little traffic it
+# drops the ticks rather than queueing them — measured across all three sites,
+# the real gaps run from two to six hours. So every release spent an afternoon
+# with the website still offering the previous version.
+#
+# This is the other direction, and it takes seconds: publishing a release pokes
+# the website's repository, which rebuilds itself straight away. The schedule
+# stays on the other side as a safety net, for the case where this fails.
+
+on:
+  release:
+    types: [published]
+  # For firing it by hand — after a release published before this existed, or to
+  # prove the token still works without cutting a release to find out.
+  workflow_dispatch:
+
+# Nothing here reads or writes this repository. The only credential used is the
+# one that reaches the OTHER repository, and it arrives from a secret.
+permissions: {}
+
+jobs:
+  tell:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Poke the website repository
+        env:
+          GH_TOKEN: ${{ secrets.SITE_DISPATCH_TOKEN }}
+          SITE: migsilva89/loadout-website
+        run: |
+          set -euo pipefail
+          # A missing token is a warning, not a failure. Without it the site
+          # still catches up on its own schedule — hours late, but correct — and
+          # a red cross on a release that published perfectly reads as a broken
+          # release rather than as a missing setting.
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::warning::No SITE_DISPATCH_TOKEN set, so $SITE was not told."
+            echo "::warning::It will pick this release up on its own schedule instead, which GitHub throttles to every few hours."
+            exit 0
+          fi
+          gh api -X POST "repos/$SITE/dispatches" -f event_type=release-published
+          echo "Told $SITE that a release was published."
