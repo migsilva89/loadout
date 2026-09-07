@@ -93,23 +93,16 @@ public struct InventoryScanner: Sendable {
         return byName.values.sorted { $0.name < $1.name }
     }
 
-    /// Everything parked in a `skills-off`, wherever it is parked, minus whatever the matching
-    /// live `skills` directory still provides.
+    /// Everything parked in a `skills-off`, wherever it is parked, minus the matching live copy
+    /// in that same owner's `skills` directory.
     ///
     /// One pair of directories per assistant plus the shared store, because a disabled skill stays
     /// with its owner: a Codex skill waits in `~/.codex/skills-off`, and reading only Claude's
     /// would make it look deleted.
     ///
-    /// Within one assistant, though, the same skill can be readable in both of its directories at
-    /// once — disabling copies the folder aside, and a re-enable that leaves the copy behind makes
-    /// it turn up twice. Both readings are the same skill and carry the same id, so listing both
-    /// put two rows with one identity into the list: `ForEach` draws one of them and leaves an
-    /// empty slot the size of the other, and every count is one too high. The live folder is what
-    /// decides whether anything loads the skill, so that is the reading kept.
-    ///
-    /// The check is per assistant on purpose. A skill live in Codex and parked in Claude is two
-    /// different things wearing one name, and the parked one still needs its row — that is the
-    /// only row from which it can be put back.
+    /// A live skill and a parked skill with the same name can belong to different owners, so both
+    /// must remain visible. Their ordinary ids would collide and make SwiftUI reserve a blank row;
+    /// only in that collision case the parked row gets its directory appended as a stable identity.
     func disabledSkills() -> [Item] {
         var roots = assistants.map {
             (live: $0.skillsRoot,
@@ -120,15 +113,25 @@ public struct InventoryScanner: Sendable {
              off: paths.sharedSkills.deletingLastPathComponent().appendingPathComponent("skills-off"))
         )
 
-        var byName: [String: Item] = [:]
+        let globallyLive = Set(roots.flatMap { skillFolders(in: $0.live).map(\.lastPathComponent) })
+        var parked: [Item] = []
         for root in roots {
-            let live = Set(skillFolders(in: root.live).map(\.lastPathComponent))
-            for folder in skillFolders(in: root.off) where byName[folder.lastPathComponent] == nil {
-                guard !live.contains(folder.lastPathComponent) else { continue }
-                byName[folder.lastPathComponent] = skill(at: folder, origin: .personal, enabled: false)
+            let liveHere = Set(skillFolders(in: root.live).map(\.lastPathComponent))
+            for folder in skillFolders(in: root.off) where !liveHere.contains(folder.lastPathComponent) {
+                parked.append(skill(at: folder, origin: .personal, enabled: false))
             }
         }
-        return byName.values.sorted { $0.name < $1.name }
+        let parkedCounts = Dictionary(grouping: parked, by: \.name).mapValues(\.count)
+        return parked.map { item in
+            guard globallyLive.contains(item.name) || parkedCounts[item.name, default: 0] > 1 else {
+                return item
+            }
+            var unique = item
+            unique.id += ":off:\((item.directory ?? item.path)?.standardizedFileURL.path ?? item.name)"
+            return unique
+        }.sorted {
+            $0.name == $1.name ? $0.id < $1.id : $0.name < $1.name
+        }
     }
 
     /// `claudeRoot` lets a caller that walks many projects parse `~/.claude.json` once and hand the
@@ -259,6 +262,7 @@ public struct InventoryScanner: Sendable {
             kind: .skill,
             origin: origin,
             description: front.description ?? "",
+            frontmatter: Frontmatter.indexedFields(text),
             path: file,
             directory: folder,
             modified: modificationDate(file),
@@ -338,6 +342,7 @@ public struct InventoryScanner: Sendable {
             kind: kind,
             origin: origin,
             description: front.description ?? firstProseLine(front.body),
+            frontmatter: Frontmatter.indexedFields(text),
             path: file,
             directory: nil,
             modified: modificationDate(file),

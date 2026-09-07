@@ -73,6 +73,8 @@ Every AC is verifiable. `[T]` means covered by an automated test; `[M]` means ve
 - **AC2.5** `[M]` The detail shows name, type, origin, path, modification date, the raw content of the file, and the usage line.
 - **AC2.6** `[M]` A deliberate dark theme, fixed — the v2 redesign palette. The app does not follow the system preference (decided 2026-08-13).
 - **AC2.7** `[M]` Keyboard navigation: arrow keys to move through the list, `⌘F` for search, `⌘N` for a new skill, `⌘⌫` to delete.
+- **AC2.8** `[T]` Every inventory kind can be filtered by On or Off. Turning a plugin off keeps its skills, commands and subagents visible under Off instead of removing them from the inventory.
+- **AC2.9** `[T]` Every top-level frontmatter key found in the current kind appears dynamically as a filter and sort choice; choosing one shows its value as a list column. No key names are hard-coded.
 
 ### AC3 — Enabling and disabling
 
@@ -91,6 +93,7 @@ Rewritten 2026-08-15 — see `spec/spec-flow-enable-disable-skills.md` for the f
 - **AC3.11** `[M]` A plugin skill's row carries a tag with the plugin's name, and selecting a plugin fills the detail pane with what it ships, each item switchable there.
 - **AC3.12** `[T]` A project skill parks in `<repo>/.claude/skills-off`, and `[M]` the first disable says once that the change will show up in the repository.
 - **AC3.13** `[M]` The state on screen reflects the disk immediately after the operation.
+- **AC3.14** `[T]` A plugin that is off makes every item it ships effectively off. The child rows remain visible, and their switches cannot imply that the disabled parent is running them.
 
 ### AC11 — The last three (2026-08-15)
 
@@ -167,6 +170,7 @@ See `spec/spec-flow-agents-mcp-frontmatter.md`. Every kind Loadout lists can now
 - **AC9.6** `[M]` A README covering what it is, how to build it, and how to run the tests.
 - **AC9.7** `[T]` `Scripts/test-update.sh` passes against the assembled bundle: Sparkle is embedded, it and its installer are signed, the app can find it, and the feed address and signing key are in the Info.plist.
 - **AC9.8** `[M]` An installed copy offered a signed update downloads and installs it itself, and reopens on the new version.
+- **AC9.9** `[T]` The release app and its embedded Sparkle framework each contain both `arm64` and `x86_64`, so one download runs on Apple silicon and Intel Macs.
 
 ---
 

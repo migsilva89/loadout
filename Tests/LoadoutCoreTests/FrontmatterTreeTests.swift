@@ -73,6 +73,21 @@ final class FrontmatterTreeTests: XCTestCase {
         XCTAssertEqual(list(value(signals, "allOf")), [], "an empty list is an empty list")
     }
 
+    func testEveryTopLevelKeyBecomesGenericIndexData() {
+        let fields = Frontmatter.indexedFields(vercelish)
+
+        XCTAssertEqual(fields["name"], "vercel-functions")
+        XCTAssertEqual(fields["description"], "Vercel Functions expert guidance.")
+        XCTAssertTrue(fields["metadata"]?.contains("priority: 8") == true)
+        XCTAssertTrue(fields["validate"]?.contains("severity: recommended") == true)
+        XCTAssertNil(fields["minScore"], "nested keys do not pretend to be top-level fields")
+    }
+
+    func testDuplicateTopLevelKeysDoNotCrashTheGenericIndex() {
+        let indexed = Frontmatter.indexedFields("---\nteam: old\nteam: current\n---\n")
+        XCTAssertEqual(indexed["team"], "current")
+    }
+
     // MARK: - AC11.2 every entry of a list survives
 
     func testAListOfMapsKeepsEveryRule() {

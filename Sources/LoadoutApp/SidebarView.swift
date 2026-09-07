@@ -180,8 +180,9 @@ struct SidebarView: View {
             sortOpen.toggle()
         } label: {
             HStack(spacing: 5) {
-                Text(model.order.label)
+                Text(sortLabel)
                     .lineLimit(1)
+                    .frame(maxWidth: 120, alignment: .leading)
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: 8.5))
                     .foregroundStyle(V2.textDim)
@@ -191,18 +192,40 @@ struct SidebarView: View {
         .help("Change the order the list is sorted in")
         .pointingHand()
         .popover(isPresented: $sortOpen, arrowEdge: .bottom) {
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(ItemSort.allCases, id: \.self) { order in
-                    popoverRow(title: order.label, subtitle: nil, checked: model.order == order, hint: "") {
-                        model.order = order
-                        sortOpen = false
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach([ItemSort.usage, .name], id: \.self) { order in
+                        popoverRow(title: order.label, subtitle: nil, checked: model.order == order, hint: "") {
+                            model.order = order
+                            sortOpen = false
+                        }
+                    }
+                    if !model.frontmatterKeys.isEmpty {
+                        popoverGroupLabel("Frontmatter")
+                        ForEach(model.frontmatterKeys, id: \.self) { key in
+                            popoverRow(
+                                title: key, subtitle: nil,
+                                checked: model.order == .frontmatter && model.frontmatterSortKey == key,
+                                hint: "Sort by the value of \(key); files without it come last"
+                            ) {
+                                model.sortByFrontmatter(key)
+                                sortOpen = false
+                            }
+                        }
                     }
                 }
+                .padding(5)
             }
-            .padding(5)
-            .frame(width: 210)
+            .frame(width: 240)
+            .frame(maxHeight: 480)
             .background(V2.popover)
         }
+    }
+
+    private var sortLabel: String {
+        model.order == .frontmatter
+            ? (model.frontmatterSortKey.map { "\($0)" } ?? "Frontmatter")
+            : model.order.label
     }
 
     // MARK: Filters
@@ -291,44 +314,65 @@ struct SidebarView: View {
     }
 
     private var filtersPopover: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            popoverGroupLabel("Source")
-            filterOption(.all)
-            filterOption(.mine)
-            filterOption(.fromPlugins)
-            popoverGroupLabel("State")
-            filterOption(.neverUsed)
-            filterOption(.disabled)
-            if model.selection == .skills || model.selection == .commands || model.selection == .agents {
-                filterOption(.overBudget)
-            }
-            if model.selection == .skills {
-                popoverGroupLabel("Assistant")
-                assistantOption(.any, label: "Any")
-                assistantOption(.multiple, label: "In more than one")
-                ForEach(model.visibleAssistants) { assistant in
-                    assistantOption(.one(assistant.id), label: assistant.label)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                popoverGroupLabel("Source")
+                filterOption(.all)
+                filterOption(.mine)
+                filterOption(.fromPlugins)
+                popoverGroupLabel("State")
+                filterOption(.enabled)
+                filterOption(.disabled)
+                popoverGroupLabel("Usage")
+                filterOption(.neverUsed)
+                if model.selection == .skills || model.selection == .commands || model.selection == .agents {
+                    popoverGroupLabel("Budget")
+                    filterOption(.overBudget)
                 }
+                if !model.frontmatterKeys.isEmpty {
+                    popoverGroupLabel("Frontmatter key")
+                    ForEach(model.frontmatterKeys, id: \.self) { key in
+                        popoverRow(
+                            title: key, subtitle: nil,
+                            checked: model.filter == .frontmatter && model.frontmatterFilterKey == key,
+                            hint: "Show files that set \(key)",
+                            trailingCount: model.count(frontmatterKey: key)
+                        ) {
+                            model.filterByFrontmatter(key)
+                            filtersOpen = false
+                        }
+                    }
+                }
+                if model.selection == .skills {
+                    popoverGroupLabel("Assistant")
+                    assistantOption(.any, label: "Any")
+                    assistantOption(.multiple, label: "In more than one")
+                    ForEach(model.visibleAssistants) { assistant in
+                        assistantOption(.one(assistant.id), label: assistant.label)
+                    }
+                }
+                Hairline().padding(.vertical, 5)
+                Button {
+                    model.filter = .all
+                    model.frontmatterFilterKey = nil
+                    model.assistantFilter = .any
+                    filtersOpen = false
+                } label: {
+                    Text("Clear filters")
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(V2.textMid)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 6)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .pointingHand()
             }
-            Hairline().padding(.vertical, 5)
-            Button {
-                model.filter = .all
-                model.assistantFilter = .any
-                filtersOpen = false
-            } label: {
-                Text("Clear filters")
-                    .font(.system(size: 12.5))
-                    .foregroundStyle(V2.textMid)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 6)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .pointingHand()
+            .padding(5)
         }
-        .padding(5)
         .frame(width: 286)
+        .frame(maxHeight: 520)
         .background(V2.popover)
     }
 
@@ -447,7 +491,12 @@ struct SidebarView: View {
         if model.showsEverything {
             tokens.append(FilterToken(id: "scope", label: "Everything") { model.changeContext(to: nil) })
         }
-        if model.filter != .all {
+        if model.filter == .frontmatter, let key = model.frontmatterFilterKey {
+            tokens.append(FilterToken(id: "filter", label: "Has \(key)") {
+                model.filter = .all
+                model.frontmatterFilterKey = nil
+            })
+        } else if model.filter != .all {
             tokens.append(FilterToken(id: "filter", label: model.filter.title) { model.filter = .all })
         }
         switch model.assistantFilter {
@@ -630,6 +679,8 @@ struct SidebarRow: View {
     @Bindable var model: AppModel
 
     private var isSelected: Bool { model.selectedID == item.id }
+    private var isEnabled: Bool { model.isEffectivelyEnabled(item) }
+    private var pluginIsOff: Bool { item.pluginID != nil && model.pluginIsOff(for: item) }
 
     /// The list without descriptions, for somebody who knows their own skills by name.
     @AppStorage("listDensity") private var density = "compact"
@@ -646,7 +697,7 @@ struct SidebarRow: View {
                         .help(originHint)
                         .foregroundStyle(
                             isSelected ? Color.white
-                                : (item.enabled && !model.pluginIsOff(for: item) ? V2.text : V2.textDim)
+                                : (isEnabled ? V2.text : V2.textDim)
                         )
                         .lineLimit(1)
                     if item.kind == .skill || item.kind == .command {
@@ -668,6 +719,10 @@ struct SidebarRow: View {
                         PluginTag(name: tag, muted: isSelected, quiet: true)
                             .help(originTagHint)
                     }
+                    if let key = model.visibleFrontmatterKey,
+                       let value = item.frontmatter[key] {
+                        FrontmatterTag(key: key, value: value, muted: isSelected)
+                    }
                     Spacer(minLength: 6)
                     Text("\(item.usage.count)")
                         .font(.system(size: 11))
@@ -675,7 +730,8 @@ struct SidebarRow: View {
                         .foregroundStyle(Color.white.opacity(isSelected ? 0.75 : 0.35))
                         .help(usageHint)
                     if item.kind != .plugin {
-                        MiniSwitch(on: item.enabled) { model.toggle(item) }
+                        MiniSwitch(on: isEnabled) { model.toggle(item) }
+                            .disabled(pluginIsOff)
                             .help(switchHint)
                             .spotlight(Spotlight.toggle(item.id))
                     }
@@ -712,7 +768,11 @@ struct SidebarRow: View {
         .spotlight(Spotlight.row(item.id))
         .contextMenu {
             if item.kind != .plugin {
-                Button(item.enabled ? "Disable" : "Enable") { model.toggle(item) }
+                // The same reading as the switch beside it. Saying "Disable" over a row already
+                // drawn as off, and then moving the file with nothing on screen changing, is the
+                // menu telling a different story from the control it sits next to.
+                Button(isEnabled ? "Disable" : "Enable") { model.toggle(item) }
+                    .disabled(pluginIsOff)
             }
             // Only from a repository outwards. The other direction hands a file to a team, which
             // is not a thing to do from a context menu.
@@ -780,7 +840,7 @@ struct SidebarRow: View {
     }
 
     private var originHint: String {
-        if !item.enabled { return "Disabled — not loaded by anything right now" }
+        if !isEnabled { return "Disabled — not loaded by anything right now" }
         switch item.origin {
         case .personal: return "Your own, in ~/.claude"
         case .project(let name): return "Lives in the \(name) repository"
@@ -801,10 +861,29 @@ struct SidebarRow: View {
                 ? "Disable — moves it aside inside the \(name) repository"
                 : "Enable — puts it back in the \(name) repository"
         case .plugin(let plugin):
+            if pluginIsOff { return "Turn on the \(plugin) plugin before changing this item" }
             return item.enabled
                 ? "Disable just this skill, leaving the rest of the \(plugin) plugin alone"
                 : "Enable this skill again"
         }
+    }
+}
+
+private struct FrontmatterTag: View {
+    let key: String
+    let value: String
+    var muted: Bool
+
+    var body: some View {
+        Text(value.isEmpty ? key : "\(key): \(value)")
+            .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+            .foregroundStyle(muted ? Color.white.opacity(0.82) : V2.textMid)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .padding(.horizontal, 6)
+            .frame(maxWidth: 180, minHeight: 18)
+            .background(Color.white.opacity(muted ? 0.12 : 0.055), in: RoundedRectangle(cornerRadius: 5))
+            .help(value.isEmpty ? key : "\(key): \(value)")
     }
 }
 

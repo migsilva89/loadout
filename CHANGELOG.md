@@ -4,6 +4,36 @@ Notable changes, newest first. Dates are the day the work landed on `main`.
 
 The versions are what a release is tagged as; between tags, `main` is what is being used daily.
 
+## Unreleased
+
+### Added
+
+- **Sort and filter the list by any frontmatter key.** Every key a file happens to set — `team`,
+  `model`, `allowed-tools`, anything — now appears on its own in the funnel and the sort menu, and
+  the one you pick becomes a small column on each row so a whole set can be read at a glance.
+  Nothing is hard-coded: a Claude-only field simply does not appear on a Codex skill. Suggested by
+  u/CacheInvalidation on Reddit.
+- **An On filter beside the Off one, on every kind.** Skills, commands, subagents and MCP servers
+  can each be narrowed to what is actually loaded right now, which is the question the Off filter
+  only ever answered backwards.
+- **One download that runs on Apple silicon and Intel Macs.** The release was built on an Apple
+  silicon machine and would not open on an Intel one. The app and the Sparkle framework inside it
+  are now both universal, and the build refuses to assemble a bundle that is not. Requested on
+  Reddit.
+
+### Fixed
+
+- **Turning a plugin off now turns off what it ships.** Its skills, commands and subagents kept
+  their rows lit and their switches on, so the list claimed Claude was loading things it was not.
+  They stay visible — that is where you put them back from — but they read as off, and their
+  switches stay still until the plugin itself is back on.
+- **Two skills of the same name no longer leave a blank row.** A skill live in one assistant and
+  parked in another is two different things wearing one name; the list drew one of them and left a
+  gap the size of the other, and every count was one too high.
+- **Disabling a shared skill twice in the same second no longer fails.** The second attempt was
+  refused with "an item with the same name already exists", because the first snapshot had become
+  a link pointing at a file that had moved, and the check for a free filename could not see it.
+
 ## 0.3.5 — 2026-08-30
 
 ### Fixed

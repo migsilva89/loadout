@@ -30,6 +30,17 @@ final class FilterCompositionTests: XCTestCase {
         ).count
     }
 
+    private func item(
+        _ name: String, kind: ItemKind, enabled: Bool = true,
+        origin: Origin = .personal, pluginID: String? = nil,
+        frontmatter: [String: String] = [:]
+    ) -> Item {
+        Item(
+            id: "\(kind.rawValue):\(origin.label):\(name)", name: name, kind: kind,
+            origin: origin, frontmatter: frontmatter, enabled: enabled, pluginID: pluginID
+        )
+    }
+
     // MARK: Assistant menu × chips
 
     func testAnAssistantWithNothingLoadedCountsZeroOnEveryChip() {
@@ -105,5 +116,98 @@ final class FilterCompositionTests: XCTestCase {
         XCTAssertEqual(count(fixture, selection: .skills), 1)
         XCTAssertEqual(count(fixture, selection: .commands), 1)
         XCTAssertEqual(count(fixture, selection: .commands, query: "skill"), 0)
+    }
+
+
+    // MARK: Every kind × effective state
+
+    func testOnAndOffFiltersWorkForEveryInventoryKind() {
+        let kinds: [(Selection, ItemKind)] = [
+            (.skills, .skill), (.commands, .command), (.agents, .agent), (.mcp, .mcp),
+        ]
+        for (selection, kind) in kinds {
+            let items = [item("on", kind: kind), item("off", kind: kind, enabled: false)]
+            let on = Filtering.apply(
+                items, selection: selection, filter: .enabled, query: "", order: .name
+            )
+            let off = Filtering.apply(
+                items, selection: selection, filter: .disabled, query: "", order: .name
+            )
+            XCTAssertEqual(on.map(\.name), ["on"], "\(kind) has an On filter")
+            XCTAssertEqual(off.map(\.name), ["off"], "\(kind) has an Off filter")
+        }
+    }
+
+    func testTurningOffAPluginMakesEveryKindItShipsEffectivelyOff() {
+        let pluginID = "toolkit@mkt"
+        let items = [
+            item("skill", kind: .skill, origin: .plugin("toolkit"), pluginID: pluginID),
+            item("command", kind: .command, origin: .plugin("toolkit"), pluginID: pluginID),
+            item("agent", kind: .agent, origin: .plugin("toolkit"), pluginID: pluginID),
+        ]
+        for (selection, name) in [(Selection.skills, "skill"), (.commands, "command"), (.agents, "agent")] {
+            XCTAssertEqual(
+                Filtering.apply(
+                    items, selection: selection, filter: .disabled, query: "", order: .name,
+                    disabledPluginIDs: [pluginID]
+                ).map(\.name),
+                [name]
+            )
+            XCTAssertTrue(Filtering.apply(
+                items, selection: selection, filter: .enabled, query: "", order: .name,
+                disabledPluginIDs: [pluginID]
+            ).isEmpty)
+        }
+        XCTAssertTrue(items.allSatisfy(\.enabled), "their own choices remain on for the next plugin enable")
+    }
+
+    func testPluginOriginFilterCoversSkillsCommandsAndAgents() {
+        let plugin = Origin.plugin("toolkit")
+        let items = [
+            item("skill", kind: .skill, origin: plugin),
+            item("command", kind: .command, origin: plugin),
+            item("agent", kind: .agent, origin: plugin),
+            item("personal", kind: .skill),
+        ]
+        for selection in [Selection.skills, .commands, .agents] {
+            XCTAssertEqual(
+                Filtering.apply(
+                    items, selection: selection, filter: .fromPlugins, query: "", order: .name
+                ).count,
+                1
+            )
+        }
+    }
+
+    // MARK: Generic frontmatter
+
+    func testFrontmatterFilterAcceptsAnyKeyAndComposesWithKind() {
+        let items = [
+            item("forked", kind: .skill, frontmatter: ["context": "fork"]),
+            item("plain", kind: .skill, frontmatter: ["name": "plain"]),
+            item("command", kind: .command, frontmatter: ["context": "fork"]),
+        ]
+
+        let filtered = Filtering.apply(
+            items, selection: .skills, filter: .frontmatter, query: "", order: .name,
+            frontmatterFilterKey: "context"
+        )
+
+        XCTAssertEqual(filtered.map(\.name), ["forked"])
+    }
+
+    func testFrontmatterSortUsesValuesAndPutsMissingKeysLast() {
+        let items = [
+            item("missing", kind: .skill),
+            item("second", kind: .skill, frontmatter: ["priority": "20"]),
+            item("first", kind: .skill, frontmatter: ["priority": "3"]),
+        ]
+
+        let sorted = Filtering.apply(
+            items, selection: .skills, filter: .all, query: "", order: .frontmatter,
+            frontmatterSortKey: "priority"
+        )
+
+        XCTAssertEqual(sorted.map(\.name), ["first", "second", "missing"])
     }
 }

@@ -371,12 +371,13 @@ extension DisableAcrossAssistantsTests {
         )
         let mutations = Mutations(paths: fixture.paths)
         try mutations.disableSkill(item("demo", in: fixture), assistants: assistants(fixture))
+        let parkedItem = item("demo", in: fixture, enabled: false)
         // Something else of the same name turns up in Codex while it is parked.
         skill("demo", forAssistant: "codex", in: fixture)
 
         XCTAssertThrowsError(
             try mutations.enableSkill(
-                item("demo", in: fixture, enabled: false),
+                parkedItem,
                 into: assistants(fixture).filter { ["claude", "codex"].contains($0.id) },
                 assistants: assistants(fixture)
             )

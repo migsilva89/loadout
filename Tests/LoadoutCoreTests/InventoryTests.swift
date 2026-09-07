@@ -154,6 +154,30 @@ final class InventoryTests: XCTestCase {
         XCTAssertEqual(skills.first { $0.name == "parked" }?.enabled, false)
     }
 
+    /// The live and parked copies can belong to different roots, which can mean two genuinely
+    /// different skills. Both stay visible, but with distinct ids so SwiftUI draws two real rows
+    /// instead of one row and one empty slot.
+    func testSkillLiveInAnAssistantAndParkedInSharedStoreHasDistinctRows() throws {
+        let fixture = Fixture()
+        let fm = FileManager.default
+        fixture.skill("paseo-handoff")
+
+        let sharedOff = fixture.paths.sharedSkills.deletingLastPathComponent()
+            .appendingPathComponent("skills-off/paseo-handoff")
+        try fm.createDirectory(at: sharedOff, withIntermediateDirectories: true)
+        try "---\nname: paseo-handoff\ndescription: Stale parked copy.\n---\n".write(
+            to: sharedOff.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8
+        )
+
+        let skills = InventoryScanner(paths: fixture.paths).scanAll().items
+            .filter { $0.kind == .skill && $0.name == "paseo-handoff" }
+
+        XCTAssertEqual(skills.count, 2)
+        XCTAssertEqual(skills.map(\.enabled).sorted { !$0 && $1 }, [false, true])
+        XCTAssertEqual(skills.map(\.id).count, Set(skills.map(\.id)).count)
+        XCTAssertEqual(Filtering.filter(skills, by: .disabled).count, 1, "the parked copy stays findable")
+    }
+
     // MARK: AC1.4
 
     func testPluginSkillsAreAttributedToTheirPlugin() {

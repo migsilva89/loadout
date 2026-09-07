@@ -237,7 +237,8 @@ struct DetailView: View {
 
     /// Who the Assistants card is for: your own skills and commands, while they are switched on.
     private func showsAssistants(_ item: Item) -> Bool {
-        (item.kind == .skill || item.kind == .command) && item.origin == .personal && item.enabled
+        (item.kind == .skill || item.kind == .command)
+            && item.origin == .personal && model.isEffectivelyEnabled(item)
     }
 
     /// The one gesture behind all three controls — the chip, the seam and ⌥⌘I — so they cannot
@@ -301,7 +302,9 @@ struct DetailView: View {
     // MARK: - Header
 
     private func header(_ item: Item) -> some View {
-        HStack(alignment: .center, spacing: 12) {
+        let effectivelyEnabled = model.isEffectivelyEnabled(item)
+        let parentPluginIsOff = item.pluginID != nil && model.pluginIsOff(for: item)
+        return HStack(alignment: .center, spacing: 12) {
             // The theme's own gradient, the same one the app icon is drawn with — the tile is
             // the item's icon, and which kind it is comes from the glyph on it and the tab you
             // are on, not from a hue borrowed from the system palette.
@@ -314,7 +317,7 @@ struct DetailView: View {
                         .foregroundStyle(.white)
                 }
                 .shadow(color: .black.opacity(0.5), radius: 1.5, y: 1)
-                .saturation(item.enabled ? 1 : 0.2)
+                .saturation(effectivelyEnabled ? 1 : 0.2)
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.name)
                     .font(.system(size: 19, weight: .semibold))
@@ -333,11 +336,12 @@ struct DetailView: View {
             // Every skill has this switch now, whoever it belongs to: a plugin shipping 38 of them
             // used to mean all 38 or none.
             if item.kind != .plugin {
-                Text(item.enabled ? "Enabled" : "Disabled")
+                Text(effectivelyEnabled ? "Enabled" : "Disabled")
                     .font(.system(size: 12.5))
                     .foregroundStyle(V2.textMid)
                     .help(switchHelp(item))
-                MiniSwitch(on: item.enabled, width: 40, height: 24) { model.toggle(item) }
+                MiniSwitch(on: effectivelyEnabled, width: 40, height: 24) { model.toggle(item) }
+                    .disabled(parentPluginIsOff)
                     .help(switchHelp(item))
             }
         }
@@ -367,6 +371,9 @@ struct DetailView: View {
     /// worth saying, because a switch beside a file is read as one that might.
     private func switchHelp(_ item: Item) -> String {
         let noun = item.kind.briefingNoun
+        if item.pluginID != nil, model.pluginIsOff(for: item) {
+            return "Turn on the plugin before changing this \(noun)"
+        }
         if item.kind == .mcp {
             return item.enabled
                 ? "Turn off to lift this server out of the assistant's configuration, keeping what it said so you can put it back"
