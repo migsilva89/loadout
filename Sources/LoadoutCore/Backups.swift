@@ -30,7 +30,13 @@ public struct Backups: Sendable {
             // this began, which is exactly the copy somebody would be reaching for.
             var destination = destination
             var attempt = 2
-            while fm.fileExists(atPath: destination.path) {
+            // `fileExists` follows symbolic links. A snapshot of a shared skill is itself a
+            // symlink, and becomes dangling as soon as the real skill is parked in `skills-off`.
+            // At that point `fileExists` says the backup name is free even though the directory
+            // entry is still there; `copyItem` then fails with "an item with the same name already
+            // exists" and blocks the next toggle. Reading the entry's attributes is lstat-like:
+            // it sees the link itself whether or not its destination still exists.
+            while entryExists(at: destination) {
                 let name = destination.deletingPathExtension().lastPathComponent
                 let ext = destination.pathExtension
                 let unique = "\(name)-\(attempt)" + (ext.isEmpty ? "" : ".\(ext)")
@@ -43,6 +49,10 @@ public struct Backups: Sendable {
             throw LoadoutError.backupFailed(error.localizedDescription)
         }
         return destination
+    }
+
+    private func entryExists(at url: URL) -> Bool {
+        (try? fm.attributesOfItem(atPath: url.path)) != nil
     }
 
     /// `~/.claude/skills/foo` becomes `skills/foo`; anything outside `~/.claude` keeps its

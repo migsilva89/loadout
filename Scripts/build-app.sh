@@ -24,9 +24,15 @@ VERSION="${VERSION#v}"
 SIGN_IDENTITY="${LOADOUT_SIGN_IDENTITY:-}"
 
 echo "→ Building ($CONFIG)"
-swift build -c "$CONFIG" --product LoadoutApp
+BUILD_ARGS=(-c "$CONFIG" --product LoadoutApp)
+# Releases are one app for both kinds of Mac. Debug builds stay native so the edit/build loop is
+# fast; everything that can leave this machine goes through the default release path.
+if [[ "$CONFIG" == "release" ]]; then
+  BUILD_ARGS+=(--arch arm64 --arch x86_64)
+fi
+swift build "${BUILD_ARGS[@]}"
 
-BINARY="$(swift build -c "$CONFIG" --product LoadoutApp --show-bin-path)/LoadoutApp"
+BINARY="$(swift build "${BUILD_ARGS[@]}" --show-bin-path)/LoadoutApp"
 [[ -x "$BINARY" ]] || { echo "no binary at $BINARY"; exit 1; }
 
 echo "→ Assembling the bundle"
@@ -40,6 +46,19 @@ cp "$BINARY" "$APP/Contents/MacOS/Loadout"
 SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
 BUILT_SPARKLE="$(dirname "$BINARY")/Sparkle.framework"
 [[ -d "$BUILT_SPARKLE" ]] || { echo "no Sparkle.framework beside $BINARY — run 'swift package resolve'"; exit 1; }
+
+if [[ "$CONFIG" == "release" ]]; then
+  require_universal() {
+    local file="$1" label="$2" archs
+    archs="$(lipo -archs "$file")"
+    [[ " $archs " == *" arm64 "* && " $archs " == *" x86_64 "* ]] || {
+      echo "$label is not universal (found: $archs)"
+      exit 1
+    }
+  }
+  require_universal "$BINARY" "Loadout"
+  require_universal "$BUILT_SPARKLE/Versions/B/Sparkle" "Sparkle.framework"
+fi
 rm -rf "$SPARKLE"
 ditto "$BUILT_SPARKLE" "$SPARKLE"
 # Loadout is not sandboxed. Sparkle's XPC services exist only to carry the installer across a

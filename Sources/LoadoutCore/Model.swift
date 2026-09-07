@@ -63,6 +63,9 @@ public struct Item: Identifiable, Equatable, Sendable {
     public var kind: ItemKind
     public var origin: Origin
     public var description: String
+    /// Top-level frontmatter keys and their readable values. Kept as data so the inventory can
+    /// filter and sort generically without knowing which assistant invented a field.
+    public var frontmatter: [String: String]
     /// The file that defines it (`SKILL.md`, the command's `.md`, …). Nil for MCP servers,
     /// which live inside a JSON blob rather than in a file of their own.
     public var path: URL?
@@ -102,6 +105,7 @@ public struct Item: Identifiable, Equatable, Sendable {
         kind: ItemKind,
         origin: Origin,
         description: String = "",
+        frontmatter: [String: String] = [:],
         path: URL? = nil,
         directory: URL? = nil,
         modified: Date? = nil,
@@ -124,6 +128,7 @@ public struct Item: Identifiable, Equatable, Sendable {
         self.kind = kind
         self.origin = origin
         self.description = description
+        self.frontmatter = frontmatter
         self.path = path
         self.directory = directory
         self.modified = modified

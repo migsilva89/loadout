@@ -137,6 +137,27 @@ public struct Frontmatter: Equatable, Sendable {
         return pairs
     }
 
+    /// Top-level frontmatter as indexable data. Values stay readable for the list column and sort;
+    /// nested structures are flattened into one stable summary while the key itself stays generic.
+    public static func indexedFields(_ text: String) -> [String: String] {
+        tree(text).reduce(into: [:]) { fields, pair in
+            // Duplicate YAML keys are malformed but occur in hand-edited files. The existing
+            // reader uses the last one; indexing must stay equally forgiving instead of trapping.
+            fields[pair.0] = indexedText(pair.1)
+        }
+    }
+
+    private static func indexedText(_ value: Value) -> String {
+        switch value {
+        case .scalar(let text):
+            return text
+        case .list(let values):
+            return values.map(indexedText).joined(separator: ", ")
+        case .map(let pairs):
+            return pairs.map { "\($0.0): \(indexedText($0.1))" }.joined(separator: ", ")
+        }
+    }
+
     /// One map, consuming every line indented further than its parent.
     private static func readMap(_ lines: [String], _ index: inout Int, indent parentIndent: Int) -> Value {
         var pairs: [(String, Value)] = []

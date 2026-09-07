@@ -131,10 +131,14 @@ struct PluginDetailView: View {
     let plugin: PluginInfo
 
     private var items: [Item] { model.itemsOfPlugin(plugin) }
-    /// Skills and commands both have a switch of their own now, so they belong in the same list —
-    /// splitting them left a plugin command switchable in one place and not in the other.
-    private var switchable: [Item] { items.filter { $0.kind == .skill || $0.kind == .command } }
-    private var rest: [Item] { items.filter { $0.kind != .skill && $0.kind != .command } }
+    /// Every file-backed item has the same reversible switch. MCP entries are not currently read
+    /// from plugin manifests, so anything else stays informational.
+    private var switchable: [Item] {
+        items.filter { $0.kind == .skill || $0.kind == .command || $0.kind == .agent }
+    }
+    private var rest: [Item] {
+        items.filter { $0.kind != .skill && $0.kind != .command && $0.kind != .agent }
+    }
 
     var body: some View {
         ScrollView {
@@ -153,7 +157,7 @@ struct PluginDetailView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if !switchable.isEmpty {
-                    section("Skills and commands", items: switchable, switchable: true)
+                    section("Skills, commands and agents", items: switchable, switchable: true)
                 }
                 whereItLives
                 if !rest.isEmpty {
@@ -298,11 +302,13 @@ struct PluginDetailView: View {
     /// there is nothing to flip here, or it reads as a switch that failed to draw.
     @ViewBuilder
     private func itemRow(_ item: Item, switchable: Bool) -> some View {
+        let effectivelyEnabled = model.isEffectivelyEnabled(item)
+        let pluginIsOff = !plugin.enabled
         let row = HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.name)
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(item.enabled ? V2.text : V2.textDim)
+                    .foregroundStyle(effectivelyEnabled ? V2.text : V2.textDim)
                 Text(item.description)
                     .font(.system(size: 11.5))
                     .foregroundStyle(Color.white.opacity(0.42))
@@ -311,12 +317,18 @@ struct PluginDetailView: View {
             }
             Spacer(minLength: 6)
             if switchable {
-                MiniSwitch(on: item.enabled) { model.toggle(item) }
+                // While the plugin itself is off nothing here is loaded, so the switch reads off
+                // and does not move: this is the one page showing both switches at once, and a
+                // child left on under a parent turned off is the page contradicting itself.
+                MiniSwitch(on: effectivelyEnabled) { model.toggle(item) }
+                    .disabled(pluginIsOff)
                     .help(
-                        item.enabled
-                            ? "Stop Claude loading \(item.name), leaving the rest of the plugin on. "
-                                + "It stays off when the plugin updates."
-                            : "Let Claude load \(item.name) again. A plugin update leaves it on from now on."
+                        pluginIsOff
+                            ? "Turn on the \(plugin.name) plugin before changing this \(item.kind.briefingNoun)"
+                            : item.enabled
+                                ? "Stop Claude loading \(item.name), leaving the rest of the plugin on. "
+                                    + "It stays off when the plugin updates."
+                                : "Let Claude load \(item.name) again. A plugin update leaves it on from now on."
                     )
             }
         }

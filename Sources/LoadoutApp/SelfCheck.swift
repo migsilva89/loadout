@@ -138,8 +138,18 @@ enum SelfCheck {
         for name in ["vercel-cli", "vercel-functions"] {
             let folder = install.appendingPathComponent("skills/\(name)")
             try! FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            try! "---\nname: \(name)\ndescription: From the plugin.\n---\n\nBody.".write(
+            try! "---\nname: \(name)\ndescription: From the plugin.\nteam: platform\npriority: \(name == "vercel-cli" ? "1" : "2")\n---\n\nBody.".write(
                 to: folder.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8
+            )
+        }
+        for (folder, name, kind) in [
+            ("commands", "vercel-status", "command"),
+            ("agents", "vercel-reviewer", "agent"),
+        ] {
+            let directory = install.appendingPathComponent(folder)
+            try! FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try! "---\ndescription: A plugin \(kind).\nteam: delivery\n---\n\nBody.".write(
+                to: directory.appendingPathComponent("\(name).md"), atomically: true, encoding: .utf8
             )
         }
         try! JSONSerialization.data(withJSONObject: [
@@ -152,6 +162,16 @@ enum SelfCheck {
 
         let pluginSkill = model.items.first { $0.name == "vercel-functions" }!
         check("a plugin skill knows which plugin it came from", pluginSkill.pluginID == "vercel@official")
+        check("generic frontmatter keys reach the app model", model.frontmatterKeys.contains("team"))
+        model.filterByFrontmatter("team")
+        check("a generic frontmatter key filters the visible list", model.visibleItems.count == 2)
+        model.sortByFrontmatter("priority")
+        check("a generic frontmatter key sorts values and exposes its column", {
+            model.filter = .all
+            return model.visibleItems.prefix(2).map(\.name) == ["vercel-cli", "vercel-functions"]
+                && model.visibleFrontmatterKey == "priority"
+        }())
+        model.order = .usage
         model.toggle(pluginSkill)
         check(
             "one plugin skill can be switched off on its own",
@@ -171,13 +191,32 @@ enum SelfCheck {
         )
         check("the plugin's detail pane has something to show", {
             model.selectedPluginID = "vercel@official"
-            return model.selectedPlugin.map { model.itemsOfPlugin($0).count } == 2
+            return model.selectedPlugin.map { model.itemsOfPlugin($0).count } == 4
         }())
         model.toggle(model.items.first { $0.name == "vercel-functions" }!)
         check(
             "switching it back on forgets it, so updates leave it alone",
             model.mutations.records.pluginSkills(of: "vercel@official").isEmpty
         )
+        if let plugin = model.plugins.first(where: { $0.id == "vercel@official" }) {
+            model.togglePlugin(plugin)
+            let pluginItems = model.items.filter { $0.pluginID == plugin.id }
+            check("turning a plugin off makes every item it ships effectively off",
+                  pluginItems.count == 4 && pluginItems.allSatisfy { !model.isEffectivelyEnabled($0) })
+            for (selection, kind) in [
+                (Selection.skills, ItemKind.skill),
+                (.commands, .command),
+                (.agents, .agent),
+            ] {
+                model.selection = selection
+                model.filter = .disabled
+                check("the Off filter keeps the disabled plugin's \(kind.rawValue)s visible",
+                      model.visibleItems.contains { $0.pluginID == plugin.id && $0.kind == kind })
+            }
+            model.togglePlugin(model.plugins.first { $0.id == plugin.id }!)
+            model.selection = .skills
+            model.filter = .all
+        }
         // The page also has to say what the plugin *is*: where its folder is and what it brought.
         // Without those, "how do I get rid of this?" had no answer on the screen that was about it.
         check("the page can say what the plugin ships", {

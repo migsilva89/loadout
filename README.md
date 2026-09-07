@@ -51,7 +51,7 @@ Or download the [latest release](../../releases/latest) — the [website](https:
 points at the same file — and drag `Loadout.app` into `/Applications`. The disk image is signed and
 notarised, so it opens without a Gatekeeper warning and without a trip through System Settings.
 
-macOS 15 or later.
+macOS 15 or later, on Apple silicon or Intel.
 
 Or build it yourself, which needs Xcode:
 

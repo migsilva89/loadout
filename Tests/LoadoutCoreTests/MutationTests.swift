@@ -271,6 +271,43 @@ final class MutationTests: XCTestCase {
         XCTAssertNil(try backups.snapshot(fixture.paths.skills.appendingPathComponent("nao-existe")))
     }
 
+    /// A backup of a shared skill is a symlink. Once its target moves to `skills-off`, that old
+    /// backup becomes dangling but still occupies its filename. A second snapshot in the same
+    /// second must see the link itself and choose a suffix instead of failing with "already exists".
+    func testSnapshotAvoidsANameOccupiedByADanglingSymlink() throws {
+        let fixture = Fixture()
+        let fm = FileManager.default
+        let backups = Backups(paths: fixture.paths)
+        let stamp = Backups.stampFormatter.date(from: "2026-09-05T12-00-00")!
+
+        let canonical = fixture.paths.sharedSkills.appendingPathComponent("seo-audit")
+        try fm.createDirectory(at: canonical, withIntermediateDirectories: true)
+        try "skill".write(
+            to: canonical.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8
+        )
+        let claudeLink = fixture.paths.skills.appendingPathComponent("seo-audit")
+        try fm.createSymbolicLink(at: claudeLink, withDestinationURL: canonical)
+        try backups.snapshot(claudeLink, stamp: stamp)
+
+        let parked = fixture.paths.sharedSkills.deletingLastPathComponent()
+            .appendingPathComponent("skills-off/seo-audit")
+        try fm.createDirectory(at: parked.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try fm.moveItem(at: canonical, to: parked)
+
+        let codexCopy = fixture.paths.skillsRoot(forAssistant: "codex")
+            .appendingPathComponent("seo-audit")
+        try fm.createDirectory(at: codexCopy, withIntermediateDirectories: true)
+        try "second".write(
+            to: codexCopy.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8
+        )
+
+        XCTAssertNoThrow(try backups.snapshot(codexCopy, stamp: stamp))
+        XCTAssertTrue(fixture.exists(
+            fixture.paths.backups
+                .appendingPathComponent("2026-09-05T12-00-00/skills/seo-audit-2/SKILL.md")
+        ))
+    }
+
     // MARK: - Snapshot enumeration (Settings › Backups)
 
     func testListSnapshotsFindsOnlyStampNamedFolders() throws {

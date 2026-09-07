@@ -65,6 +65,10 @@ enum DriveScript {
             guard let order = ItemSort(rawValue: argument) else { return "no such order" }
             model.order = order
             return "ok"
+        case "sort-frontmatter":
+            guard model.frontmatterKeys.contains(argument) else { return "no such frontmatter key" }
+            model.sortByFrontmatter(argument)
+            return "ok"
         case "toggle-plugin":
             // The plugin's own switch, which is a different control from an item's.
             guard let plugin = model.plugins.first(where: { $0.name == argument })
@@ -78,6 +82,10 @@ enum DriveScript {
         case "filter":
             guard let filter = ItemFilter(rawValue: argument) else { return "no such filter" }
             model.filter = filter
+            return "ok"
+        case "filter-frontmatter":
+            guard model.frontmatterKeys.contains(argument) else { return "no such frontmatter key" }
+            model.filterByFrontmatter(argument)
             return "ok"
         case "select":
             // By id when one is given, because two projects may hold a row of the same name and a
@@ -238,6 +246,7 @@ enum DriveScript {
                 "kind": item.kind.rawValue,
                 "origin": item.origin.label,
                 "enabled": item.enabled,
+                "effectivelyEnabled": model.isEffectivelyEnabled(item),
                 "assistants": item.assistants.sorted(),
                 "path": item.path?.path ?? "",
                 // Straight from the file system, so a row that claims something the disk does not

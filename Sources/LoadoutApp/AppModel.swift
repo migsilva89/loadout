@@ -100,6 +100,10 @@ final class AppModel {
     var filter: ItemFilter = .all {
         didSet { followSelectionIntoView() }
     }
+    /// The generic frontmatter key chosen in the filter funnel. Nil for every ordinary filter.
+    var frontmatterFilterKey: String? {
+        didSet { followSelectionIntoView() }
+    }
     /// The assistant menu next to sort. Independent of `filter`, and only meaningful for
     /// skills — resets to `.any` alongside `filter` whenever the sidebar row changes.
     var assistantFilter: AssistantFilter = .any {
@@ -110,6 +114,8 @@ final class AppModel {
         didSet { followSelectionIntoView() }
     }
     var order: ItemSort = .usage
+    /// The generic frontmatter key chosen in the sort menu.
+    var frontmatterSortKey: String?
     /// Bridges ⌘F (a window-level command, with no view of its own) to the search field's
     /// `@FocusState`, which can only live inside the view that owns the field.
     var searchFocused: Bool = false
@@ -546,8 +552,42 @@ final class AppModel {
     var visibleItems: [Item] {
         Filtering.apply(
             items, selection: selection, filter: filter,
-            assistant: assistantFilter, query: query, order: order
+            assistant: assistantFilter, query: query, order: order,
+            frontmatterFilterKey: frontmatterFilterKey,
+            frontmatterSortKey: frontmatterSortKey,
+            disabledPluginIDs: disabledPluginIDs
         )
+    }
+
+    /// Every key that exists in the current kind. Nothing here knows Claude's or Codex's schema:
+    /// a new field appears in the menus as soon as a file contains it.
+    var frontmatterKeys: [String] {
+        Set(Filtering.slice(items, for: selection).flatMap { $0.frontmatter.keys })
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    /// The key shown as a small column on each row while frontmatter drives the list.
+    var visibleFrontmatterKey: String? {
+        order == .frontmatter ? frontmatterSortKey
+            : (filter == .frontmatter ? frontmatterFilterKey : nil)
+    }
+
+    private var disabledPluginIDs: Set<String> {
+        Set(plugins.filter { !$0.enabled }.map(\.id))
+    }
+
+    func isEffectivelyEnabled(_ item: Item) -> Bool {
+        Filtering.isEffectivelyEnabled(item, disabledPluginIDs: disabledPluginIDs)
+    }
+
+    func filterByFrontmatter(_ key: String) {
+        frontmatterFilterKey = key
+        filter = .frontmatter
+    }
+
+    func sortByFrontmatter(_ key: String) {
+        frontmatterSortKey = key
+        order = .frontmatter
     }
 
     var selected: Item? {
@@ -568,7 +608,20 @@ final class AppModel {
     func count(for chip: ItemFilter) -> Int {
         Filtering.apply(
             items, selection: selection, filter: chip,
-            assistant: assistantFilter, query: query, order: order
+            assistant: assistantFilter, query: query, order: order,
+            frontmatterFilterKey: frontmatterFilterKey,
+            frontmatterSortKey: frontmatterSortKey,
+            disabledPluginIDs: disabledPluginIDs
+        ).count
+    }
+
+    func count(frontmatterKey: String) -> Int {
+        Filtering.apply(
+            items, selection: selection, filter: .frontmatter,
+            assistant: assistantFilter, query: query, order: order,
+            frontmatterFilterKey: frontmatterKey,
+            frontmatterSortKey: frontmatterSortKey,
+            disabledPluginIDs: disabledPluginIDs
         ).count
     }
 

@@ -3,11 +3,13 @@ import Foundation
 public enum ItemSort: String, CaseIterable, Sendable {
     case name
     case usage
+    case frontmatter
 
     public var label: String {
         switch self {
         case .name: return "Name"
         case .usage: return "Most used"
+        case .frontmatter: return "Frontmatter"
         }
     }
 }
@@ -54,22 +56,26 @@ public enum Selection: String, Equatable, Hashable, Sendable, CaseIterable {
 /// complexity of combining chips.
 public enum ItemFilter: String, Equatable, Hashable, Sendable, CaseIterable {
     case all
+    case enabled
     case mine
     case fromPlugins
     case neverUsed
     case disabled
     case overBudget
+    case frontmatter
 
     /// "Personal", not "Mine": read next to a count on a chip, "Mine 12" reads like a
     /// possessive fragment, where "Personal 12" reads as a label.
     public var title: String {
         switch self {
         case .all: return "All"
+        case .enabled: return "On"
         case .mine: return "Personal"
         case .fromPlugins: return "From plugins"
         case .neverUsed: return "Never used"
         case .disabled: return "Off"
         case .overBudget: return "Over budget"
+        case .frontmatter: return "Frontmatter"
         }
     }
 
@@ -78,12 +84,15 @@ public enum ItemFilter: String, Equatable, Hashable, Sendable, CaseIterable {
     public var hint: String {
         switch self {
         case .all: return "Everything in this list"
+        case .enabled: return "Currently turned on and available to the assistant"
         case .mine: return "Created and kept locally, not from a project or plugin"
         case .fromPlugins: return "Comes from an installed plugin"
         case .neverUsed: return "Never used in the last 90 days"
         case .disabled: return "Currently turned off"
         case .overBudget:
             return "Breaks a documented limit: body over \(Budget.maxBodyLines) lines or \(Budget.maxBodyWords) words, or a name or description over its maximum"
+        case .frontmatter:
+            return "Has the selected frontmatter key"
         }
     }
 }
@@ -121,10 +130,15 @@ public enum Filtering {
     }
 
     /// The chip, applied on top of the sidebar slice.
-    public static func filter(_ items: [Item], by filter: ItemFilter) -> [Item] {
+    public static func filter(
+        _ items: [Item], by filter: ItemFilter, frontmatterKey: String? = nil,
+        disabledPluginIDs: Set<String> = []
+    ) -> [Item] {
         switch filter {
         case .all:
             return items
+        case .enabled:
+            return items.filter { isEffectivelyEnabled($0, disabledPluginIDs: disabledPluginIDs) }
         case .mine:
             return items.filter { $0.origin == .personal }
         case .fromPlugins:
@@ -135,10 +149,19 @@ public enum Filtering {
         case .neverUsed:
             return items.filter { $0.usage.neverUsed }
         case .disabled:
-            return items.filter { !$0.enabled }
+            return items.filter { !isEffectivelyEnabled($0, disabledPluginIDs: disabledPluginIDs) }
         case .overBudget:
             return items.filter { $0.budget.isOverBudget }
+        case .frontmatter:
+            guard let frontmatterKey else { return items }
+            return items.filter { $0.frontmatter[frontmatterKey] != nil }
         }
+    }
+
+    public static func isEffectivelyEnabled(
+        _ item: Item, disabledPluginIDs: Set<String> = []
+    ) -> Bool {
+        item.enabled && !(item.pluginID.map { disabledPluginIDs.contains($0) } ?? false)
     }
 
     /// The assistant menu, applied independently of the chip.
@@ -153,7 +176,9 @@ public enum Filtering {
         }
     }
 
-    public static func sort(_ items: [Item], by order: ItemSort) -> [Item] {
+    public static func sort(
+        _ items: [Item], by order: ItemSort, frontmatterKey: String? = nil
+    ) -> [Item] {
         switch order {
         case .name:
             return items.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
@@ -163,20 +188,40 @@ public enum Filtering {
                     ? $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
                     : $0.usage.count > $1.usage.count
             }
+        case .frontmatter:
+            guard let frontmatterKey else { return sort(items, by: .name) }
+            return items.sorted {
+                let left = $0.frontmatter[frontmatterKey]
+                let right = $1.frontmatter[frontmatterKey]
+                switch (left, right) {
+                case let (a?, b?) where a != b:
+                    return a.localizedStandardCompare(b) == .orderedAscending
+                case (_?, nil): return true
+                case (nil, _?): return false
+                default:
+                    return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+                }
+            }
         }
     }
 
     public static func apply(
         _ items: [Item], selection: Selection, filter chip: ItemFilter,
-        assistant: AssistantFilter = .any, query: String, order: ItemSort
+        assistant: AssistantFilter = .any, query: String, order: ItemSort,
+        frontmatterFilterKey: String? = nil, frontmatterSortKey: String? = nil,
+        disabledPluginIDs: Set<String> = []
     ) -> [Item] {
         sort(
             filter(
-                filter(slice(items, for: selection), by: chip),
+                filter(
+                    slice(items, for: selection), by: chip,
+                    frontmatterKey: frontmatterFilterKey,
+                    disabledPluginIDs: disabledPluginIDs
+                ),
                 by: assistant
             )
             .filter { matches($0, query: query) },
-            by: order
+            by: order, frontmatterKey: frontmatterSortKey
         )
     }
 }
