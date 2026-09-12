@@ -16,9 +16,12 @@ public struct AskConversation: Codable, Identifiable, Hashable, Sendable {
     public var startedAt: Date
     /// The first thing that was asked, trimmed — how a conversation is recognised in a list.
     public var title: String
+    /// Nil for conversations made before global chat; those remain available in History.
+    public var contexts: [ChatContext]?
 
     public init(
-        id: String, itemID: String, cliID: String, originPath: String, startedAt: Date, title: String
+        id: String, itemID: String, cliID: String, originPath: String, startedAt: Date, title: String,
+        contexts: [ChatContext]? = nil
     ) {
         self.id = id
         self.itemID = itemID
@@ -26,6 +29,7 @@ public struct AskConversation: Codable, Identifiable, Hashable, Sendable {
         self.originPath = originPath
         self.startedAt = startedAt
         self.title = title
+        self.contexts = contexts
     }
 }
 

@@ -25,6 +25,12 @@ struct AskPanel: View {
                 Divider().overlay(V2.hairline)
                 proposalsArea
             }
+            if model.ask.isGlobal && model.ask.hasUnsavedChanges {
+                Button("Save accepted changes") { model.saveChatChanges() }
+                    .buttonStyle(V2ToolbarButtonStyle(prominent: true, enabled: !model.ask.isRunning))
+                    .disabled(model.ask.isRunning)
+                    .padding(10)
+            }
             Divider().overlay(V2.hairline)
             composer
         }
@@ -38,12 +44,12 @@ struct AskPanel: View {
             Image(systemName: "sparkles")
                 .font(.system(size: 11))
                 .foregroundStyle(V2.link)
-            Text(model.ask.cli?.label ?? "Ask")
+            Text("Chat")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(V2.text)
                 .help(
                     model.ask.cli.map {
-                        "\($0.label) is the assistant answering here, in a copy of this skill's folder"
+                        "\($0.label) is answering this conversation"
                     } ?? "The assistant that answers here"
                 )
             // A bare spinner at this size is almost invisible against the bar, so it says what it
@@ -59,14 +65,14 @@ struct AskPanel: View {
             Button("History") { historyOpen.toggle() }
                 .buttonStyle(V2ToolbarButtonStyle(prominent: false, enabled: !model.ask.history.isEmpty))
                 .disabled(model.ask.history.isEmpty)
-                .help("The earlier conversations about this skill")
+                .help("Your earlier conversations")
                 .pointingHand(enabled: !model.ask.history.isEmpty)
                 .popover(isPresented: $historyOpen, arrowEdge: .bottom) { historyList }
             Button("New") { model.ask.startNewConversation() }
-                .buttonStyle(V2ToolbarButtonStyle(prominent: false, enabled: !model.ask.entries.isEmpty))
-                .disabled(model.ask.entries.isEmpty)
+                .buttonStyle(V2ToolbarButtonStyle(prominent: false, enabled: model.ask.canLeaveConversation))
+                .disabled(!model.ask.canLeaveConversation)
                 .help("Start a fresh conversation. This one is kept, under History.")
-                .pointingHand(enabled: !model.ask.entries.isEmpty)
+                .pointingHand(enabled: model.ask.canLeaveConversation)
             Button("Close") { model.showsAskPanel = false }
                 .buttonStyle(V2ToolbarButtonStyle(prominent: false, enabled: true))
                 .help("Hide the conversation. It is kept, and reopens where you left it.")
@@ -76,11 +82,11 @@ struct AskPanel: View {
         .frame(height: 40)
     }
 
-    /// The earlier conversations about this skill. Ids, read back from the assistant's own record —
+    /// Your earlier conversations. Ids, read back from the assistant's own record —
     /// so this list can only ever offer what the assistant can still resume.
     private var historyList: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Conversations about this skill")
+            Text("Conversations")
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(V2.textMid)
                 .padding(.horizontal, 12)
@@ -167,10 +173,7 @@ struct AskPanel: View {
 
     private var emptyText: String {
         let name = model.ask.cli?.label ?? "the assistant"
-        return """
-            Ask \(name) to change this skill. It works in a copy of the folder, so nothing here \
-            reaches your file until you accept a change and save.
-            """
+        return "Ask \(name) about your setup. Use Ask on a skill to attach it here. Review proposed changes before saving them."
     }
 
     // MARK: - Proposals
@@ -178,11 +181,11 @@ struct AskPanel: View {
     /// Everything the assistant touched except the document on screen. That one is decided in the
     /// editor, at the width of the pane, which is the only place a long change is readable.
     private var sideProposals: [AskModel.Proposal] {
-        model.ask.proposals.filter { $0.id != AskModel.documentName }
+        model.ask.proposals.filter { model.ask.isGlobal || $0.id != AskModel.documentName }
     }
 
     private var documentPending: Int {
-        model.ask.proposals.first { $0.id == AskModel.documentName }?.pending.count ?? 0
+        model.ask.isGlobal ? 0 : (model.ask.proposals.first { $0.id == AskModel.documentName }?.pending.count ?? 0)
     }
 
     private var proposalsArea: some View {
@@ -200,50 +203,31 @@ struct AskPanel: View {
 
             if !sideProposals.isEmpty {
                 Text(sideProposals.count == 1
-                     ? "1 file beside the document"
-                     : "\(sideProposals.count) files beside the document")
+                     ? "1 changed file"
+                     : "\(sideProposals.count) changed files")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(V2.text)
 
                 if sideProposals.count > 1 {
-                    HStack(spacing: 4) {
+                    Menu {
                         ForEach(sideProposals) { proposal in
-                            Button {
+                            Button(model.ask.proposalLabel(proposal.id)) {
                                 model.ask.focusedProposalID = proposal.id
-                            } label: {
-                                HStack(spacing: 4) {
-                                    Text(proposal.id)
-                                    if !proposal.pending.isEmpty {
-                                        Text("\(proposal.pending.count)")
-                                            .font(.system(size: 9.5))
-                                            .foregroundStyle(V2.amber)
-                                    }
-                                }
-                                .font(.system(size: 11))
                             }
-                            .buttonStyle(
-                                V2ToolbarButtonStyle(
-                                    prominent: proposal.id == model.ask.focusedProposalID, enabled: true
-                                )
-                            )
-                            .help(
-                                proposal.pending.isEmpty
-                                    ? "Show what changed in \(proposal.id)"
-                                    : "Show the \(proposal.pending.count) change"
-                                        + (proposal.pending.count == 1 ? "" : "s")
-                                        + " waiting in \(proposal.id)"
-                            )
-                            .pointingHand()
                         }
+                    } label: {
+                        Text(model.ask.proposalLabel(model.ask.focusedProposalID ?? sideProposals[0].id))
+                            .lineLimit(1).truncationMode(.middle)
                     }
+                    .menuStyle(.borderlessButton)
                 }
 
                 if let focused = sideProposals.first(where: { $0.id == model.ask.focusedProposalID })
                     ?? sideProposals.first {
                     Label(
                         focused.isNew
-                            ? "\(focused.id) is new. It is written when you save."
-                            : "\(focused.id) is written when you save, with a backup first.",
+                            ? "\(model.ask.proposalLabel(focused.id)) is new. It is written when you save."
+                            : "\(model.ask.proposalLabel(focused.id)) is written when you save, with a backup first.",
                         systemImage: focused.isNew ? "doc.badge.plus" : "doc.text"
                     )
                     .font(.system(size: 10.5))
@@ -291,6 +275,38 @@ struct AskPanel: View {
 
     private var composer: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if model.ask.contexts.isEmpty {
+                Text("Global · no skills attached")
+                    .font(.system(size: 11)).foregroundStyle(V2.textDim)
+            } else {
+                ScrollView(.horizontal) {
+                    HStack(spacing: 6) {
+                        ForEach(model.ask.contexts) { context in
+                            Button { model.ask.detach(context.id) } label: {
+                                HStack(spacing: 5) {
+                                    Text(model.ask.contextLabel(context)).lineLimit(1)
+                                    Image(systemName: "xmark").font(.system(size: 9))
+                                }
+                            }
+                            .buttonStyle(V2ToolbarButtonStyle(prominent: false, enabled: !model.ask.isRunning))
+                            .disabled(model.ask.isRunning)
+                            .help("Remove \(context.name) from the attachments for future messages. Earlier messages stay in the conversation.")
+                            .accessibilityLabel("Remove \(context.name) from chat")
+                        }
+                    }
+                }
+            }
+            Menu {
+                ForEach(model.askableCLIs) { cli in
+                    Button(cli.label) { model.openChat(cli) }
+                }
+            } label: {
+                Text(model.ask.cli?.label ?? "Choose assistant")
+                    .font(.system(size: 11))
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .disabled(!model.ask.canLeaveConversation)
             TextEditor(text: Binding(
                 get: { model.ask.draftMessage },
                 set: { model.ask.draftMessage = $0 }
@@ -444,7 +460,7 @@ struct AskPanel: View {
         if cli.chat?.resumeTemplate == nil {
             return "\(cli.label) starts fresh each message — it can't pick a conversation back up."
         }
-        return "Runs in a copy of the folder. Your file changes only when you accept and save."
+        return "Attached files change only when you accept and save."
     }
 }
 

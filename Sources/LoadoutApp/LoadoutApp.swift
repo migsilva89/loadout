@@ -71,7 +71,7 @@ struct LoadoutApp: App {
     var body: some Scene {
         Window("Loadout", id: "main") {
             ContentView(model: model)
-                .frame(minWidth: 824, minHeight: 640)
+                .frame(minWidth: model.showsAskPanel ? 1160 : 824, minHeight: 640)
                 // After the window is up and the inventory has been read, so starting the
                 // updater can never be the reason a launch feels slow. Sparkle owns the schedule
                 // from here: it decides when the next check is due, not this line.

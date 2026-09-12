@@ -4,6 +4,20 @@ Notable changes, newest first. Dates are the day the work landed on `main`.
 
 The versions are what a release is tagged as; between tags, `main` is what is being used daily.
 
+## 0.5.0 — 2026-09-12
+
+### Added
+
+- **One chat for your setup.** Open Chat beside New skill from any tab. Browsing skills,
+  plugins or settings keeps the same conversation open.
+- **Choose what the conversation includes.** Ask attaches a skill to the current chat. Add
+  several skills, remove attachments above the message box, or start a new chat with no files.
+  Earlier conversations, including chats from previous versions, remain available in History.
+- **Review changes across attachments.** Accept or reject each change in the chat panel, then
+  choose Save accepted changes. Each file is saved to its original attachment with a backup,
+  regardless of the selected row. Files changed elsewhere require another review; plugin files
+  remain read-only.
+
 ## 0.4.1 — 2026-09-12
 
 ### Fixed

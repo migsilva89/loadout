@@ -537,6 +537,71 @@ enum SelfCheck {
         try? workspaces.remove(itemID: skill.id, hasPendingBlocks: false)
         model.showsAskPanel = false
 
+        // Global chat holds explicit attachments, independent of selection and tab changes.
+        let chatCLI = AssistantCLI(id: "codex", label: "Fixture",
+            executable: URL(fileURLWithPath: "/usr/bin/true"), argumentTemplate: "{prompt}", isCustom: false)
+        model.openChat(chatCLI)
+        check("global chat opens without attachments", model.ask.isGlobal && model.ask.contexts.isEmpty)
+        model.select(skill.id)
+        model.askAssistant(chatCLI)
+        let firstContext = model.ask.contexts.first!
+        check("Ask attaches the selected skill to the global chat", firstContext.id == skill.id)
+        check("adding the same attachment is idempotent", model.ask.attach(firstContext) && model.ask.contexts.count == 1)
+        model.createSkill(name: "chat-second", description: "Second attachment.")
+        let second = model.selected!
+        model.askAssistant(chatCLI)
+        let secondContext = model.ask.contexts.first { $0.id == second.id }!
+        check("multiple attachments share one chat", model.ask.contexts.count == 2)
+        let globalID = model.ask.itemID!
+        let global = GlobalChatWorkspace(root: workspaces.directory(for: globalID))
+        let firstBefore = try! String(contentsOf: skill.path!, encoding: .utf8)
+        let secondBefore = try! String(contentsOf: second.path!, encoding: .utf8)
+        let firstProposal = firstContext.prefix + "SKILL.md"
+        let secondProposal = secondContext.prefix + "SKILL.md"
+        try! (firstBefore + "\nFirst global edit.\n").write(
+            to: global.root.appendingPathComponent(firstProposal), atomically: true, encoding: .utf8)
+        try! (secondBefore + "\nSecond global edit.\n").write(
+            to: global.root.appendingPathComponent(secondProposal), atomically: true, encoding: .utf8)
+        model.ask.refreshProposals()
+        model.select(skill.id)
+        model.selection = .plugins
+        model.toggleChat()
+        model.toggleChat()
+        check("browsing and hiding chat preserve context and proposals",
+              model.ask.itemID == globalID && model.ask.contexts.count == 2 && model.ask.proposals.count == 2)
+        check("global proposals never enter the unrelated editor", model.reviewLayout == nil)
+        model.ask.startNewConversation()
+        check("new chat keeps undecided changes", model.ask.itemID == globalID)
+        model.ask.detach(firstContext.id)
+        check("detaching keeps undecided changes", model.ask.contexts.count == 2)
+        model.ask.acceptAll(in: firstProposal)
+        model.ask.rejectAll(in: secondProposal)
+        model.ask.startNewConversation()
+        check("new chat also keeps accepted unsaved changes", model.ask.itemID == globalID)
+        model.saveChatChanges()
+        check("global save writes to the attachment while another tab is selected",
+              (try! String(contentsOf: skill.path!, encoding: .utf8)).contains("First global edit."))
+        check("global save leaves rejected files untouched",
+              (try! String(contentsOf: second.path!, encoding: .utf8)) == secondBefore)
+        model.ask.detach(firstContext.id)
+        check("saved attachments can be removed", model.ask.contexts.count == 1)
+        model.ask.startNewConversation()
+        check("new chat clears context without changing files", model.ask.contexts.isEmpty && model.ask.itemID != globalID)
+        model.selection = .skills
+        model.select(second.id)
+        model.ask.attach(secondContext)
+        let conflictRoot = workspaces.directory(for: model.ask.itemID!)
+        try! (secondBefore + "\nProposal.\n").write(to: conflictRoot.appendingPathComponent(secondProposal), atomically: true, encoding: .utf8)
+        model.ask.refreshProposals()
+        model.ask.acceptAll(in: secondProposal)
+        let external = secondBefore + "\nExternal edit.\n"
+        try! external.write(to: second.path!, atomically: true, encoding: .utf8)
+        model.saveChatChanges()
+        check("chat save refuses an external edit conflict", model.errorMessage != nil &&
+              (try! String(contentsOf: second.path!, encoding: .utf8)) == external)
+        model.errorMessage = nil
+        model.showsAskPanel = false
+
         // Delete
         model.select(model.items.first { $0.name == "self-check-skill" }?.id)
         model.deleteSelected()

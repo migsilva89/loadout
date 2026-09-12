@@ -144,16 +144,16 @@ See `spec/spec-flow-agents-mcp-frontmatter.md`. Every kind Loadout lists can now
 
 ### AC7 — Talking to an assistant
 
-- **AC7.1** `[M]` An "Ask" button in the detail opens a conversation in a column beside the document — beside it, not on top of it, because deciding on a change means reading the proposal and the file at the same time.
+- **AC7.1** `[M]` A global "Chat" button beside "New skill" opens a column on any tab. "Ask" attaches the current skill to that conversation. Browsing never changes the conversation or its explicit attachments.
 - **AC7.2** `[T]` Ask only offers the assistants Loadout knows how to talk to — today `claude`, `codex` and `opencode`. `cursor-agent` is left out because it requires an interactive login. If none of them is on the PATH, the app says so instead of failing silently. The others still appear in the rest of the app and still count towards usage.
 - **AC7.3** `[M]` The reply appears as it is written, not all at once at the end.
 - **AC7.4** `[T]` The process has a timeout and can be stopped; stopping kills the child process.
-- **AC7.5** `[M]` There is one conversation per skill, resumed by the assistant's own session id. I quit the app, come back, and it carries on. A button starts a new conversation.
-- **AC7.6** `[T]` The assistant always runs in a disposable copy of the skill's folder, never in `~/.claude`. It has write permission there, and runs commands on its own initiative — verified.
+- **AC7.5** `[M]` Conversations are global, resumed by the assistant's own session id with their explicit attachments. History keeps earlier per-skill conversations accessible. New starts with no attachments and refuses while changes remain pending or accepted but unsaved.
+- **AC7.6** `[T]` The assistant runs in a disposable workspace. Each explicit attachment has a distinct copied folder; no attachments means an empty workspace. Nested symbolic links are omitted from copied attachments. Plugin attachments are read-only references.
 - **AC7.7** `[T]` The changes proposed to me are computed by Loadout, by comparing the copy against the real folder. No output format from any assistant decides what goes into my file — and that is what makes this work with `codex`, which says it touched a file but never what it changed.
-- **AC7.8** `[M]` Each change is accepted or rejected on its own. Accepting changes the draft being edited and lights up Save; Save is still mine, with the mandatory backup before writing.
+- **AC7.8** `[M]` Each change is accepted or rejected in the chat panel. Save accepted changes writes only accepted blocks, with mandatory backups, routing by attachment rather than selection. A disk conflict refuses the save and requires a new review.
 - **AC7.9** `[T]` A rejected change is never written, not even after the one next to it is accepted.
-- **AC7.10** `[M]` A skill is a folder: the files beside the document that it touched are listed, and the ones I accepted are written by the same Save, each with its own backup.
+- **AC7.10** `[M]` A skill is a folder: its document and supporting files appear together in the chat review, and accepted changes are written by Save accepted changes, each with its own backup.
 - **AC7.11** `[T]` The working copy is never deleted while there is still a change waiting to be decided. Copies whose conversation no longer exists are swept away at launch.
 - **AC7.12** `[M]` An assistant I added in Settings does not appear in Ask: Loadout does not know its options and does not invent them.
 

@@ -43,9 +43,10 @@ struct ContentView: View {
     /// The sidebar may not grow past what the detail pane can spare — the pane's own number, asked
     /// of the pane, rather than a measurement of the pane kept over here.
     private func ceiling(in available: CGFloat) -> CGFloat {
-        max(
+        let chatWidth = model.showsAskPanel ? askPanelWidth(in: available) : 0
+        return max(
             Self.sidebarRange.lowerBound,
-            min(Self.sidebarRange.upperBound, available - DetailView.minimumWidth)
+            min(Self.sidebarRange.upperBound, available - DetailView.minimumWidth - chatWidth)
         )
     }
 
@@ -268,9 +269,30 @@ struct TitleBar: View {
     /// tooltip is enough — a control clipped to half a word is not.
     private var rightZone: some View {
         ViewThatFits(in: .horizontal) {
-            newSkillButton()
-            newSkillButton(compact: true)
+            HStack(spacing: 8) { newSkillButton(); chatButton() }
+            HStack(spacing: 8) { newSkillButton(compact: true); chatButton(compact: true) }
         }
+    }
+
+    private func chatButton(compact: Bool = false) -> some View {
+        Button { model.toggleChat() } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "bubble.left.and.bubble.right")
+                if !compact { Text("Chat") }
+            }
+            .font(.system(size: 12.5))
+            .foregroundStyle(model.showsAskPanel ? V2.text : V2.textDim)
+            .padding(.horizontal, compact ? 7 : 11)
+            .frame(height: 26)
+            .background(model.showsAskPanel ? V2.buttonHover : V2.button,
+                        in: RoundedRectangle(cornerRadius: 7))
+            .overlay(RoundedRectangle(cornerRadius: 7)
+                .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.5))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(model.showsAskPanel ? "Hide chat" : "Show chat")
+        .help(model.showsAskPanel ? "Hide chat" : "Chat about your setup")
+        .pointingHand()
     }
 
     /// What the primary action makes on the tab that is showing. Plugins are installed, not

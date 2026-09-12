@@ -63,19 +63,21 @@ cd loadout
 open dist/Loadout.app
 ```
 
-## Talking to an assistant about a skill
+## Chat about your setup
 
-Select a skill and press **Ask**. A conversation opens in a column beside the editor, using the
-assistant CLI already installed and the subscription it already has — there is no API key.
+Open **Chat** beside **New skill** from any tab. It uses an assistant CLI already installed and
+its existing subscription — there is no API key. Choose the assistant and model in the chat panel.
 
-The assistant never works in your folder. Loadout copies the skill's folder somewhere disposable
-and runs the assistant there, then compares the two and opens each change up inside the document:
-the old lines struck through above the new, with **Accept** and **Reject** beside each one.
-Accepting edits the draft; the file on disk changes when you save, with the usual backup first.
+Press **Ask** on a skill to attach it to the current conversation. You can attach several skills
+and remove them above the message box. Selecting another row does not change the attachments or
+switch conversations. Removing an attachment excludes its files from future messages; earlier
+messages stay in the conversation. **New** starts a chat with no attachments, and **History**
+includes earlier conversations, including those started before global chat.
 
-A skill is a folder, so files beside `SKILL.md` are listed too and written by the same save. The
-conversation is remembered per skill and picks up where it left off tomorrow; **History** has the
-earlier ones.
+The assistant runs in disposable copies of the attached folders. Review each proposed change
+in the chat panel with **Accept** or **Reject**, then choose **Save accepted changes**. Only accepted
+changes reach their original files, with a backup first. If a file changed elsewhere, review the
+updated proposal before saving. Plugin files remain read-only references.
 
 In the **New skill** sheet, **Create and ask** makes the skeleton and hands it to an assistant with
 what you typed as the brief, so the description and body come back as proposals.

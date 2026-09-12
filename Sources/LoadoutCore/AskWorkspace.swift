@@ -174,11 +174,15 @@ public struct AskWorkspaces: Sendable {
     /// Relative paths of every file in the copy, skipping git's own directory and the metadata
     /// junk the assistants leave behind.
     private func files(under directory: URL) -> [String] {
-        guard let walker = fm.enumerator(at: directory, includingPropertiesForKeys: [.isDirectoryKey])
+        guard let walker = fm.enumerator(at: directory, includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey])
         else { return [] }
         var result: [String] = []
         let prefix = directory.standardizedFileURL.path + "/"
         for case let url as URL in walker {
+            if (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink == true {
+                walker.skipDescendants()
+                continue
+            }
             let name = url.lastPathComponent
             if name == ".git" || name == ".DS_Store" {
                 walker.skipDescendants()

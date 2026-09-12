@@ -5,7 +5,7 @@ import LoadoutCore
 /// The conversation beside the editor: what has been said, what the assistant changed, and which
 /// of those changes are still waiting for a decision.
 ///
-/// One conversation per skill, kept as the CLI's own session id rather than a transcript of our
+/// Global conversations, kept as the CLI's own session id rather than a transcript of our
 /// own, so closing the app and coming back tomorrow resumes the same exchange. The assistant works
 /// in a disposable copy of the folder; nothing reaches Miguel's file until he accepts a block and
 /// saves, through the ordinary write path with its mandatory backup.
@@ -60,8 +60,102 @@ final class AskModel {
 
     // MARK: - State
 
-    /// Which skill this conversation belongs to. Switching skills switches conversation.
+    /// The workspace identity; independent of the selected item in global chat.
     private(set) var itemID: String?
+    private(set) var isGlobal = false
+    private(set) var contexts: [ChatContext] = []
+    private var runID = UUID()
+    private var globalWorkspace: GlobalChatWorkspace? {
+        guard isGlobal, let itemID else { return nil }
+        return GlobalChatWorkspace(root: workspaces.directory(for: itemID))
+    }
+    var hasUnsavedChanges: Bool { proposals.contains { !$0.accepted.isEmpty } }
+    var canLeaveConversation: Bool { !isRunning && !hasPendingBlocks && !hasUnsavedChanges }
+
+    func context(for proposalID: String) -> ChatContext? {
+        contexts.first { $0.relativePath(for: proposalID) != nil }
+    }
+
+    func contextLabel(_ context: ChatContext) -> String {
+        guard contexts.filter({ $0.name == context.name }).count > 1 else { return context.name }
+        let source = context.assistants.isEmpty ? context.origin.path : context.assistants.joined(separator: ", ")
+        return "\(context.name) (\(source))"
+    }
+
+    func proposalLabel(_ proposalID: String) -> String {
+        guard let context = context(for: proposalID),
+              let relative = context.relativePath(for: proposalID) else { return proposalID }
+        return "\(contextLabel(context)) / \(relative)"
+    }
+
+    /// Opening the toolbar chat never takes context from the current selection.
+    @discardableResult
+    func openGlobal(cli: AssistantCLI) -> Bool {
+        if isGlobal && self.cli?.id == cli.id { return true }
+        guard canLeaveConversation else {
+            report?("Stop the reply and save or reject the proposed changes before switching assistants.")
+            return false
+        }
+        runner.cancel()
+        runID = UUID()
+        isGlobal = true
+        self.cli = cli
+        _chosenModel = Self.rememberedModel(for: cli)
+        resetGlobal()
+        if let latest = history.first(where: { $0.contexts != nil }) { resume(latest) }
+        return true
+    }
+
+    private func resetGlobal() {
+        itemID = "global-chat-" + UUID().uuidString
+        origin = globalWorkspace?.root
+        sessionID = nil
+        workspace = nil
+        entries = []
+        contexts = []
+        proposals = []
+        focusedProposalID = nil
+        draftMessage = ""
+    }
+
+    @discardableResult
+    func attach(_ context: ChatContext) -> Bool {
+        guard isGlobal, !isRunning else {
+            report?("Wait for the reply to finish before changing attachments.")
+            return false
+        }
+        guard !contexts.contains(where: { $0.id == context.id || ($0.origin == context.origin && $0.documentName == context.documentName) }) else { return true }
+        do {
+            try globalWorkspace?.prepare([context])
+            contexts.append(context)
+            persistContext()
+            return true
+        } catch {
+            report?(describe(error))
+            return false
+        }
+    }
+
+    func detach(_ id: String) {
+        guard !isRunning, let context = contexts.first(where: { $0.id == id }) else { return }
+        guard !proposals.contains(where: {
+            context.relativePath(for: $0.id) != nil && (!$0.pending.isEmpty || !$0.accepted.isEmpty)
+        }) else {
+            report?("Save or reject this attachment's changes before removing it.")
+            return
+        }
+        do {
+            try globalWorkspace?.remove(context)
+            contexts.removeAll { $0.id == id }
+            proposals.removeAll { context.relativePath(for: $0.id) != nil }
+            persistContext()
+        } catch { report?(describe(error)) }
+    }
+
+    private func persistContext() {
+        if let sessionID { remember(sessionID: sessionID) }
+    }
+
     private(set) var entries: [Entry] = []
     private(set) var proposals: [Proposal] = []
     /// Which changed file the panel is showing the blocks of.
@@ -98,20 +192,24 @@ final class AskModel {
     private let runner = ChatRunner()
     private let workspaces: AskWorkspaces
     private let transcripts: URL
+    private let conversationDefaults: UserDefaults
     private var workspace: AskWorkspace?
 
     /// Every conversation Loadout remembers, across skills — ids only, since the assistant keeps the
     /// exchanges themselves. Opening a skill picks up its most recent one; History offers the rest.
     private(set) var conversations: [AskConversation] {
-        didSet { AskConversationStore.save(conversations) }
+        didSet { AskConversationStore.save(conversations, defaults: conversationDefaults) }
     }
 
     /// The conversation the panel is on. `nil` means the next message starts a new one.
     private(set) var sessionID: String?
 
-    /// The past conversations about the skill on screen, newest first, the current one included.
+    /// Conversations for the chosen assistant, newest first, including pre-global history.
     var history: [AskConversation] {
         guard let itemID, let cli, let origin else { return [] }
+        if isGlobal {
+            return conversations.filter { $0.cliID == cli.id }.sorted { $0.startedAt > $1.startedAt }
+        }
         return AskConversationStore.matching(
             itemID: itemID, cliID: cli.id, origin: origin, in: conversations
         )
@@ -128,7 +226,12 @@ final class AskModel {
     init(paths: Paths) {
         self.workspaces = AskWorkspaces(paths: paths)
         self.transcripts = paths.transcripts
-        self.conversations = AskConversationStore.load()
+        // Fixture homes must never read or mutate the owner's real conversation history.
+        let defaults = paths.home.resolvingSymlinksInPath() == FileManager.default.homeDirectoryForCurrentUser.resolvingSymlinksInPath()
+            ? UserDefaults.standard
+            : UserDefaults(suiteName: "loadout.chat-fixture." + paths.home.path.replacingOccurrences(of: "/", with: "-"))!
+        self.conversationDefaults = defaults
+        self.conversations = AskConversationStore.load(defaults: defaults)
     }
 
     /// Files the conversation away under the id the assistant just announced, so History can offer
@@ -146,7 +249,8 @@ final class AskModel {
                 // Kept from the first time it was seen, so a conversation carried on next week
                 // still shows the day it started.
                 startedAt: existing?.startedAt ?? Date(),
-                title: existing?.title ?? firstAsked
+                title: existing?.title ?? firstAsked,
+                contexts: isGlobal ? contexts : nil
             ),
             into: conversations
         )
@@ -174,6 +278,9 @@ final class AskModel {
     func open(itemID: String, cli: AssistantCLI, origin: URL) {
         guard self.itemID != itemID || self.cli?.id != cli.id else { return }
         runner.cancel()
+        runID = UUID()
+        isGlobal = false
+        contexts = []
         self.itemID = itemID
         self.cli = cli
         self.origin = origin
@@ -199,14 +306,31 @@ final class AskModel {
     /// The working copy is remade from the folder as it is now, so an old conversation resumed today
     /// proposes changes against today's file rather than against the file as it was then.
     func resume(_ conversation: AskConversation) {
-        guard !hasPendingBlocks else {
-            report?("There are changes waiting for you to accept or reject. Decide those first.")
+        guard canLeaveConversation else {
+            report?("Stop the reply and save or reject the proposed changes before opening another conversation.")
             return
         }
         runner.cancel()
+        runID = UUID()
+        if isGlobal {
+            if let saved = conversation.contexts {
+                itemID = conversation.itemID
+                contexts = saved
+            } else {
+                // Keep pre-global conversations reachable, with their old folder explicitly attached.
+                itemID = "global-chat-" + UUID().uuidString
+                let folder = URL(fileURLWithPath: conversation.originPath)
+                contexts = [ChatContext(id: conversation.itemID, name: folder.lastPathComponent, origin: folder,
+                                        isEditable: !folder.path.contains("/plugins/"))]
+            }
+            origin = globalWorkspace?.root
+            workspace = nil
+            draftMessage = ""
+        }
         sessionID = conversation.id
         entries = ChatTranscript.messages(sessionID: conversation.id, transcripts: transcripts).map {
-            Entry(kind: $0.speaker == .you ? .you : .assistant, text: $0.text)
+            Entry(kind: $0.speaker == .you ? .you : .assistant,
+                  text: $0.speaker == .you ? GlobalChatWorkspace.userMessage(from: $0.text) : $0.text)
         }
         if entries.isEmpty {
             // The CLI has pruned it. Say so rather than showing an empty panel that looks broken.
@@ -217,8 +341,14 @@ final class AskModel {
         }
         proposals = []
         focusedProposalID = nil
-        if let itemID { try? workspaces.remove(itemID: itemID, hasPendingBlocks: false) }
-        workspace = nil
+        if isGlobal {
+            do { try globalWorkspace?.prepare(contexts) }
+            catch { entries.append(Entry(kind: .failure, text: describe(error))) }
+            refreshProposals()
+        } else {
+            if let itemID { try? workspaces.remove(itemID: itemID, hasPendingBlocks: false) }
+            workspace = nil
+        }
     }
 
     /// The folder this conversation is about, as it was when the panel opened.
@@ -230,11 +360,17 @@ final class AskModel {
         // The assistant is not needed here any more: the conversation being left behind is kept
         // under History rather than deleted, so there is nothing to look up by assistant.
         guard let itemID else { return }
-        guard !hasPendingBlocks else {
-            report?("There are changes waiting for you to accept or reject. Decide those first.")
+        guard canLeaveConversation else {
+            report?("Stop the reply and save or reject the proposed changes before starting a new conversation.")
             return
         }
         runner.cancel()
+        runID = UUID()
+        if isGlobal {
+            // A new workspace keeps the previous conversation's copies and attachment identity intact.
+            resetGlobal()
+            return
+        }
         // The old one is kept, not thrown away — it is what History offers. Only the panel forgets it.
         sessionID = nil
         try? workspaces.remove(itemID: itemID, hasPendingBlocks: false)
@@ -268,20 +404,30 @@ final class AskModel {
         let message = draftMessage.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !message.isEmpty, !isRunning, let itemID, let cli, let chat = cli.chat else { return }
 
-        let workspace: AskWorkspace
+        let directory: URL
         do {
-            workspace = try workspaces.open(itemID: itemID, origin: origin)
+            if let globalWorkspace {
+                try globalWorkspace.prepare(contexts)
+                directory = globalWorkspace.root
+            } else {
+                let copy = try workspaces.open(itemID: itemID, origin: origin)
+                self.workspace = copy
+                directory = copy.root
+            }
         } catch {
             entries.append(Entry(kind: .failure, text: describe(error)))
             return
         }
-        self.workspace = workspace
-
         entries.append(Entry(kind: .you, text: message))
         draftMessage = ""
         isRunning = true
         let session = sessionID
-        let briefing = self.briefing
+        // The CLI's system briefing is first-turn-only. Attachments can change on every turn,
+        // so global context travels with every message, including resumed sessions.
+        let prompt = isGlobal ? GlobalChatWorkspace.prompt(message: message, contexts: contexts) : message
+        let briefing = isGlobal ? nil : self.briefing
+        let currentRun = UUID()
+        runID = currentRun
         let runner = self.runner
         let model = chosenModel
 
@@ -289,10 +435,13 @@ final class AskModel {
         // time, because everything they touch — the entries, the pending blocks — is the window's.
         Task.detached(priority: .userInitiated) {
             runner.send(
-                cli: cli, chat: chat, prompt: message, resuming: session, briefing: briefing,
-                model: model, in: workspace.root
+                cli: cli, chat: chat, prompt: prompt, resuming: session, briefing: briefing,
+                model: model, in: directory
             ) { event in
-                Task { @MainActor in self.receive(event) }
+                Task { @MainActor in
+                    guard self.runID == currentRun else { return }
+                    self.receive(event)
+                }
             }
         }
     }
@@ -345,9 +494,12 @@ final class AskModel {
     /// Compares the working copy against the real folder and rebuilds the pending blocks. This —
     /// not anything the assistant reported — is what decides what Miguel is offered.
     func refreshProposals() {
-        guard let workspace else { return }
+        let changes: [AskWorkspace.ChangedFile]
+        if let globalWorkspace { changes = globalWorkspace.changes(contexts) }
+        else if let workspace { changes = workspaces.changes(in: workspace) }
+        else { return }
         let previous = Dictionary(uniqueKeysWithValues: proposals.map { ($0.id, $0) })
-        proposals = workspaces.changes(in: workspace).map { change in
+        proposals = changes.map { change in
             let blocks = change.blocks
             let old = previous[change.id]
             // A decision carries over only to a change that is still the same change. Anything the
@@ -421,7 +573,7 @@ final class AskModel {
     /// and Save becomes available — his gesture, as before. Other files in the folder are written
     /// by `AppModel` when he saves them, and are not the draft.
     private func push(_ proposal: Proposal) {
-        guard proposal.id == Self.documentName else { return }
+        guard !isGlobal, proposal.id == Self.documentName else { return }
         applyToDraft?(proposal.resolvedText)
     }
 

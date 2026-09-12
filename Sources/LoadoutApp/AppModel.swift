@@ -277,7 +277,7 @@ final class AppModel {
         // the pane switches to editing when there is something to decide — otherwise the change
         // would be waiting on a screen nobody is looking at.
         ask.onProposals = { [weak self] hasPending in
-            guard let self, hasPending else { return }
+            guard let self, hasPending, !ask.isGlobal else { return }
             showsPreview = false
         }
         startWatching()
@@ -655,16 +655,6 @@ final class AppModel {
         guard id != selectedID else { return }
         selectedID = id
         loadDraft()
-        followSelectionInAskPanel()
-    }
-
-    /// One conversation per skill, so picking another skill while the panel is open switches to
-    /// that skill's conversation rather than carrying the previous one across.
-    private func followSelectionInAskPanel() {
-        guard showsAskPanel, let cli = ask.cli, let item = selected,
-              let folder = item.directory ?? item.path?.deletingLastPathComponent()
-        else { return }
-        ask.open(itemID: item.id, cli: cli, origin: folder)
     }
 
     // MARK: - Writing
@@ -683,6 +673,7 @@ final class AppModel {
     /// blocks Miguel accepted in those files are written by the same Save, each with its own
     /// snapshot first — never behind his back, and never a file he didn't accept anything in.
     private func saveAcceptedSideFiles(of item: Item) throws {
+        guard !ask.isGlobal, ask.itemID == item.id else { return }
         let files = ask.acceptedSideFiles
         guard !files.isEmpty,
               let folder = item.directory ?? item.path?.deletingLastPathComponent()
@@ -711,7 +702,7 @@ final class AppModel {
     /// Built from the file on disk rather than from the draft, so a change is always shown against
     /// what is really there — and the accepted ones are what make the draft differ from it.
     var reviewLayout: ReviewLayout? {
-        guard showsAskPanel,
+        guard showsAskPanel, !ask.isGlobal, ask.itemID == selected?.id,
               let document = ask.proposals.first(where: { $0.id == AskModel.documentName }),
               !document.pending.isEmpty
         else { return nil }
@@ -738,6 +729,10 @@ final class AppModel {
 
     /// The message box's Send. The assistant is pointed at a copy of the folder, never the folder.
     func sendAskMessage() {
+        if ask.isGlobal {
+            if let origin = ask.origin { ask.send(origin: origin) }
+            return
+        }
         guard let item = selected,
               let folder = item.directory ?? item.path?.deletingLastPathComponent()
         else { return }
@@ -1249,8 +1244,86 @@ final class AppModel {
             askCLI = cli
             return
         }
-        ask.open(itemID: item.id, cli: cli, origin: folder)
+        guard ask.openGlobal(cli: cli) else { return }
+        _ = ask.attach(ChatContext(id: item.id, name: item.name, origin: folder,
+                                  documentName: item.path?.lastPathComponent ?? "SKILL.md",
+                                  kind: item.kind.briefingNoun, assistants: item.assistants.sorted(),
+                                  isEditable: item.isEditable))
         showsAskPanel = true
+    }
+
+    /// The app-wide entry point does not attach the selected item.
+    func toggleChat() {
+        if showsAskPanel { showsAskPanel = false; return }
+        if ask.isGlobal, ask.cli != nil { showsAskPanel = true; return }
+        guard let cli = askableCLIs.first(where: { $0.id == lastAssistantCLIID })
+                ?? askableCLIs.first else {
+            statusMessage = "Install Claude Code, Codex or OpenCode to use Chat."
+            showsSettings = true
+            settingsSection = "assistants"
+            return
+        }
+        openChat(cli)
+    }
+
+    func openChat(_ cli: AssistantCLI) {
+        guard ask.openGlobal(cli: cli) else { return }
+        lastAssistantCLIID = cli.id
+        showsAskPanel = true
+    }
+
+    /// Save routes by the attachment, never by the currently selected row.
+    func saveChatChanges() {
+        guard ask.isGlobal, !ask.isRunning else { return }
+        let accepted = ask.proposals.filter { !$0.accepted.isEmpty }
+        guard !accepted.isEmpty else { return }
+        do {
+            // Preflight the entire set before writing any file. A changed or moved origin needs
+            // another review, not an overwrite based on yesterday's proposal.
+            var destinations = Set<String>()
+            for proposal in accepted {
+                guard let context = ask.context(for: proposal.id),
+                      let relative = context.relativePath(for: proposal.id) else {
+                    throw LoadoutError.io("The attachment for this change is no longer available.")
+                }
+                guard context.isEditable else { throw LoadoutError.notEditable(context.name) }
+                var isDirectory: ObjCBool = false
+                guard FileManager.default.fileExists(atPath: context.origin.path, isDirectory: &isDirectory),
+                      isDirectory.boolValue else {
+                    throw LoadoutError.io("\(context.name) moved or was removed. Attach it again before saving.")
+                }
+                let file = context.origin.appendingPathComponent(relative)
+                guard file.resolvingSymlinksInPath().path.hasPrefix(context.origin.path + "/") else {
+                    throw LoadoutError.io("This file points outside the attachment and wasn't written.")
+                }
+                guard destinations.insert(file.resolvingSymlinksInPath().path).inserted else {
+                    throw LoadoutError.io("Two attachments propose changes to the same file. Keep one proposal and reject the other before saving.")
+                }
+                let current = try? String(contentsOf: file, encoding: .utf8)
+                guard proposal.isNew ? current == nil && !FileManager.default.fileExists(atPath: file.path)
+                    : current == proposal.original else {
+                    throw LoadoutError.io("\(context.name) changed on disk. Review the updated proposal before saving.")
+                }
+                if let selected = selected, selected.path?.resolvingSymlinksInPath() == file.resolvingSymlinksInPath(), isDirty {
+                    throw LoadoutError.io("Save or revert your edits to \(selected.name) before saving chat changes.")
+                }
+                if relative == context.documentName, context.kind == "skill" || context.kind == "subagent" {
+                    try mutations.validateSkillDocument(proposal.resolvedText)
+                }
+            }
+            for proposal in accepted {
+                guard let context = ask.context(for: proposal.id),
+                      let relative = context.relativePath(for: proposal.id) else { continue }
+                try mutations.saveSupportingFile(in: context.origin, relativePath: relative,
+                                                contents: proposal.resolvedText)
+            }
+            ask.refreshProposals()
+            reloadFromDisk()
+            statusMessage = "Saved accepted chat changes."
+        } catch {
+            ask.refreshProposals()
+            errorMessage = (error as? LoadoutError)?.errorDescription ?? error.localizedDescription
+        }
     }
 
     /// Validates and saves a new custom entry. Throws `LoadoutError.invalidAssistantCLI`
