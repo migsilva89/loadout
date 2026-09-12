@@ -114,7 +114,10 @@ public struct Mutations: Sendable {
         }
         guard let folder = item.directory else { return ([], false) }
         let parent = folder.deletingLastPathComponent().deletingLastPathComponent()
-        let here = assistants.first { $0.skillsRoot.deletingLastPathComponent() == parent }
+        let here = assistants.first {
+            $0.skillsRoot.deletingLastPathComponent().resolvingSymlinksInPath().path
+                == parent.resolvingSymlinksInPath().path
+        }
         return (here.map { [$0.id] } ?? [], false)
     }
 
@@ -198,6 +201,7 @@ public struct Mutations: Sendable {
     /// a shared store, so there is nothing to choose.
     @discardableResult
     public func setCommand(_ item: Item, enabled: Bool, plugin: PluginInfo? = nil) throws -> URL {
+        if let plugin, !plugin.enabled { throw LoadoutError.io("Turn on the \(plugin.name) plugin before changing this item.") }
         guard item.kind == .command || item.kind == .agent, let file = item.path else {
             throw LoadoutError.notEditable(item.name)
         }
@@ -530,6 +534,8 @@ public struct Mutations: Sendable {
     /// does not read, and the choice is recorded by name — versions come and go, names do not.
     @discardableResult
     public func disablePluginSkill(_ item: Item, in plugin: PluginInfo) throws -> URL {
+        guard plugin.enabled else { throw LoadoutError.io("Turn on the \(plugin.name) plugin before changing this skill.") }
+        if plugin.assistant == "codex" { return try CodexPlugins(paths: paths).setSkill(item, in: plugin, enabled: false) }
         guard item.kind == .skill, case .plugin = item.origin else {
             throw LoadoutError.notEditable(item.name)
         }
@@ -542,6 +548,8 @@ public struct Mutations: Sendable {
     /// Brings it back and forgets it, so the next update leaves it alone (AC3.14).
     @discardableResult
     public func enablePluginSkill(_ item: Item, in plugin: PluginInfo) throws -> URL {
+        guard plugin.enabled else { throw LoadoutError.io("Turn on the \(plugin.name) plugin before changing this skill.") }
+        if plugin.assistant == "codex" { return try CodexPlugins(paths: paths).setSkill(item, in: plugin, enabled: true) }
         guard item.kind == .skill, case .plugin = item.origin else {
             throw LoadoutError.notEditable(item.name)
         }
@@ -559,6 +567,7 @@ public struct Mutations: Sendable {
     /// would lose the choice if the skill returns in a later version (AC3.15).
     @discardableResult
     public func reapplyDisabledSkills(of plugin: PluginInfo) -> [String] {
+        guard plugin.assistant == "claude" else { return [] }
         var reapplied: [String] = []
         for entry in records.pluginEntries(of: plugin.id) {
             // `skills/vercel-functions` or `commands/status.md`: the directory in front is what
@@ -687,6 +696,8 @@ public struct Mutations: Sendable {
     /// Writes `enabledPlugins["<plugin>@<marketplace>"]` into `settings.local.json`,
     /// leaving every other key exactly as it was (AC3.4).
     public func setPlugin(_ plugin: PluginInfo, enabled: Bool) throws {
+        if let reason = plugin.toggleUnavailableReason { throw LoadoutError.io(reason) }
+        if plugin.assistant == "codex" { try CodexPlugins(paths: paths).setPlugin(plugin, enabled: enabled); return }
         let file = paths.localSettings
         var root: [String: Any] = [:]
         if let data = try? Data(contentsOf: file),
@@ -719,6 +730,7 @@ public struct Mutations: Sendable {
     /// The Trash, never a delete, and a snapshot first: this is somebody's tree of files, and the
     /// same rule the rest of the app follows for a folder it did not write.
     public func removePlugin(_ plugin: PluginInfo) throws {
+        guard plugin.assistant == "claude" else { throw LoadoutError.io("Remove this plugin in Codex. You can turn it off here without removing its files.") }
         // The install path comes out of a JSON file this app does not own. Refusing anything outside
         // the plugin cache is what keeps a hand-edited or corrupted register from pointing the Trash
         // at a home directory.

@@ -94,6 +94,9 @@ Rewritten 2026-08-15 — see `spec/spec-flow-enable-disable-skills.md` for the f
 - **AC3.12** `[T]` A project skill parks in `<repo>/.claude/skills-off`, and `[M]` the first disable says once that the change will show up in the repository.
 - **AC3.13** `[M]` The state on screen reflects the disk immediately after the operation.
 - **AC3.14** `[T]` A plugin that is off makes every item it ships effectively off. The child rows remain visible, and their switches cannot imply that the disabled parent is running them.
+- **AC3.15** `[T]` Codex plugins use Codex's local inventory to identify installed versions and its configuration writer to change enablement. Provider identities isolate Codex from Claude, including same-name plugins.
+- **AC3.16** `[T]` Turning a Codex plugin off and back on restores individual skill choices; those choices survive updates. The main list, plugin contents and detail header use the same effective state. A disabled child's detail links to its parent.
+- **AC3.17** `[T]` Codex configuration writes are backed up and preserve unrelated settings and comments. Workspace-managed parent switches explain why they must be changed in Codex. Removing Codex plugins remains in Codex.
 
 ### AC11 — The last three (2026-08-15)
 

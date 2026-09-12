@@ -27,12 +27,15 @@ public struct InventoryScanner: Sendable {
         )
         items += mcpServers()
 
-        let plugins = installedPlugins()
+        let codex = CodexPlugins(paths: paths).scan(project: project)
+        let claudePlugins = claudeInstalledPlugins(project: project)
+        let plugins = (claudePlugins + codex.plugins).sorted { $0.name < $1.name }
         // Before reading them: an update may have brought back skills the user turned off.
-        reapplyPluginChoices(plugins)
-        for plugin in plugins {
+        reapplyPluginChoices(claudePlugins)
+        for plugin in claudePlugins {
             items += pluginItems(plugin)
         }
+        items += codex.items
 
         if let project {
             // The scope answers "what belongs to this project", not "what would load
@@ -43,11 +46,11 @@ public struct InventoryScanner: Sendable {
             // installed once for the machine, but a repository may have turned one off for whoever
             // works in it, and that is the state this scope has to show.
             return Inventory(
-                items: projectItems(project), plugins: installedPlugins(project: project)
+                items: projectItems(project), plugins: plugins, diagnostics: codex.diagnostics
             )
         }
 
-        return Inventory(items: items, plugins: plugins)
+        return Inventory(items: items, plugins: plugins, diagnostics: codex.diagnostics)
     }
 
     /// Everything on the machine at once: what is yours, what every project holds, what the
@@ -65,7 +68,7 @@ public struct InventoryScanner: Sendable {
         for project in projects {
             items += projectItems(project, claudeRoot: claudeRoot)
         }
-        return Inventory(items: items, plugins: global.plugins)
+        return Inventory(items: items, plugins: global.plugins, diagnostics: global.diagnostics)
     }
 
     // MARK: - Skills
@@ -357,6 +360,11 @@ public struct InventoryScanner: Sendable {
     // MARK: - Plugins
 
     public func installedPlugins(project: Project? = nil) -> [PluginInfo] {
+        (claudeInstalledPlugins(project: project) + CodexPlugins(paths: paths).scan(project: project).plugins)
+            .sorted { $0.name < $1.name }
+    }
+
+    func claudeInstalledPlugins(project: Project? = nil) -> [PluginInfo] {
         guard let data = try? Data(contentsOf: paths.installedPlugins),
               let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let plugins = root["plugins"] as? [String: Any]
@@ -459,6 +467,8 @@ public struct InventoryScanner: Sendable {
         return (items + off).map {
             var item = $0
             item.pluginID = plugin.id
+            item.assistants = [plugin.assistant]
+            item.id = "\(item.kind.rawValue):plugin:\(plugin.id):\(item.path?.lastPathComponent ?? item.name):\(item.directory?.lastPathComponent ?? "")"
             return item
         }
     }
@@ -582,10 +592,12 @@ public struct InventoryScanner: Sendable {
 
 /// One pass over the disk.
 public struct Inventory: Sendable {
+    public var diagnostics: [String]
     public var items: [Item]
     public var plugins: [PluginInfo]
 
-    public init(items: [Item] = [], plugins: [PluginInfo] = []) {
+    public init(items: [Item] = [], plugins: [PluginInfo] = [], diagnostics: [String] = []) {
+        self.diagnostics = diagnostics
         self.items = items
         self.plugins = plugins
     }

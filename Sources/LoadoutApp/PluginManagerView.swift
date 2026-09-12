@@ -22,7 +22,7 @@ struct PluginManagerView: View {
                 ContentUnavailableView(
                     "No plugins installed",
                     systemImage: "puzzlepiece.extension",
-                    description: Text("Plugins installed through Claude Code will show up here.")
+                    description: Text("Plugins installed through Claude Code or Codex will show up here.")
                 )
             }
         }
@@ -34,7 +34,7 @@ struct PluginManagerRow: View {
     let plugin: PluginInfo
 
     private var itemCount: Int {
-        model.items.filter { $0.origin == .plugin(plugin.name) }.count
+        model.items.filter { $0.pluginID == plugin.id }.count
     }
 
     private var isSelected: Bool { model.selectedPluginID == plugin.id }
@@ -59,8 +59,8 @@ struct PluginManagerRow: View {
             return "v\(plugin.version) · \(repositoryChoice ? "on" : "off") in \(name)"
         }
         return model.context == nil
-            ? "\(itemCount) \(itemCount == 1 ? "item" : "items") · v\(plugin.version)"
-            : "v\(plugin.version) · global"
+            ? "\(plugin.assistantLabel) · \(itemCount) \(itemCount == 1 ? "item" : "items") · v\(plugin.version)"
+            : "\(plugin.assistantLabel) · v\(plugin.version) · global"
     }
 
     /// Why the switch is not yours to flip here, or nil when it is.
@@ -108,11 +108,11 @@ struct PluginManagerRow: View {
             }
             Spacer(minLength: 6)
             MiniSwitch(on: plugin.enabled) { model.togglePlugin(plugin) }
-                .disabled(plugin.repositoryChoice != nil)
-                .help(repositoryVerdict(plugin) ?? (
+                .disabled(plugin.repositoryChoice != nil || plugin.toggleUnavailableReason != nil)
+                .help(plugin.toggleUnavailableReason ?? repositoryVerdict(plugin) ?? (
                     plugin.enabled
-                        ? "Turn off the \(plugin.name) plugin so Claude stops loading what it ships"
-                        : "Turn on the \(plugin.name) plugin so Claude loads what it ships"
+                        ? "Turn off the \(plugin.name) plugin in \(plugin.assistantLabel)"
+                        : "Turn on the \(plugin.name) plugin in \(plugin.assistantLabel)"
                 ))
         }
         .padding(.horizontal, 9)
@@ -191,18 +191,18 @@ struct PluginDetailView: View {
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(V2.text)
                 MiniSwitch(on: plugin.enabled, width: 40, height: 24) { model.togglePlugin(plugin) }
-                    .disabled(plugin.repositoryChoice != nil)
-                    .help(repositorySettles ?? (
+                    .disabled(plugin.repositoryChoice != nil || plugin.toggleUnavailableReason != nil)
+                    .help(plugin.toggleUnavailableReason ?? repositorySettles ?? (
                         plugin.enabled ? "Turn the whole plugin off" : "Turn the whole plugin on"
                     ))
             }
-            Text("v\(plugin.version)\(plugin.marketplace.isEmpty ? "" : " · from \(plugin.marketplace)")")
+            Text("\(plugin.assistantLabel) · v\(plugin.version)\(plugin.marketplace.isEmpty ? "" : " · from \(plugin.marketplace)")")
                 .font(.system(size: 12))
                 .foregroundStyle(V2.textDim)
             // Said out loud rather than left to a tooltip: a switch that will not move needs a
             // reason on screen, or the app looks broken.
-            if let repositorySettles {
-                Text(repositorySettles)
+            if let reason = plugin.toggleUnavailableReason ?? repositorySettles {
+                Text(reason)
                     .font(.system(size: 12))
                     .foregroundStyle(V2.textMid)
                     .fixedSize(horizontal: false, vertical: true)
@@ -248,11 +248,14 @@ struct PluginDetailView: View {
                 }
                 .buttonStyle(.plain)
                 .help("Uninstall \(plugin.name): its folder to the Trash and its entry out of Claude Code's register")
+                .disabled(plugin.assistant != "claude")
                 .pointingHand()
                 // Said beside the button, not only inside the dialog it opens: switching off and
                 // removing are two different things, and somebody who only wants the plugin quiet
                 // should be able to tell before pressing anything.
-                Text("Switching it off above keeps the files. This takes them away.")
+                Text(plugin.assistant == "codex"
+                     ? "To remove this plugin, open Codex. Switching it off here keeps its files."
+                     : "Switching it off above keeps the files. This takes them away.")
                     .font(.system(size: 11.5))
                     .foregroundStyle(V2.textFaint)
             }

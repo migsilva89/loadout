@@ -4,6 +4,20 @@ Notable changes, newest first. Dates are the day the work landed on `main`.
 
 The versions are what a release is tagged as; between tags, `main` is what is being used daily.
 
+## 0.4.1 — 2026-09-12
+
+### Fixed
+
+- **Installed Codex plugins and their skills now appear in Loadout.** Their switches use
+  Codex's own configuration, and plugins with the same name in Claude and Codex stay independent.
+  This requires a Codex version that supports its local plugin inventory protocol.
+- **Plugin switches preserve your individual skill choices.** Turning a plugin off shows all
+  its skills as off. Turning it back on restores the previous choices, including after a plugin
+  update. Open the parent plugin from a disabled skill's detail to turn it back on.
+- **External Codex changes refresh the list.** New configuration files and plugin updates are
+  detected without restarting Loadout. Workspace-managed plugin switches remain in Codex, with
+  an explanation in Loadout.
+
 ## 0.4.0 — 2026-09-07
 
 ### Added

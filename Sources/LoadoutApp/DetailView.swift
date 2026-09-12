@@ -336,6 +336,14 @@ struct DetailView: View {
             // Every skill has this switch now, whoever it belongs to: a plugin shipping 38 of them
             // used to mean all 38 or none.
             if item.kind != .plugin {
+                if parentPluginIsOff, let id = item.pluginID {
+                    Button("Open plugin") {
+                        model.selection = .plugins
+                        model.selectedPluginID = id
+                    }
+                    .buttonStyle(.plain)
+                    .help("Open the plugin to turn it back on. Your individual skill choices are kept.")
+                }
                 Text(effectivelyEnabled ? "Enabled" : "Disabled")
                     .font(.system(size: 12.5))
                     .foregroundStyle(V2.textMid)

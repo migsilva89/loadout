@@ -187,6 +187,11 @@ public struct Project: Identifiable, Equatable, Hashable, Sendable {
 
 /// An installed plugin, with the toggle state we can actually change.
 public struct PluginInfo: Identifiable, Equatable, Sendable {
+    public var assistant: String
+    public var nativeKey: String
+    /// A provider or policy may expose an installation without a local enable switch.
+    public var toggleUnavailableReason: String?
+    public var assistantLabel: String { assistant == "codex" ? "Codex" : "Claude Code" }
     /// `"vercel@claude-plugins-official"` — the key `enabledPlugins` uses.
     public var id: String
     public var name: String
@@ -206,8 +211,12 @@ public struct PluginInfo: Identifiable, Equatable, Sendable {
 
     public init(
         id: String, name: String, marketplace: String, version: String, installPath: URL,
-        enabled: Bool, repositoryChoice: Bool? = nil
+        enabled: Bool, repositoryChoice: Bool? = nil, assistant: String = "claude",
+        nativeKey: String? = nil, toggleUnavailableReason: String? = nil
     ) {
+        self.assistant = assistant
+        self.nativeKey = nativeKey ?? id
+        self.toggleUnavailableReason = toggleUnavailableReason
         self.id = id
         self.name = name
         self.marketplace = marketplace

@@ -12,6 +12,7 @@ public final class Watcher: @unchecked Sendable {
     private var pending: DispatchWorkItem?
     private let onChange: @Sendable () -> Void
     private let lock = NSLock()
+    private var requestedPaths: [String] = []
 
     /// Counts how many times the callback actually fired. Used by the tests to prove the
     /// coalescing works rather than just assuming it does.
@@ -26,7 +27,18 @@ public final class Watcher: @unchecked Sendable {
 
     public func start(watching directories: [URL]) {
         stop()
-        let existing = directories.filter { FileManager.default.fileExists(atPath: $0.path) }
+        lock.lock()
+        requestedPaths = directories.map { $0.resolvingSymlinksInPath().path }
+        lock.unlock()
+        // Watch an existing ancestor when the first installation has not created its config
+        // or cache yet. The callback filters sibling events so provider logs do not cause loops.
+        let existing = directories.map { directory -> URL in
+            var ancestor = directory
+            while !FileManager.default.fileExists(atPath: ancestor.path), ancestor.path != "/" {
+                ancestor.deleteLastPathComponent()
+            }
+            return ancestor
+        }
         guard !existing.isEmpty else { return }
 
         var context = FSEventStreamContext(
@@ -35,10 +47,19 @@ public final class Watcher: @unchecked Sendable {
             retain: nil, release: nil, copyDescription: nil
         )
 
-        let callback: FSEventStreamCallback = { _, info, _, _, _, _ in
+        let callback: FSEventStreamCallback = { _, info, _, eventPaths, _, _ in
             guard let info else { return }
             let watcher = Unmanaged<Watcher>.fromOpaque(info).takeUnretainedValue()
-            watcher.schedule()
+            let paths = unsafeBitCast(eventPaths, to: NSArray.self) as? [String] ?? []
+            watcher.lock.lock()
+            let requested = watcher.requestedPaths
+            watcher.lock.unlock()
+            if paths.contains(where: { event in
+                let path = URL(fileURLWithPath: event).resolvingSymlinksInPath().path
+                return requested.contains {
+                    path == $0 || path.hasPrefix($0 + "/")
+                }
+            }) { watcher.schedule() }
         }
 
         stream = FSEventStreamCreate(
@@ -49,7 +70,7 @@ public final class Watcher: @unchecked Sendable {
             FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
             0.2,
             FSEventStreamCreateFlags(
-                kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagNoDefer
+                kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagNoDefer | kFSEventStreamCreateFlagUseCFTypes
             )
         )
         guard let stream else { return }

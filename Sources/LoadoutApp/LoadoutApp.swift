@@ -31,6 +31,9 @@ struct LoadoutApp: App {
     }
 
     init() {
+        if CommandLine.arguments.contains("--self-check-codex") {
+            MainActor.assumeIsolated { CodexSelfCheck.run() }
+        }
         if CommandLine.arguments.contains("--self-check") {
             MainActor.assumeIsolated { SelfCheck.run() }
         }
@@ -177,4 +180,3 @@ struct LoadoutApp: App {
 
     }
 }
-

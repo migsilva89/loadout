@@ -233,6 +233,7 @@ public enum AssistantCLIRegistry {
         // Last resort for Codex: the ChatGPT app ships its own native `codex`. A machine with the
         // app but no npm install still gets an Ask target, and that copy needs no Node at all.
         if name == "codex" {
+            candidates.append("/Applications/Codex.app/Contents/Resources/codex")
             candidates.append("/Applications/ChatGPT.app/Contents/Resources/codex")
         }
         for candidate in candidates where fm.isExecutableFile(atPath: candidate) {

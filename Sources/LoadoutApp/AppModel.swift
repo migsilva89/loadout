@@ -164,6 +164,7 @@ final class AppModel {
     /// assistants on the machine at the moment it is built, and installing one — or giving an
     /// existing one its first `skills` folder — used to need a relaunch to be seen.
     private(set) var scanner: InventoryScanner
+    private var inventoryGeneration = 0
     let mutations: Mutations
     let copilot = Copilot()
     /// The conversation beside the editor. It proposes; this object still owns the text and the
@@ -484,6 +485,7 @@ final class AppModel {
     // MARK: - Reading
 
     func reload() {
+        inventoryGeneration += 1
         // A machine can gain an assistant while the app is open. Discovering them costs one
         // directory listing, and doing it here is what lets a new one appear without a relaunch.
         scanner = InventoryScanner(paths: paths)
@@ -500,6 +502,8 @@ final class AppModel {
     /// did not make (Claude Code rewrites `~/.claude.json` constantly), so on the busy path the
     /// reading is done elsewhere and only the result lands on the main actor.
     private func reloadOffMainThread() {
+        inventoryGeneration += 1
+        let generation = inventoryGeneration
         let scanner = InventoryScanner(paths: paths)
         let everything = showsEverything
         let projects = projects
@@ -510,6 +514,7 @@ final class AppModel {
                 : scanner.scanAll(project: context)
             await MainActor.run { [weak self] in
                 guard let self else { return }
+                guard self.inventoryGeneration == generation else { return }
                 self.scanner = scanner
                 self.apply(inventory)
             }
@@ -522,6 +527,7 @@ final class AppModel {
             ?? inventory.items
         items = annotated
         plugins = inventory.plugins
+        if !inventory.diagnostics.isEmpty { errorMessage = inventory.diagnostics.joined(separator: "\n") }
         if let selectedID, !items.contains(where: { $0.id == selectedID }) {
             self.selectedID = nil
         }
@@ -747,6 +753,10 @@ final class AppModel {
 
     /// The switch on a row. Off is one gesture and never asks; on can be a question.
     func toggle(_ item: Item) {
+        if pluginIsOff(for: item) {
+            errorMessage = "Turn on the \(item.origin.label) plugin before changing this item."
+            return
+        }
         if item.kind == .command || item.kind == .agent {
             toggleCommand(item)
             return
@@ -900,9 +910,12 @@ final class AppModel {
     /// A skill a plugin ships, switched one at a time so a 38-item plugin is not all or nothing.
     func togglePluginSkill(_ item: Item) {
         guard let plugin = plugins.first(where: { $0.id == item.pluginID })
-            ?? plugins.first(where: { $0.name == item.origin.label })
         else {
             errorMessage = "Couldn't tell which plugin \(item.name) came from."
+            return
+        }
+        guard plugin.enabled else {
+            errorMessage = "Turn on the \(plugin.name) plugin before changing this skill."
             return
         }
         perform(
@@ -1000,7 +1013,7 @@ final class AppModel {
     }
 
     func itemsOfPlugin(_ plugin: PluginInfo) -> [Item] {
-        items.filter { $0.pluginID == plugin.id || $0.origin == .plugin(plugin.name) }
+        items.filter { $0.pluginID == plugin.id }
             .sorted { ($0.kind.rawValue, $0.name) < ($1.kind.rawValue, $1.name) }
     }
 
@@ -1073,6 +1086,10 @@ final class AppModel {
 
     /// Opens the note that precedes uninstalling a plugin.
     func removePlugin(_ plugin: PluginInfo) {
+        guard plugin.assistant == "claude" else {
+            errorMessage = "Remove this plugin in Codex. You can turn it off here without removing its files."
+            return
+        }
         pendingPluginRemoval = plugin
         pluginRemovalDone = false
         pluginRemovalError = nil
@@ -1123,6 +1140,7 @@ final class AppModel {
     func readablePath(of plugin: PluginInfo) -> String { readablePath(plugin.installPath) }
 
     func togglePlugin(_ plugin: PluginInfo) {
+        if let reason = plugin.toggleUnavailableReason { errorMessage = reason; return }
         // The switch is already disabled where a repository has decided; this is the same answer for
         // anything that reaches here another way, because writing your settings would change a file
         // and nothing else.
@@ -1418,7 +1436,8 @@ final class AppModel {
         // and watching a home means being woken by every download and every editor's autosave.
         var directories = [paths.skills, paths.skillsOff, paths.commands, paths.agents,
                            paths.agentsOff, paths.sharedSkills, paths.pluginCache,
-                           paths.claudeJSON]
+                           paths.claudeJSON, paths.codexConfig, paths.codexPluginCache]
+        directories += plugins.filter { $0.assistant == "codex" }.map(\.installPath)
         for assistant in scanner.assistants {
             let home = assistant.skillsRoot.deletingLastPathComponent()
             directories += [assistant.skillsRoot, assistant.commandsRoot,

@@ -30,6 +30,7 @@
 - **Honest counts** — a history format that cannot prove an activation is marked unsupported, rather than reporting a zero that looks like disuse
 - **Project scope** — answers "what does an assistant see if I open this folder?" — and an Everything list that puts yours and every project's side by side, each row saying where it lives, for when the question is "where did I put that one?"
 - **A switch on everything** — turn one skill, command, subagent or MCP server off without deleting it, including a single skill out of a 38-item plugin, and Loadout re-applies that choice when the plugin updates
+- **Codex plugins** — installed plugins and their skills appear alongside Claude's, with separate controls. Turning off a plugin shows all its skills as off; turning it back on restores your individual choices. Codex's local plugin controls require an installed Codex version that supports its plugin inventory protocol. Workspace-managed plugin switches stay in Codex.
 - **An editor** — create skills, commands and subagents, edit and delete them, with syntax highlighting and live validation against the documented limits
 - **A conversation, beside the editor** — ask `claude`, `codex` or `opencode` to change a skill; it proposes, you accept change by change
 - **Out of a repository, into your own** — a skill, command or subagent that lives in a project becomes yours everywhere with one click. It is a copy: the project keeps its own, so nobody else loses anything at their next pull
@@ -112,6 +113,11 @@ provider, with the credentials already on your machine; Loadout never sees them.
 
 The test suite never touches any of this: every test runs against a temporary tree, which is why
 `Paths` takes its root by injection.
+
+Codex plugin discovery and configuration edits use its local app-server protocol. Loadout does not
+start an AI conversation for these operations. To check this integration with an installed Codex,
+run `.build/debug/LoadoutApp --self-check-codex` after building. It creates a temporary marketplace
+and tests individual switches, parent restoration, updates, backups and configuration preservation.
 
 ## Security
 

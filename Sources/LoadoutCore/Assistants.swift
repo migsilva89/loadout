@@ -89,7 +89,7 @@ public enum AssistantRegistry {
             // counts, listed apart as "no skills yet" — that is precisely the one you might
             // want to hand the first skill to. Unknown dot-directories without skills stay
             // out, so ~/.ssh never poses as an assistant.
-            let root = entry.appendingPathComponent("skills")
+            let root = id == "codex" ? paths.codexSkills : entry.appendingPathComponent("skills")
             var isDirectory: ObjCBool = false
             let hasFolder = fm.fileExists(atPath: root.path, isDirectory: &isDirectory)
                 && isDirectory.boolValue
@@ -104,6 +104,11 @@ public enum AssistantRegistry {
                 appPath: app,
                 hasSkillsFolder: hasFolder
             ))
+        }
+
+        if !found.contains(where: { $0.id == "codex" }), fm.fileExists(atPath: paths.codexHome.path) {
+            found.append(Assistant(id: "codex", label: "Codex", skillsRoot: paths.codexSkills,
+                                   hasSkillsFolder: fm.fileExists(atPath: paths.codexSkills.path)))
         }
 
         // The two he actually works in lead, then the rest alphabetically, and the ones

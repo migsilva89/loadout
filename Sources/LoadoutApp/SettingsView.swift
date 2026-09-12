@@ -799,7 +799,8 @@ struct HelpTab: View {
                 section("What switching something off does") {
                     line("A skill", "moves to a `skills-off` folder beside the assistant that owns it — never into another assistant's. Switching it on asks which assistants should load it again.")
                     line("A command or subagent", "moves to `commands-off` or `agents-off` next to it.")
-                    line("From a plugin", "moves aside inside the plugin's installed version, and Loadout puts it back there when the plugin updates.")
+                    line("From a plugin", "Claude skills move aside inside the installed plugin. Codex skills use Codex's own enable setting. Loadout keeps individual off choices when the plugin updates.")
+                    line("A whole plugin", "turns all its skills off in the list, without forgetting your individual choices. Turn the plugin back on to restore those choices. Workspace-managed Codex plugins must be changed in Codex.")
                     line("An MCP server", "its entry is lifted out of ~/.claude.json and kept, to be put back exactly as it was.")
                     line("Nothing is deleted", "and every write takes a backup first. Deleting is a separate gesture, and it goes to the Trash.")
                 }

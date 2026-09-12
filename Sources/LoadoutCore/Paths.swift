@@ -7,6 +7,8 @@ import Foundation
 /// the test suite off the user's real `~/.claude` (AC9.2) and the code free of
 /// hardcoded user paths (AC9.5).
 public struct Paths: Sendable {
+    public let codexExecutable: URL?
+    public let codexHome: URL
     public let home: URL
     public let claude: URL
     public let projectsRoot: URL
@@ -19,7 +21,10 @@ public struct Paths: Sendable {
     /// asked of the system, so a fixture home in a test keeps its own copy of all of it.
     public let support: URL
 
-    public init(home: URL, claude: URL? = nil, projectsRoot: URL? = nil, support: URL? = nil) {
+    public init(home: URL, claude: URL? = nil, projectsRoot: URL? = nil, support: URL? = nil,
+                codexExecutable: URL? = nil, codexHome: URL? = nil) {
+        self.codexExecutable = codexExecutable
+        self.codexHome = codexHome ?? home.appendingPathComponent(".codex")
         self.home = home
         self.claude = claude ?? home.appendingPathComponent(".claude")
         self.projectsRoot = projectsRoot ?? home.appendingPathComponent("Projects")
@@ -30,8 +35,13 @@ public struct Paths: Sendable {
     }
 
     public static func live() -> Paths {
-        Paths(home: FileManager.default.homeDirectoryForCurrentUser)
+        Paths(home: FileManager.default.homeDirectoryForCurrentUser,
+              codexExecutable: AssistantCLIRegistry.defaultLocate("codex"),
+              codexHome: ProcessInfo.processInfo.environment["CODEX_HOME"].map { URL(fileURLWithPath: $0) })
     }
+
+    public var codexConfig: URL { codexHome.appendingPathComponent("config.toml") }
+    public var codexPluginCache: URL { codexHome.appendingPathComponent("plugins/cache") }
 
     // MARK: Skills
 
@@ -39,13 +49,13 @@ public struct Paths: Sendable {
     public var skillsOff: URL { claude.appendingPathComponent("skills-off") }
 
     /// Codex keeps its own skills next to its own config.
-    public var codexSkills: URL { home.appendingPathComponent(".codex/skills") }
+    public var codexSkills: URL { codexHome.appendingPathComponent("skills") }
 
     /// The tree both assistants can point at, so a shared skill has one copy and one edit.
     public var sharedSkills: URL { home.appendingPathComponent(".agents/skills") }
 
     public func skillsRoot(forAssistant id: String) -> URL {
-        home.appendingPathComponent(".\(id)/skills")
+        id == "codex" ? codexSkills : home.appendingPathComponent(".\(id)/skills")
     }
 
     public var commands: URL { claude.appendingPathComponent("commands") }
