@@ -21,6 +21,9 @@
   <a href="../../releases/latest">
     <img src="https://img.shields.io/github/v/release/migsilva89/loadout?style=flat-square" alt="Latest release">
   </a>
+  <a href="https://buymeacoffee.com/migsilva?utm_source=github-loadout">
+    <img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-%E2%98%95-FFDD00?style=flat-square" alt="Buy me a coffee">
+  </a>
 </p>
 
 ## Features
