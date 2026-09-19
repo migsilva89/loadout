@@ -55,7 +55,28 @@ public struct Paths: Sendable {
     public var sharedSkills: URL { home.appendingPathComponent(".agents/skills") }
 
     public func skillsRoot(forAssistant id: String) -> URL {
-        id == "codex" ? codexSkills : home.appendingPathComponent(".\(id)/skills")
+        switch id {
+        case "codex": return codexSkills
+        case "antigravity": return antigravitySkills
+        default: return home.appendingPathComponent(".\(id)/skills")
+        }
+    }
+
+    // MARK: Antigravity
+
+    /// Antigravity CLI (`agy`) has no dot-directory of its own: it lives inside `~/.gemini`, next
+    /// to the Gemini CLI. Its own state — conversations, logs, the built-in skills — sits under
+    /// `antigravity-cli`, and this folder existing is what says the CLI is installed.
+    public var antigravityHome: URL { home.appendingPathComponent(".gemini/antigravity-cli") }
+    /// The global customization root the CLI reads: skills, plugins and `mcp_config.json`.
+    /// Probed on agy 1.2.7 — of the three folders its docs mention, this is the only one it loads.
+    public var antigravityConfig: URL { home.appendingPathComponent(".gemini/config") }
+    public var antigravitySkills: URL { antigravityConfig.appendingPathComponent("skills") }
+    /// One SQLite database per conversation, with every step as a protobuf blob.
+    public var antigravityConversations: URL { antigravityHome.appendingPathComponent("conversations") }
+    /// The index of those conversations: title, dates and the workspace each one ran in.
+    public var antigravitySummaries: URL {
+        antigravityHome.appendingPathComponent("conversation_summaries.db")
     }
 
     public var commands: URL { claude.appendingPathComponent("commands") }

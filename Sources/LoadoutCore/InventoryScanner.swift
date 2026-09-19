@@ -26,6 +26,7 @@ public struct InventoryScanner: Sendable {
             in: paths.agentsOff, kind: .agent, origin: .personal, enabled: false
         )
         items += mcpServers()
+        items += AntigravityMCP(paths: paths).items()
 
         let codex = CodexPlugins(paths: paths).scan(project: project)
         let claudePlugins = claudeInstalledPlugins(project: project)
@@ -569,7 +570,8 @@ public struct InventoryScanner: Sendable {
             path: paths.claudeJSON,
             directory: nil,
             modified: modificationDate(paths.claudeJSON),
-            enabled: true
+            enabled: true,
+            assistants: ["claude"]
         )
     }
 

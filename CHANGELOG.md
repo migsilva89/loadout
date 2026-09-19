@@ -4,6 +4,22 @@ Notable changes, newest first. Dates are the day the work landed on `main`.
 
 The versions are what a release is tagged as; between tags, `main` is what is being used daily.
 
+## 0.6.0 — 2026-09-19
+
+### Added
+
+- **Antigravity CLI.** `agy` appears as an assistant once it has run on the machine. Its skills
+  are read from and shared into `~/.gemini/config/skills`, the folder the CLI loads; its usage is
+  counted from its conversation history, with a skill read that agy labels as such shown as
+  explicit; and Ask can run `agy` for a one-shot answer. A running conversation with `agy` is not
+  covered yet.
+- **MCP servers from every assistant.** The MCP tab lists Claude's, Codex's and Antigravity's
+  servers, each row marked with its owner, and the assistant filter narrows the list to one of
+  them. The switch uses each assistant's own mechanism — Codex's `enabled` flag through Codex,
+  Antigravity's `disabled` flag in its own file — so no assistant's settings are ever written to
+  switch another's server. Codex servers are removed in Codex, not here. "Never used" leaves
+  Codex and Antigravity servers alone, because their history does not yet show MCP calls.
+
 ## 0.5.0 — 2026-09-12
 
 ### Added

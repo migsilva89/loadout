@@ -489,7 +489,7 @@ struct AssistantsTab: View {
 
         SettingsGroup(
             title: "Ask CLIs",
-            note: "What \"Ask\" in a skill's detail runs. The four built-ins show up on their own "
+            note: "What \"Ask\" in a skill's detail runs. The five built-ins show up on their own "
                 + "once installed; add anything else by hand."
         ) {
             ForEach(model.assistantCLIs) { cli in

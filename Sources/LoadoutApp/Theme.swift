@@ -299,6 +299,7 @@ enum AssistantBrand {
         "hermes": 0xCFCFD4,
         "commandcode": 0xC9CBD0,
         "gemini": 0x4285F4,
+        "antigravity": 0x4285F4,
         "copilot": 0x8B949E,
         "opencode": 0xF5A623,
         "droid": 0x3DDC84,

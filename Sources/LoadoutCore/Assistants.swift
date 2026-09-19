@@ -63,6 +63,7 @@ public enum AssistantRegistry {
         "hermes": ("Hermes", nil),
         "commandcode": ("CommandCode", nil),
         "gemini": ("Gemini", nil),
+        "antigravity": ("Antigravity", "/Applications/Antigravity.app"),
         "copilot": ("Copilot", nil),
         "opencode": ("opencode", nil),
         "droid": ("Droid", nil),
@@ -109,6 +110,18 @@ public enum AssistantRegistry {
         if !found.contains(where: { $0.id == "codex" }), fm.fileExists(atPath: paths.codexHome.path) {
             found.append(Assistant(id: "codex", label: "Codex", skillsRoot: paths.codexSkills,
                                    hasSkillsFolder: fm.fileExists(atPath: paths.codexSkills.path)))
+        }
+
+        // Antigravity CLI keeps everything under `~/.gemini`, so the walk above never meets it:
+        // the Gemini CLI's own `~/.gemini/skills` is Gemini's, and agy reads
+        // `~/.gemini/config/skills` instead. Listed when the CLI has ever run on this machine.
+        if fm.fileExists(atPath: paths.antigravityHome.path) {
+            let descriptor = known["antigravity"]!
+            found.append(Assistant(
+                id: "antigravity", label: descriptor.label, skillsRoot: paths.antigravitySkills,
+                appPath: descriptor.app.flatMap { fm.fileExists(atPath: $0) ? $0 : nil },
+                hasSkillsFolder: fm.fileExists(atPath: paths.antigravitySkills.path)
+            ))
         }
 
         // The two he actually works in lead, then the rest alphabetically, and the ones

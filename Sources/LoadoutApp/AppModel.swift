@@ -104,8 +104,8 @@ final class AppModel {
     var frontmatterFilterKey: String? {
         didSet { followSelectionIntoView() }
     }
-    /// The assistant menu next to sort. Independent of `filter`, and only meaningful for
-    /// skills — resets to `.any` alongside `filter` whenever the sidebar row changes.
+    /// The assistant menu next to sort. Independent of `filter`, and only meaningful for skills
+    /// and MCP servers — resets to `.any` alongside `filter` whenever the sidebar row changes.
     var assistantFilter: AssistantFilter = .any {
         didSet { followSelectionIntoView() }
     }
@@ -1227,8 +1227,11 @@ final class AppModel {
         }
     }
 
-    /// True for the servers this app may remove: yours, not the ones a repository ships.
-    func canRemove(_ item: Item) -> Bool { item.kind == .mcp && !item.declaredByRepository }
+    /// True for the servers this app may remove: yours, not the ones a repository ships — and not
+    /// Codex's, whose entry is a TOML table Codex itself removes with `codex mcp remove`.
+    func canRemove(_ item: Item) -> Bool {
+        item.kind == .mcp && !item.declaredByRepository && Mutations.owner(of: item) != "codex"
+    }
 
     // MARK: - Assistant CLIs ("Ask")
 

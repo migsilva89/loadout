@@ -1,7 +1,7 @@
 import Foundation
 
 /// A command-line assistant the "Ask" sheet can run — `claude`, `codex`, whatever the user
-/// points it at. Four are built in; anything else the owner adds by hand in Settings lives
+/// points it at. Five are built in; anything else the owner adds by hand in Settings lives
 /// alongside them on equal footing.
 public struct AssistantCLI: Identifiable, Hashable, Sendable {
     /// The placeholder in `argumentTemplate` that becomes the prompt — always one whole
@@ -14,7 +14,7 @@ public struct AssistantCLI: Identifiable, Hashable, Sendable {
     public let executable: URL
     /// Whitespace-separated argv template, e.g. `"-p {prompt}"` or `"exec {prompt}"`.
     public let argumentTemplate: String
-    /// True for an entry the owner typed into Settings; false for one of the four built-ins.
+    /// True for an entry the owner typed into Settings; false for one of the five built-ins.
     /// Built-ins are read-only there — only custom entries can be edited or removed.
     public let isCustom: Bool
 
@@ -140,7 +140,7 @@ public enum AssistantCLIValidation {
     }
 }
 
-/// Finds every assistant CLI on this machine: the four built-ins, wherever they actually sit
+/// Finds every assistant CLI on this machine: the five built-ins, wherever they actually sit
 /// on `PATH` or in the usual install locations, plus whatever the owner added by hand.
 public enum AssistantCLIRegistry {
     private struct Builtin {
@@ -166,6 +166,8 @@ public enum AssistantCLIRegistry {
             argumentTemplate: "-p --output-format text {prompt}"
         ),
         Builtin(id: "opencode", binaryName: "opencode", label: "opencode", argumentTemplate: "run {prompt}"),
+        // Antigravity CLI. `-p` is its print mode, and it happily runs outside a git repository.
+        Builtin(id: "antigravity", binaryName: "agy", label: "Antigravity", argumentTemplate: "-p {prompt}"),
     ]
 
     /// Every built-in binary name, for the "none installed" tooltip.
@@ -210,7 +212,7 @@ public enum AssistantCLIRegistry {
     }
 
     /// Walks `PATH` the way a login shell would, then the usual install locations — the same
-    /// search `Copilot.findClaude` used to do alone, now shared by all four built-ins.
+    /// search `Copilot.findClaude` used to do alone, now shared by all five built-ins.
     public static func defaultLocate(_ name: String) -> URL? {
         let fm = FileManager.default
         var candidates: [String] = []

@@ -311,3 +311,77 @@ enum CodexLine {
         """
     }
 }
+
+// MARK: - Antigravity conversations
+
+import SQLite3
+
+extension Fixture {
+    /// One step of an Antigravity conversation, the way agy stores it: a `view_file` call on a
+    /// path, or a plain user message with no tool call at all.
+    struct AntigravityStep {
+        var at: Date
+        var tool: String?
+        var arguments: String = ""
+    }
+
+    /// Writes a conversation database the shape agy 1.2.7 leaves behind — a `steps` table whose
+    /// `metadata` column is a protobuf blob — and registers it in the summaries index with the
+    /// workspace it ran in.
+    func antigravityConversation(_ id: String, workspace: String? = "/Users/me/meu-repo",
+                                 steps: [AntigravityStep]) {
+        let folder = paths.antigravityConversations
+        try! FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+
+        var db: OpaquePointer?
+        sqlite3_open(folder.appendingPathComponent("\(id).db").path, &db)
+        sqlite3_exec(db, "CREATE TABLE steps (idx INTEGER PRIMARY KEY, step_type INTEGER, metadata BLOB);", nil, nil, nil)
+        for (index, step) in steps.enumerated() {
+            var statement: OpaquePointer?
+            sqlite3_prepare_v2(db, "INSERT INTO steps (idx, step_type, metadata) VALUES (?, ?, ?);", -1, &statement, nil)
+            sqlite3_bind_int(statement, 1, Int32(index))
+            sqlite3_bind_int(statement, 2, step.tool == nil ? 14 : 132)
+            let blob = [UInt8](Self.metadata(for: step))
+            sqlite3_bind_blob(statement, 3, blob, Int32(blob.count), unsafeBitCast(-1, to: sqlite3_destructor_type.self))
+            sqlite3_step(statement)
+            sqlite3_finalize(statement)
+        }
+        sqlite3_close(db)
+
+        var summaries: OpaquePointer?
+        sqlite3_open(paths.antigravitySummaries.path, &summaries)
+        sqlite3_exec(summaries, "CREATE TABLE IF NOT EXISTS conversation_summaries (conversation_id TEXT PRIMARY KEY, workspace_uris TEXT NOT NULL);", nil, nil, nil)
+        let uris = workspace.map { "[\"file://\($0)\"]" } ?? ""
+        sqlite3_exec(summaries, "INSERT OR REPLACE INTO conversation_summaries VALUES ('\(id)', '\(uris)');", nil, nil, nil)
+        sqlite3_close(summaries)
+    }
+
+    /// Field 1: a `google.protobuf.Timestamp`. Field 4, when there is a tool call: id, name, JSON.
+    private static func metadata(for step: AntigravityStep) -> Data {
+        func varint(_ value: UInt64) -> [UInt8] {
+            var value = value
+            var bytes: [UInt8] = []
+            repeat {
+                var byte = UInt8(value & 0x7F)
+                value >>= 7
+                if value > 0 { byte |= 0x80 }
+                bytes.append(byte)
+            } while value > 0
+            return bytes
+        }
+        func field(_ number: UInt64, _ payload: [UInt8]) -> [UInt8] {
+            varint(number << 3 | 2) + varint(UInt64(payload.count)) + payload
+        }
+        func field(_ number: UInt64, _ text: String) -> [UInt8] { field(number, Array(text.utf8)) }
+
+        let stamp = varint(1 << 3) + varint(UInt64(step.at.timeIntervalSince1970))
+            + varint(2 << 3) + varint(0)
+        var bytes = field(1, stamp) + varint(3 << 3) + varint(2)
+        if let tool = step.tool {
+            bytes += field(4, field(1, "call_1") + field(2, tool) + field(3, step.arguments))
+        }
+        // A trailing field the parser has never heard of, as the real blobs have plenty of.
+        bytes += varint(11 << 3) + varint(1318)
+        return Data(bytes)
+    }
+}

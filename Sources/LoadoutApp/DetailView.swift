@@ -241,6 +241,12 @@ struct DetailView: View {
             && item.origin == .personal && model.isEffectivelyEnabled(item)
     }
 
+    /// The marks in the strip: the card's items, plus MCP servers — which have one owner worth
+    /// naming but no card, because a server can't be linked into a second assistant.
+    private func showsAssistantMarks(_ item: Item) -> Bool {
+        showsAssistants(item) || item.kind == .mcp
+    }
+
     /// The one gesture behind all three controls — the chip, the seam and ⌥⌘I — so they cannot
     /// drift into meaning three slightly different things.
     private func toggleDetails() {
@@ -257,7 +263,7 @@ struct DetailView: View {
                 : nil,
             lines: showsBudget(item) ? "\(item.budget.bodyLines) / \(Budget.maxBodyLines) lines" : nil,
             overBudget: item.budget.isOverBudget,
-            assistants: showsAssistants(item)
+            assistants: showsAssistantMarks(item)
                 ? model.visibleAssistants.filter { item.assistants.contains($0.id) }
                 : []
         )
@@ -793,6 +799,21 @@ struct DetailView: View {
         }
     }
 
+    /// Whose file the server is a few lines of, and what the switch does there.
+    private func serverSentence(_ item: Item) -> String {
+        if item.declaredByRepository {
+            return "This server comes from the .mcp.json the repository commits, so everyone who checks it out gets it. Switching it off is recorded in your own settings and changes nothing for anybody else."
+        }
+        switch Mutations.owner(of: item) {
+        case "codex":
+            return "This server is defined in ~/.codex/config.toml, not in a separate file. Switching it off sets Codex's own enabled flag. Removing it is done in Codex, with `codex mcp remove`."
+        case "antigravity":
+            return "This server is defined in ~/.gemini/config/mcp_config.json, not in a separate file. Switching it off sets the same disabled flag `agy mcp disable` does."
+        default:
+            return "This server is defined in ~/.claude.json, not in a separate file."
+        }
+    }
+
     private func locationHelp(_ item: Item) -> String {
         if item.kind == .mcp {
             return "The settings file this server is defined in, a few lines among the assistant's other settings"
@@ -1240,9 +1261,7 @@ struct DetailView: View {
             // One of these is in a file of its own and the other is not, so the sentence cannot be
             // the same. Saying "~/.claude.json" over a server that came out of a repository's
             // `.mcp.json` pointed at the wrong file and read as the app not knowing where it was.
-            Text(item.declaredByRepository
-                ? "This server comes from the .mcp.json the repository commits, so everyone who checks it out gets it. Switching it off is recorded in your own settings and changes nothing for anybody else."
-                : "This server is defined in ~/.claude.json, not in a separate file.")
+            Text(serverSentence(item))
                 .font(.system(size: 12.5))
                 .foregroundStyle(V2.textMid)
                 .padding(16)

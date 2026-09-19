@@ -367,6 +367,10 @@ public struct Mutations: Sendable {
 
     // MARK: - MCP servers
 
+    /// Which assistant's file an MCP row lives in. Claude's rows say so; anything older or unmarked
+    /// is Claude's too, because until now that was the only owner there was.
+    public static func owner(of item: Item) -> String { item.assistants.first ?? "claude" }
+
     /// Switches an MCP server off by lifting its entry out of `~/.claude.json`, and on by putting
     /// back exactly what was lifted (AC11.9, AC11.10).
     ///
@@ -376,6 +380,13 @@ public struct Mutations: Sendable {
     /// Loadout's record **before** it is removed, so failing to remember it never loses a server.
     public func setServer(_ item: Item, enabled: Bool) throws {
         guard item.kind == .mcp else { throw LoadoutError.notEditable(item.name) }
+        // Each owner has its own switch and its own file; the Claude path below never sees the
+        // others, so a Codex server can't be "switched off" by touching ~/.claude.json.
+        switch Self.owner(of: item) {
+        case "codex": return try CodexPlugins(paths: paths).setServer(named: item.name, enabled: enabled)
+        case "antigravity": return try AntigravityMCP(paths: paths).setServer(named: item.name, enabled: enabled)
+        default: break
+        }
         if item.declaredByRepository {
             try setRepositoryServer(item, enabled: enabled)
             return
@@ -424,6 +435,12 @@ public struct Mutations: Sendable {
     public func removeServer(_ item: Item) throws {
         guard item.kind == .mcp else { throw LoadoutError.notEditable(item.name) }
         guard !item.declaredByRepository else { throw LoadoutError.notEditable(item.name) }
+        switch Self.owner(of: item) {
+        case "antigravity": return try AntigravityMCP(paths: paths).removeServer(named: item.name)
+        // A Codex server is a TOML table with nested `env`; Codex has `codex mcp remove` for it.
+        case "codex": throw LoadoutError.notEditable(item.name)
+        default: break
+        }
         let project = projectKey(for: item)
 
         guard var root = readClaudeJSON() else {
