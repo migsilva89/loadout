@@ -233,6 +233,7 @@ struct TitleBar: View {
         HStack(spacing: 12) {
             leftZone
             KindTabs(model: model)
+            coffeeButton
             Spacer(minLength: 12)
             rightZone
         }
@@ -272,6 +273,26 @@ struct TitleBar: View {
             HStack(spacing: 8) { newSkillButton(); chatButton() }
             HStack(spacing: 8) { newSkillButton(compact: true); chatButton(compact: true) }
         }
+    }
+
+    /// The tip jar, beside the tabs: in the bar so it is always in view, styled like the chat
+    /// button so it is one of the bar's controls rather than an advert, and after the tabs rather
+    /// than among them because it does not change what the window shows.
+    private var coffeeButton: some View {
+        Button { BugReport.openCoffee() } label: {
+            // A cup and nothing else: the tooltip carries the sentence. Sized like the sidebar
+            // toggle on the other side of the tabs, so the two read as the tabs' bookends.
+            Image(systemName: "cup.and.saucer")
+                .font(.system(size: 12))
+                .foregroundStyle(V2.textDim)
+                .frame(width: 28, height: 26)
+                .background(V2.button, in: RoundedRectangle(cornerRadius: 7))
+                .overlay(RoundedRectangle(cornerRadius: 7)
+                    .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.5))
+        }
+        .buttonStyle(.plain)
+        .help("Loadout is free, and stays free. If it saves you time, a coffee keeps the next release coming")
+        .pointingHand()
     }
 
     private func chatButton(compact: Bool = false) -> some View {

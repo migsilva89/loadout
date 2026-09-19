@@ -75,6 +75,14 @@ enum BugReport {
     static func openGuide() {
         NSWorkspace.shared.open(URL(string: "\(repository)#readme")!)
     }
+
+    /// The tip jar. The app is free and stays free; this is the one place it says so and asks.
+    /// `utm_source` tells the Buy Me a Coffee dashboard which app the visit came from.
+    static let coffee = URL(string: "https://buymeacoffee.com/migsilva?utm_source=loadout-app")!
+
+    static func openCoffee() {
+        NSWorkspace.shared.open(coffee)
+    }
 }
 
 // MARK: - Appearance
@@ -831,6 +839,17 @@ struct HelpTab: View {
                         Button("Open the guide") { BugReport.openGuide() }
                         .help("The README, which covers what the app does and how it is built")
                         .pointingHand()
+                    }
+                }
+
+                section("Free, and stays free") {
+                    HStack(spacing: 8) {
+                        Text("If Loadout saves you time, a coffee keeps the next release coming.")
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(.secondary)
+                        Button("Buy me a coffee ☕") { BugReport.openCoffee() }
+                            .help("Opens buymeacoffee.com in the browser")
+                            .pointingHand()
                     }
                 }
             }
