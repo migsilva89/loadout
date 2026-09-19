@@ -25,14 +25,14 @@
 
 ## Features
 
-- **A full inventory** — personal and project skills, everything from plugins, slash commands, subagents and MCP servers, across every assistant on the machine
+- **A full inventory** — personal and project skills, everything from plugins, slash commands, subagents and MCP servers, across every assistant on the machine — Claude Code, Codex and Antigravity MCP servers side by side, each marked with its owner
 - **Real usage** — how many times each thing fired, when it last did, and in how many projects, read from the assistants' own session logs
 - **Honest counts** — a history format that cannot prove an activation is marked unsupported, rather than reporting a zero that looks like disuse
 - **Project scope** — answers "what does an assistant see if I open this folder?" — and an Everything list that puts yours and every project's side by side, each row saying where it lives, for when the question is "where did I put that one?"
 - **A switch on everything** — turn one skill, command, subagent or MCP server off without deleting it, including a single skill out of a 38-item plugin, and Loadout re-applies that choice when the plugin updates
 - **Codex plugins** — installed plugins and their skills appear alongside Claude's, with separate controls. Turning off a plugin shows all its skills as off; turning it back on restores your individual choices. Codex's local plugin controls require an installed Codex version that supports its plugin inventory protocol. Workspace-managed plugin switches stay in Codex.
 - **An editor** — create skills, commands and subagents, edit and delete them, with syntax highlighting and live validation against the documented limits
-- **A conversation, beside the editor** — ask `claude`, `codex` or `opencode` to change a skill; it proposes, you accept change by change
+- **A conversation, beside the editor** — ask `claude`, `codex`, `opencode` or `agy` to change a skill; it proposes, you accept change by change
 - **Out of a repository, into your own** — a skill, command or subagent that lives in a project becomes yours everywhere with one click. It is a copy: the project keeps its own, so nobody else loses anything at their next pull
 - **Help where the question is** — Settings › Help says in plain words what switching something off does to your files, where Loadout keeps its own, and reports a bug with the version and system already filled in
 - **A backup before every write** — if the copy fails, nothing is written. Deleting goes to the Trash, never `rm`
@@ -86,7 +86,9 @@ what you typed as the brief, so the description and body come back as proposals.
 
 Each assistant reads its skills from `~/.<name>/skills` — `~/.claude/skills`, `~/.codex/skills`,
 and so on. Loadout finds them by itself: any such folder that exists is included, and an assistant
-installed tomorrow shows up without a code change.
+installed tomorrow shows up without a code change. Antigravity CLI (`agy`) is the exception it
+knows about: it has no folder of its own and reads `~/.gemini/config/skills`, so that is where
+Loadout puts its skills.
 
 Clicking an assistant that does not have the skill puts it there. On disk, the folder is promoted
 to `~/.agents/skills/<name>` and each assistant gets a symlink to it — one copy, one edit, both
@@ -100,11 +102,11 @@ merge them on its own and says why.
 
 | Data | Location | Written by Loadout? |
 |---|---|:---:|
-| Your skills, commands, subagents and MCP servers | `~/.claude/`, `~/.codex/`, `~/.<assistant>/` | Only when you save, create, delete or share |
+| Your skills, commands, subagents and MCP servers | `~/.claude/`, `~/.codex/`, `~/.gemini/config/`, `~/.<assistant>/` | Only when you save, create, delete or share |
 | Backups, taken before every write | `~/Library/Application Support/Loadout/backups/` | Yes |
 | Usage index, rebuildable | `~/Library/Application Support/Loadout/usage.sqlite` | Yes |
 | Working copies for the assistant conversation | `~/Library/Application Support/Loadout/ask-workspaces/` | Yes |
-| The assistants' session logs | `~/.claude/projects/`, `~/.codex/sessions/` | Never — read only |
+| The assistants' session logs | `~/.claude/projects/`, `~/.codex/sessions/`, `~/.gemini/antigravity-cli/conversations/` | Never — read only |
 
 Loadout keeps its own files out of `~/.claude`: that directory belongs to Claude, and an app that
 keeps its database in someone else's folder is a surprise waiting for whoever wipes `.claude` to

@@ -45,6 +45,7 @@ public final class UsageIndex: @unchecked Sendable {
         [
             ClaudeUsageSource(paths: paths),
             CodexUsageSource(paths: paths),
+            AntigravityUsageSource(paths: paths),
             OpenCodeUsageSource(paths: paths),
             CursorUsageSource(paths: paths),
             PiUsageSource(paths: paths),

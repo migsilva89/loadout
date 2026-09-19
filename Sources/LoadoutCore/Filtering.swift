@@ -99,8 +99,8 @@ public enum ItemFilter: String, Equatable, Hashable, Sendable, CaseIterable {
 
 /// The assistant menu next to sort: independent of the origin/state chip above the list, and
 /// combined with it rather than replacing it — "Personal" plus "Codex" means personal skills
-/// Codex loads, not one or the other. Only skills carry assistants, so this only has an effect
-/// (and is only shown) while the sidebar is on `.skills`.
+/// Codex loads, not one or the other. Skills carry the assistants that load them and MCP servers
+/// carry their one owner, so this is shown on those two tabs and is inert on the rest.
 public enum AssistantFilter: Hashable, Sendable {
     case any
     /// What the old `.shared` chip did: skills more than one assistant loads.
@@ -147,7 +147,7 @@ public enum Filtering {
                 return false
             }
         case .neverUsed:
-            return items.filter { $0.usage.neverUsed }
+            return items.filter { $0.usage.neverUsed && usageIsObservable($0) }
         case .disabled:
             return items.filter { !isEffectivelyEnabled($0, disabledPluginIDs: disabledPluginIDs) }
         case .overBudget:
@@ -156,6 +156,16 @@ public enum Filtering {
             guard let frontmatterKey else { return items }
             return items.filter { $0.frontmatter[frontmatterKey] != nil }
         }
+    }
+
+    /// The owners whose history proves an MCP call: Claude's transcripts name the server in the
+    /// tool (`mcp__server__tool`). Codex and Antigravity don't yet, so their servers are never
+    /// called unused — a zero nobody can see is not a zero.
+    static let assistantsWithMCPUsage: Set<String> = ["claude"]
+
+    public static func usageIsObservable(_ item: Item) -> Bool {
+        guard item.kind == .mcp else { return true }
+        return item.assistants.isEmpty || !item.assistants.isDisjoint(with: assistantsWithMCPUsage)
     }
 
     public static func isEffectivelyEnabled(

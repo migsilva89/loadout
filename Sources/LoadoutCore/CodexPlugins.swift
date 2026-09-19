@@ -34,6 +34,7 @@ struct CodexPlugins {
             throw LoadoutError.io("Codex returned an unsupported plugin inventory. Update Codex and reload.")
         }
         var result = Inventory()
+        result.items += Self.servers(in: config, file: paths.codexConfig)
         for error in installed["marketplaceLoadErrors"] as? [[String: Any]] ?? [] {
             result.diagnostics.append("Codex marketplace: \(error["message"] as? String ?? "could not be read")")
         }
@@ -204,6 +205,53 @@ struct CodexPlugins {
         encoder.outputFormatting = .withoutEscapingSlashes
         let quoted = String(data: try encoder.encode(plugin.nativeKey), encoding: .utf8)!
         var params: [String: Any] = ["keyPath": "plugins.\(quoted).enabled", "value": enabled,
+                                    "mergeStrategy": "replace", "filePath": paths.codexConfig.path]
+        if let layer = (settings["layers"] as? [[String: Any]])?.first(where: {
+            ($0["name"] as? [String: Any])?["type"] as? String == "user"
+        }), let version = layer["version"] as? String { params["expectedVersion"] = version }
+        let response = try connection.call("config/value/write", params)
+        if response["status"] as? String != "ok" {
+            throw LoadoutError.io("Codex saved the setting, but another configuration overrides it. Change the overriding setting in Codex.")
+        }
+    }
+
+    /// Codex's own MCP servers, the `[mcp_servers.<name>]` tables of `config.toml` as `config/read`
+    /// resolves them. Servers a plugin brings along are not in here — Codex keeps those with the
+    /// plugin — so every row is one the person wrote and can switch.
+    static func servers(in config: [String: Any], file: URL) -> [Item] {
+        let servers = config["mcp_servers"] as? [String: Any] ?? [:]
+        return servers.compactMap { name, value -> Item? in
+            guard let dict = value as? [String: Any] else { return nil }
+            var description = "MCP server"
+            if let command = dict["command"] as? String {
+                let args = dict["args"] as? [String] ?? []
+                description = args.isEmpty ? command : command + " " + args.joined(separator: " ")
+            } else if let url = dict["url"] as? String {
+                description = url
+            }
+            return Item(
+                id: "mcp:codex:\(name)", name: name, kind: .mcp, origin: .personal,
+                description: description, path: file,
+                modified: (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate,
+                enabled: (dict["enabled"] as? Bool) ?? true, assistants: ["codex"]
+            )
+        }.sorted { $0.name < $1.name }
+    }
+
+    /// The same write the plugin switch does, on `mcp_servers.<name>.enabled`: Codex's own flag,
+    /// written by Codex, checked against the version of the file it read.
+    func setServer(named name: String, enabled: Bool) throws {
+        let connection = try CodexConnection(paths: paths)
+        defer { connection.close() }
+        let settings = try connection.call("config/read", ["includeLayers": true])
+        guard let config = settings["config"] as? [String: Any],
+              (config["mcp_servers"] as? [String: Any])?[name] != nil
+        else { throw LoadoutError.notFound(name) }
+        try Backups(paths: paths).snapshot(paths.codexConfig)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .withoutEscapingSlashes
+        let quoted = String(data: try encoder.encode(name), encoding: .utf8)!
+        var params: [String: Any] = ["keyPath": "mcp_servers.\(quoted).enabled", "value": enabled,
                                     "mergeStrategy": "replace", "filePath": paths.codexConfig.path]
         if let layer = (settings["layers"] as? [[String: Any]])?.first(where: {
             ($0["name"] as? [String: Any])?["type"] as? String == "user"

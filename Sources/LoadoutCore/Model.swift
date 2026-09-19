@@ -76,8 +76,9 @@ public struct Item: Identifiable, Equatable, Sendable {
     /// Set when the frontmatter could not be read, so the UI can say so instead of lying.
     public var warning: String?
     public var usage: Usage
-    /// Ids of the assistants that load this skill. Empty for anything that is not a
-    /// personal skill.
+    /// Ids of the assistants that load this item: the ones a personal skill or command is linked
+    /// into, or the single owner of an MCP server — whose file the switch has to write. Empty for
+    /// everything else.
     public var assistants: Set<String>
     /// What it costs to keep installed, and whether it breaks a documented limit. Only
     /// meaningful for items that own a markdown document.

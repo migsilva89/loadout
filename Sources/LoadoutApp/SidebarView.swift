@@ -343,10 +343,13 @@ struct SidebarView: View {
                         }
                     }
                 }
-                if model.selection == .skills {
+                if model.selection == .skills || model.selection == .mcp {
                     popoverGroupLabel("Assistant")
                     assistantOption(.any, label: "Any")
-                    assistantOption(.multiple, label: "In more than one")
+                    // A server has one owner, so "in more than one" can never match on MCP.
+                    if model.selection == .skills {
+                        assistantOption(.multiple, label: "In more than one")
+                    }
                     ForEach(model.visibleAssistants) { assistant in
                         assistantOption(.one(assistant.id), label: assistant.label)
                     }
