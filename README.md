@@ -149,6 +149,10 @@ copy named `Loadout-<version>-update.dmg`, and a signed `appcast.xml` that point
 at it. The app only accepts an update signed with the key it was built with. `release.sh` will not
 print the publish command unless that signed feed exists.
 
+## Support the project
+
+Loadout is free and stays free. If it saves you time, you can [buy me a coffee](https://buymeacoffee.com/migsilva?utm_source=github-loadout) — it keeps the next release coming.
+
 ## License
 
 [MIT](LICENSE).
