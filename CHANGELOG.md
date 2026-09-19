@@ -4,6 +4,14 @@ Notable changes, newest first. Dates are the day the work landed on `main`.
 
 The versions are what a release is tagged as; between tags, `main` is what is being used daily.
 
+## 0.6.1 — 2026-09-19
+
+### Added
+
+- **Buy me a coffee.** A cup in the title bar, after the tabs, and a line at the end of Settings ›
+  Help. Loadout is free and stays free; this is the one place in the app that says so and asks.
+  Nothing else changed.
+
 ## 0.6.0 — 2026-09-19
 
 ### Added
