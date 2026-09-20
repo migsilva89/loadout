@@ -26,6 +26,16 @@
   </a>
 </p>
 
+<p align="center">
+  <img src=".github/assets/loadout-all.gif" width="1000" alt="Browsing the inventory, disabling and re-enabling a skill, switching off one skill out of a plugin, putting a skill on a second assistant, then asking an assistant to rewrite its description and accepting the change inside the document">
+</p>
+
+```bash
+brew install --cask migsilva89/loadout/loadout
+```
+
+Or [download the DMG](../../releases/latest) and drag `Loadout.app` into `/Applications`. Signed and notarised; macOS 15 or later.
+
 ## Features
 
 - **A full inventory** — personal and project skills, everything from plugins, slash commands, subagents and MCP servers, across every assistant on the machine — Claude Code, Codex and Antigravity MCP servers side by side, each marked with its owner
@@ -40,10 +50,6 @@
 - **Help where the question is** — Settings › Help says in plain words what switching something off does to your files, where Loadout keeps its own, and reports a bug with the version and system already filled in
 - **A backup before every write** — if the copy fails, nothing is written. Deleting goes to the Trash, never `rm`
 - **One skill, every assistant** — share a skill across assistants as symlinks to a single copy, so one edit reaches all of them. Switching it off asks which assistants it should return to, and a skill never changes hands behind your back
-
-<p align="center">
-  <img src=".github/assets/loadout-all.gif" width="1000" alt="Browsing the inventory, disabling and re-enabling a skill, switching off one skill out of a plugin, putting a skill on a second assistant, then asking an assistant to rewrite its description and accepting the change inside the document">
-</p>
 
 ## Install
 
