@@ -131,6 +131,8 @@ final class AppModel {
 
     // Status
     var errorMessage: String?
+    /// The last inventory diagnostics put in front of the person, so a reload does not repeat them.
+    private var shownDiagnostics = ""
     var statusMessage: String?
     var indexProgress: Double?
 
@@ -527,7 +529,14 @@ final class AppModel {
             ?? inventory.items
         items = annotated
         plugins = inventory.plugins
-        if !inventory.diagnostics.isEmpty { errorMessage = inventory.diagnostics.joined(separator: "\n") }
+        // Once per distinct message. The watcher reloads on every write under ~/.claude and
+        // ~/.codex, and a diagnostic that is the same after each of them is one sentence, not a
+        // dialog that returns every few seconds for as long as the app is open.
+        let diagnostics = inventory.diagnostics.joined(separator: "\n")
+        if !diagnostics.isEmpty, diagnostics != shownDiagnostics {
+            shownDiagnostics = diagnostics
+            errorMessage = diagnostics
+        }
         if let selectedID, !items.contains(where: { $0.id == selectedID }) {
             self.selectedID = nil
         }

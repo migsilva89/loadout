@@ -99,9 +99,23 @@ final class CodexPluginTests: XCTestCase {
         XCTAssertFalse(f.exists(f.paths.localSettings))
     }
 
-    func testMalformedProtocolAndMissingPackageAreDiagnosed() throws {
+    func testMalformedProtocolIsDiagnosedAndMissingManifestIsNot() throws {
         let f = Fixture()
         XCTAssertThrowsError(try CodexPlugins(paths: f.paths).inventory(installed: [:], skills: [:], settings: [:]))
+        // A connector plugin: installed, versioned, and nothing in its package but its server.
+        // It is listed, with no skills and no dialog — the situation reported under issue #12.
+        let result = try scan(f)
+        XCTAssertTrue(result.diagnostics.isEmpty)
+        XCTAssertEqual(result.plugins.count, 1)
+        XCTAssertNil(result.plugins.first?.toggleUnavailableReason)
+        XCTAssertTrue(result.items.isEmpty)
+    }
+
+    func testUnreadableManifestIsStillDiagnosed() throws {
+        let f = Fixture()
+        let root = f.paths.codexPluginCache.appendingPathComponent("market/kit/1.0.0/.codex-plugin")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try "not json".write(to: root.appendingPathComponent("plugin.json"), atomically: true, encoding: .utf8)
         let result = try scan(f)
         XCTAssertFalse(result.diagnostics.isEmpty)
         XCTAssertNotNil(result.plugins.first?.toggleUnavailableReason)

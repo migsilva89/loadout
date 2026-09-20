@@ -171,7 +171,13 @@ struct CodexPlugins {
 
     static func manifestSkills(at root: URL) throws -> [URL] {
         let file = root.appendingPathComponent(".codex-plugin/plugin.json")
-        let object = try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any]
+        // No manifest is not a broken plugin. A connector such as Slack or Google Calendar ships
+        // nothing but its MCP server, and Codex installs it without one; the only thing to do is
+        // look in the conventional folder and, finding nothing, list the plugin with no skills.
+        // A manifest that is there and cannot be read is a different matter, and still throws.
+        let object = FileManager.default.fileExists(atPath: file.path)
+            ? try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any]
+            : nil
         let locations: [String]
         if let path = object?["skills"] as? String { locations = [path] }
         else if let paths = object?["skills"] as? [String] { locations = paths }

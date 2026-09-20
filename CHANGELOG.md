@@ -4,6 +4,16 @@ Notable changes, newest first. Dates are the day the work landed on `main`.
 
 The versions are what a release is tagged as; between tags, `main` is what is being used daily.
 
+## 0.6.2 — 2026-09-20
+
+### Fixed
+
+- **"Something went wrong" on a loop.** Codex installs connector plugins — Slack, Google
+  Calendar — without a `plugin.json`, because they carry no skills, only their MCP server.
+  Loadout treated the missing file as a broken plugin, and repeated the dialog on every reload
+  the file watcher triggered. A plugin without a manifest is now listed with no skills and no
+  dialog, and a diagnostic is shown once per session, not once per reload. (#12)
+
 ## 0.6.1 — 2026-09-19
 
 ### Added
