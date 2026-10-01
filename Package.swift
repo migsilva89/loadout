@@ -8,7 +8,7 @@ let package = Package(
         // Pinned because this framework installs executable code: it is what replaces Loadout.app
         // on somebody's disk. Moving off this version is a deliberate review, not something a
         // release build picks up on its own.
-        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.6"),
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.0"),
     ],
     targets: [
         .target(name: "LoadoutCore"),
