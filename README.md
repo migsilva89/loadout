@@ -26,6 +26,8 @@
   </a>
 </p>
 
+https://github.com/user-attachments/assets/40763b70-7607-403e-9eb5-f0b3e07ad3c4
+
 <p align="center">
   <img src=".github/assets/loadout-all.gif" width="1000" alt="Browsing the inventory, disabling and re-enabling a skill, switching off one skill out of a plugin, putting a skill on a second assistant, then asking an assistant to rewrite its description and accepting the change inside the document">
 </p>
