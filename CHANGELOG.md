@@ -4,6 +4,15 @@ Notable changes, newest first. Dates are the day the work landed on `main`.
 
 The versions are what a release is tagged as; between tags, `main` is what is being used daily.
 
+## 0.6.3 — 2026-10-18
+
+### Changed
+
+- **Each tab keeps its own filter.** Filter Skills to Personal, look at Commands, come back,
+  and Skills is still on Personal. A filter still never follows you to another tab, where its
+  control may not even be shown — it just waits for you on the tab where you set it. (#17)
+- **Sparkle 2.10.0**, the framework that downloads and installs updates. (#14)
+
 ## 0.6.2 — 2026-09-20
 
 ### Fixed
