@@ -10,9 +10,11 @@ name: Update the Homebrew cask
 # of the disk image as GitHub serves it, downloaded rather than taken from the
 # machine that built it.
 #
-# Unlike the site, the cask has no schedule of its own to catch up with. A
-# missing token is therefore a failure, not a warning: a red cross is the only
-# way anybody learns the cask did not move.
+# The credential is a deploy key on the tap with write access, its private half
+# held here as HOMEBREW_TAP_DEPLOY_KEY. It reaches that one repository only, and
+# unlike a token it does not expire. Unlike the site, the cask has no schedule
+# of its own to catch up with, so a missing key is a failure, not a warning: a
+# red cross is the only way anybody learns the cask did not move.
 
 on:
   release:
@@ -37,13 +39,13 @@ jobs:
           # Reads this repository's release assets.
           GH_TOKEN: ${{ github.token }}
           # Writes to the tap — the only credential that reaches another repository.
-          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          TAP_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
           TAP: migsilva89/homebrew-loadout
           TAG: ${{ github.event.release.tag_name || inputs.tag }}
         run: |
           set -euo pipefail
-          if [ -z "${TAP_TOKEN:-}" ]; then
-            echo "::error::No HOMEBREW_TAP_TOKEN set, so $TAP still names the previous version."
+          if [ -z "${TAP_KEY:-}" ]; then
+            echo "::error::No HOMEBREW_TAP_DEPLOY_KEY set, so $TAP still names the previous version."
             exit 1
           fi
 
@@ -51,7 +53,10 @@ jobs:
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "Loadout-$VERSION.dmg"
           SHA="$(sha256sum "Loadout-$VERSION.dmg" | cut -d' ' -f1)"
 
-          git clone --quiet "https://x-access-token:$TAP_TOKEN@github.com/$TAP.git" tap
+          install -m 600 /dev/null "$RUNNER_TEMP/tap-key"
+          printf '%s\n' "$TAP_KEY" > "$RUNNER_TEMP/tap-key"
+          export GIT_SSH_COMMAND="ssh -i $RUNNER_TEMP/tap-key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+          git clone --quiet "git@github.com:$TAP.git" tap
           cd tap
           sed -i -E \
             -e "s/^  version \"[^\"]+\"/  version \"$VERSION\"/" \
