@@ -447,13 +447,28 @@ enum SelfCheck {
         check("filters out nonmatches", model.visibleItems.isEmpty)
         model.query = ""
 
-        // Switching kind resets the filters: an assistant filter set on Skills used to
-        // silently empty Commands, with the control that caused it not even rendered there.
-        model.assistantFilter = .one("claude")
+        // Each tab keeps its own filters: an assistant filter set on Skills used to silently
+        // empty Commands, with the control that caused it not even rendered there — but coming
+        // back to Skills finds it as it was left. Commands starts clean, since earlier checks
+        // left their own filter on it.
         model.selection = .commands
-        check("tab change resets the assistant filter", model.assistantFilter == .any)
-        check("tab change resets the funnel", model.filter == .all)
+        model.filter = .all
         model.selection = .skills
+        model.assistantFilter = .one("claude")
+        model.filter = .mine
+        model.selection = .commands
+        check("tab change doesn't carry the assistant filter", model.assistantFilter == .any)
+        check("tab change doesn't carry the funnel", model.filter == .all)
+        model.filter = .neverUsed
+        model.selection = .skills
+        check("coming back restores the assistant filter", model.assistantFilter == .one("claude"))
+        check("coming back restores the funnel", model.filter == .mine)
+        model.selection = .commands
+        check("each tab keeps its own funnel", model.filter == .neverUsed)
+        model.filter = .all
+        model.selection = .skills
+        model.filter = .all
+        model.assistantFilter = .any
 
         // Chip counts follow every narrowing the list itself follows — the "All 56 over an
         // empty list" bug was the counts ignoring the assistant menu.

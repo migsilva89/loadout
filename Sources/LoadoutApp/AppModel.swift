@@ -82,15 +82,20 @@ final class AppModel {
     /// list. A place to search — and it says so on screen, because no assistant ever loads more
     /// than one project at a time.
     var showsEverything = false
-    /// Switching kind resets the filters — an assistant or over-budget filter set on Skills
+    /// Each tab keeps its own filters — an assistant or over-budget filter set on Skills
     /// would silently empty Commands, with the control that caused it not even rendered
-    /// there — and moves the selection to the new list, so the detail pane never shows a
-    /// skill while the Commands tab is lit.
+    /// there, but coming back to Skills finds it as it was left. Switching also moves the
+    /// selection to the new list, so the detail pane never shows a skill while the Commands
+    /// tab is lit.
     var selection: Selection = .skills {
         didSet {
             guard oldValue != selection else { return }
-            filter = .all
-            assistantFilter = .any
+            filtersByTab[oldValue] = ListFilters(
+                filter: filter, assistant: assistantFilter, frontmatterKey: frontmatterFilterKey)
+            let restored = filtersByTab[selection] ?? ListFilters()
+            frontmatterFilterKey = restored.frontmatterKey
+            filter = restored.filter
+            assistantFilter = restored.assistant
             selectedID = visibleItems.first?.id
             selectFirstPluginIfNeeded()
             loadDraft()
@@ -105,10 +110,17 @@ final class AppModel {
         didSet { followSelectionIntoView() }
     }
     /// The assistant menu next to sort. Independent of `filter`, and only meaningful for skills
-    /// and MCP servers — resets to `.any` alongside `filter` whenever the sidebar row changes.
+    /// and MCP servers — kept per tab alongside `filter`.
     var assistantFilter: AssistantFilter = .any {
         didSet { followSelectionIntoView() }
     }
+    /// The filters of every tab but the one on screen, put back when that tab is picked again.
+    private struct ListFilters {
+        var filter: ItemFilter = .all
+        var assistant: AssistantFilter = .any
+        var frontmatterKey: String?
+    }
+    private var filtersByTab: [Selection: ListFilters] = [:]
     var selectedID: String?
     var query: String = "" {
         didSet { followSelectionIntoView() }
