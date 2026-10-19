@@ -385,7 +385,10 @@ public struct Mutations: Sendable {
         switch Self.owner(of: item) {
         case "codex": return try CodexPlugins(paths: paths).setServer(named: item.name, enabled: enabled)
         case "antigravity": return try AntigravityMCP(paths: paths).setServer(named: item.name, enabled: enabled)
-        default: break
+        default:
+            if let json = JSONMCP(paths: paths, assistant: Self.owner(of: item)) {
+                return try json.setServer(named: item.name, enabled: enabled)
+            }
         }
         if item.declaredByRepository {
             try setRepositoryServer(item, enabled: enabled)
@@ -439,7 +442,10 @@ public struct Mutations: Sendable {
         case "antigravity": return try AntigravityMCP(paths: paths).removeServer(named: item.name)
         // A Codex server is a TOML table with nested `env`; Codex has `codex mcp remove` for it.
         case "codex": throw LoadoutError.notEditable(item.name)
-        default: break
+        default:
+            if let json = JSONMCP(paths: paths, assistant: Self.owner(of: item)) {
+                return try json.removeServer(named: item.name)
+            }
         }
         let project = projectKey(for: item)
 
@@ -459,6 +465,117 @@ public struct Mutations: Sendable {
         }
         if remembered {
             try records.forgetServer(named: item.name, project: project)
+        }
+    }
+
+    // MARK: - Sharing and adding MCP servers
+
+    /// The entry style an assistant's config speaks. The matrix reads once and renders per
+    /// target, so this is the only place that maps an assistant to its spelling.
+    public static func entryStyle(for assistant: String) -> MCPStore.EntryStyle {
+        switch assistant {
+        case "antigravity": return .antigravity
+        case "opencode": return .opencode
+        default: return .classic
+        }
+    }
+
+    /// The raw entry a server has in its owner's config — the thing that gets copied when the
+    /// matrix shares it with another assistant.
+    public func serverEntry(named name: String, assistant: String) throws -> [String: Any] {
+        switch assistant {
+        case "codex":
+            let connection = try CodexConnection(paths: paths)
+            defer { connection.close() }
+            let settings = try connection.call("config/read", ["includeLayers": true])
+            guard let config = settings["config"] as? [String: Any],
+                  let entry = (config["mcp_servers"] as? [String: Any])?[name] as? [String: Any]
+            else { throw LoadoutError.notFound(name) }
+            // Codex resolves TOML into the same shape the JSON formats use — `command` as a
+            // string, `args`, `url` — so it reads as a classic entry.
+            return entry
+        case "antigravity":
+            guard let root = try? JSONSerialization.jsonObject(
+                with: Data(contentsOf: paths.antigravityConfig.appendingPathComponent("mcp_config.json"))
+            ) as? [String: Any],
+                  let entry = (root["mcpServers"] as? [String: Any])?[name] as? [String: Any]
+            else { throw LoadoutError.notFound(name) }
+            return entry
+        default:
+            if let json = JSONMCP(paths: paths, assistant: assistant) {
+                guard let entry = json.currentServers()[name] as? [String: Any] else {
+                    throw LoadoutError.notFound(name)
+                }
+                return entry
+            }
+            guard assistant == "claude",
+                  let root = readClaudeJSON(),
+                  let entry = (root["mcpServers"] as? [String: Any])?[name] as? [String: Any]
+            else { throw LoadoutError.notFound(name) }
+            return entry
+        }
+    }
+
+    /// Puts an existing server into another assistant's config, translated into that
+    /// assistant's own format — the matrix's cell press when the cell is empty.
+    ///
+    /// Never merges: an assistant that already has a server of this name keeps its own
+    /// definition, because two configs disagreeing about one server is exactly the mess this
+    /// app exists to remove.
+    public func copyServer(from item: Item, to assistant: String) throws {
+        guard item.kind == .mcp else { throw LoadoutError.notEditable(item.name) }
+        guard !item.assistants.contains(assistant) else { return }
+        guard assistant != "codex" else {
+            throw LoadoutError.io(
+                "Codex keeps its servers in config.toml behind its own protocol. Add this one with `codex mcp add`."
+            )
+        }
+        let source = Self.owner(of: item)
+        let raw = try serverEntry(named: item.name, assistant: source)
+        let entry = MCPEntry(dict: raw, style: Self.entryStyle(for: source))
+        try addServer(name: item.name, entry: entry, to: assistant)
+    }
+
+    /// Writes a brand-new server into one assistant's config, in that assistant's format.
+    public func addServer(name: String, entry: MCPEntry, to assistant: String) throws {
+        guard !name.isEmpty, name == name.trimmingCharacters(in: .whitespacesAndNewlines),
+              !name.contains("\u{1}")
+        else { throw LoadoutError.invalidName(name) }
+        guard assistant != "codex" else {
+            throw LoadoutError.io(
+                "Codex keeps its servers in config.toml behind its own protocol. Add this one with `codex mcp add`."
+            )
+        }
+        if let json = JSONMCP(paths: paths, assistant: assistant) {
+            return try json.addServer(named: name, entry: entry)
+        }
+        switch assistant {
+        case "antigravity":
+            let file = paths.antigravityConfig.appendingPathComponent("mcp_config.json")
+            var root = (try? JSONSerialization.jsonObject(with: Data(contentsOf: file))
+                as? [String: Any]) ?? [:]
+            var servers = root["mcpServers"] as? [String: Any] ?? [:]
+            guard servers[name] == nil else { throw LoadoutError.alreadyExists(file) }
+            try Backups(paths: paths).snapshot(file)
+            servers[name] = entry.rendered(for: .antigravity)
+            root["mcpServers"] = servers
+            let data = try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
+            try FileManager.default.createDirectory(
+                at: file.deletingLastPathComponent(), withIntermediateDirectories: true
+            )
+            try data.write(to: file, options: .atomic)
+        case "claude":
+            guard var root = readClaudeJSON() else {
+                throw LoadoutError.io("Couldn't read \(paths.claudeJSON.lastPathComponent).")
+            }
+            var servers = root["mcpServers"] as? [String: Any] ?? [:]
+            guard servers[name] == nil else { throw LoadoutError.alreadyExists(paths.claudeJSON) }
+            try backups.snapshot(paths.claudeJSON)
+            servers[name] = entry.rendered(for: .classic)
+            root["mcpServers"] = servers
+            try writeJSON(root, to: paths.claudeJSON)
+        default:
+            throw LoadoutError.notEditable(assistant)
         }
     }
 

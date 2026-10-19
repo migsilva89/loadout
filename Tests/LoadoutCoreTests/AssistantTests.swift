@@ -32,6 +32,22 @@ final class AssistantTests: XCTestCase {
 
     // MARK: Seeing the gap
 
+    /// A stray `~/.antigravity` folder is found by the walk, and the CLI's real home under
+    /// `~/.gemini` is the special case — both naming the same assistant. Listing it twice would
+    /// show two rows and two columns in the MCP matrix, so the real entry replaces the stray one.
+    func testAntigravityIsListedOnceEvenWithAFolderOfItsOwn() {
+        let fixture = Fixture()
+        try? fm.createDirectory(at: fixture.paths.home.appendingPathComponent(".antigravity/skills"),
+                                withIntermediateDirectories: true)
+        try? fm.createDirectory(at: fixture.paths.antigravityHome, withIntermediateDirectories: true)
+
+        let found = allAssistants(fixture).filter { $0.id == "antigravity" }
+
+        XCTAssertEqual(found.count, 1)
+        XCTAssertEqual(found.first?.skillsRoot, fixture.paths.antigravitySkills,
+                       "the entry is the CLI's, reading ~/.gemini/config/skills")
+    }
+
     func testASkillIsOneRowCarryingTheAssistantsThatLoadIt() {
         let fixture = Fixture()
         fixture.skill("on-both")

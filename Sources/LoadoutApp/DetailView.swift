@@ -235,14 +235,20 @@ struct DetailView: View {
         .clipped()
     }
 
-    /// Who the Assistants card is for: your own skills and commands, while they are switched on.
+    /// Who the Assistants card is for: your own skills and commands while they are switched on,
+    /// and your own MCP servers whether they are on or off — off is exactly when you are looking
+    /// for another assistant to turn it on in. A server a repository ships is excluded: it is the
+    /// team's, and its other home is that repository's own project scope.
     private func showsAssistants(_ item: Item) -> Bool {
-        (item.kind == .skill || item.kind == .command)
+        if item.kind == .mcp {
+            return item.origin == .personal && !item.declaredByRepository
+        }
+        return (item.kind == .skill || item.kind == .command)
             && item.origin == .personal && model.isEffectivelyEnabled(item)
     }
 
-    /// The marks in the strip: the card's items, plus MCP servers — which have one owner worth
-    /// naming but no card, because a server can't be linked into a second assistant.
+    /// The marks in the strip: the card's items, plus every MCP server — which now has the card
+    /// itself, and in the strip keeps naming the owner beside the rest.
     private func showsAssistantMarks(_ item: Item) -> Bool {
         showsAssistants(item) || item.kind == .mcp
     }
@@ -804,6 +810,16 @@ struct DetailView: View {
         if item.declaredByRepository {
             return "This server comes from the .mcp.json the repository commits, so everyone who checks it out gets it. Switching it off is recorded in your own settings and changes nothing for anybody else."
         }
+        if MCPList.isMerged(item) {
+            let owners = model.mcpOwnerRows(named: item.name)
+            let names = Set(owners.map { Mutations.owner(of: $0) })
+                .sorted()
+                .map { id in model.assistants.first { $0.id == id }?.label ?? id.capitalized }
+            let listed = names.count == 1
+                ? names[0]
+                : names.dropLast().joined(separator: ", ") + " and " + names.last!
+            return "\(owners.count == 1 ? "This server is" : "\(owners.count) assistants have this server in") their own configs — \(listed). The switch changes them all, each the way that assistant does it."
+        }
         switch Mutations.owner(of: item) {
         case "codex":
             return "This server is defined in ~/.codex/config.toml, not in a separate file. Switching it off sets Codex's own enabled flag. Removing it is done in Codex, with `codex mcp remove`."
@@ -861,7 +877,14 @@ struct DetailView: View {
 
     private func assistantsCard(_ item: Item) -> some View {
         let assistants = model.visibleAssistants
-        let loaded = assistants.filter { item.assistants.contains($0.id) }.count
+        // For an MCP server "loaded" means switched on in that assistant's own config — the
+        // row it lives in is a separate item per assistant, so `item.assistants` alone would
+        // count only this row's owner and every other cell would read as empty.
+        let loaded = assistants.filter { assistant in
+            item.kind == .mcp
+                ? model.mcpIsOn(name: item.name, for: assistant.id)
+                : item.assistants.contains(assistant.id)
+        }.count
         return V2Card {
             VStack(spacing: 0) {
                 cardHeader {
@@ -870,7 +893,7 @@ struct DetailView: View {
                         Text("\(loaded) loaded of \(assistants.count)")
                             .font(.system(size: 11))
                             .foregroundStyle(V2.textFaint)
-                            .help("How many of the assistants below have this skill, out of the ones Loadout found on this Mac and Settings keeps in view")
+                            .help("How many of the assistants below have this \(item.kind.briefingNoun), out of the ones Loadout found on this Mac and Settings keeps in view")
                     }
                 }
                 // Four up is the design's shape, but only while a cell has room for a name and a
@@ -904,6 +927,71 @@ struct DetailView: View {
 
     @ViewBuilder
     private func assistantCell(_ assistant: Assistant, item: Item) -> some View {
+        if item.kind == .mcp {
+            mcpAssistantCell(assistant, item: item)
+        } else {
+            skillAssistantCell(assistant, item: item)
+        }
+    }
+
+    /// One assistant's square for an MCP server: ✓ on, ⊕ absent (press to put it there),
+    /// − off or not writable. The minus over Codex when it doesn't have the server is
+    /// deliberately still: Codex's config is TOML behind its own protocol, and offering a
+    /// press that can only answer "`codex mcp add`" is offering something the app cannot do.
+    @ViewBuilder
+    private func mcpAssistantCell(_ assistant: Assistant, item: Item) -> some View {
+        let on = model.mcpIsOn(name: item.name, for: assistant.id)
+        let present = model.mcpIsPresent(name: item.name, for: assistant.id)
+        let writable = model.mcpIsWritable(assistant.id)
+        let storable = writable && !(assistant.id == "codex" && !present)
+        let help = mcpAssistantHelp(assistant, item: item, on: on, present: present, writable: writable)
+
+        if !storable {
+            assistantRow(assistant, has: on, none: true)
+                .help(help)
+                // Still reads as state — the check or minus is true and worth seeing. Only
+                // the press is gone, dimmed the way a disabled control is.
+                .opacity(0.55)
+                .spotlight(Spotlight.assistant(assistant.id))
+        } else {
+            Button {
+                model.setAssistant(assistant, on: item, present: !on)
+            } label: {
+                assistantRow(assistant, has: on, none: !on && present)
+                    .help(help)
+            }
+            .buttonStyle(.plain)
+            .pointingHand()
+            .spotlight(Spotlight.assistant(assistant.id))
+        }
+    }
+
+    private func mcpAssistantHelp(
+        _ assistant: Assistant, item: Item, on: Bool, present: Bool, writable: Bool
+    ) -> String {
+        let count = assistantUsage[assistant.id] ?? 0
+        let fired = count > 0
+            ? "\(assistant.label) called \(uses(count)) in \(model.usageWindowLabel). "
+            : ""
+        if on {
+            return "On in \(assistant.label). " + fired
+                + "Click to switch it off in \(assistant.label)'s own config."
+        }
+        if present {
+            return "Configured in \(assistant.label) but switched off. " + fired
+                + "Click to turn it on there."
+        }
+        if assistant.id == "codex", writable {
+            return "Codex keeps its servers in config.toml behind its own protocol. Loadout can switch this one on and off; adding it is `codex mcp add`."
+        }
+        if !writable {
+            return "\(assistant.label) keeps no MCP config Loadout knows how to write."
+        }
+        return "Click to put this server in \(assistant.label)'s config — the definition is translated into its own format."
+    }
+
+    @ViewBuilder
+    private func skillAssistantCell(_ assistant: Assistant, item: Item) -> some View {
         let has = item.assistants.contains(assistant.id)
         let none = !has && !assistant.hasSkillsFolder
         // The one assistant that holds the last copy: unlinking there would take the skill with

@@ -28,6 +28,10 @@ struct SidebarView: View {
             // do. The manager gets the full column instead.
             if model.selection == .plugins {
                 PluginManagerView(model: model)
+            } else if model.selection == .mcp, model.showsMCPSharing {
+                // The other face of the same tab: the list answers "whose is this", the matrix
+                // answers "who has it and who is missing it", with the fix in the empty square.
+                MCPMatrixView(model: model)
             } else {
                 header
                 Hairline()
@@ -57,6 +61,7 @@ struct SidebarView: View {
                 scopeButton
                 sortButton
                 Spacer(minLength: 6)
+                if model.selection == .mcp { sharingButton }
                 densityButton
                 filterButton
             }
@@ -283,6 +288,21 @@ struct SidebarView: View {
         .buttonStyle(.plain)
         .help(hint)
         .accessibilityLabel(hint)
+        .pointingHand()
+    }
+
+    /// The door to the other face of this tab: the matrix of servers across assistants. A grid
+    /// glyph in the same pill as its neighbours, and only on MCP — the other kinds are shared
+    /// one assistant-mark at a time and have no matrix to show.
+    private var sharingButton: some View {
+        Button {
+            model.showsMCPSharing = true
+        } label: {
+            Image(systemName: "square.grid.3x3")
+                .font(.system(size: 11.5))
+        }
+        .buttonStyle(V2PillButtonStyle(active: false))
+        .help("Sharing — one server, every assistant, in one grid")
         .pointingHand()
     }
 

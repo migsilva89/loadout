@@ -9,6 +9,11 @@ import LoadoutCore
 final class AppModel {
     // Inventory
     private(set) var items: [Item] = []
+    /// The personal-scope MCP rows exactly as each owner has them, before the list folds
+    /// same-named ones together (`MCPList.mergeDuplicates`). The matrix, the Assistants card
+    /// and every switch read *these* — per-assistant state is the whole point of them — while
+    /// the list, its counts and selection read `items`.
+    private(set) var mcpOwners: [Item] = []
     private(set) var plugins: [PluginInfo] = []
     private(set) var projects: [Project] = []
 
@@ -272,6 +277,7 @@ final class AppModel {
             (UserDefaults.standard.string(forKey: Self.hiddenAssistantsKey) ?? "")
                 .split(separator: ",").map(String.init)
         )
+        self.showsMCPSharing = UserDefaults.standard.bool(forKey: Self.mcpSharingKey)
         self.customAssistantCLIs = CustomAssistantCLIStore.load()
         self.lastAssistantCLIID = UserDefaults.standard.string(forKey: Self.lastAssistantCLIKey)
         self.ask = AskModel(paths: paths)
@@ -539,7 +545,10 @@ final class AppModel {
         let previousSelection = selectedID
         let annotated = usageIndex?.annotate(inventory.items, assistants: countedAssistantIDs)
             ?? inventory.items
-        items = annotated
+        // Owners first, then the fold: the raw rows are what every per-assistant question
+        // asks, and what the list collapses into one row per name.
+        mcpOwners = annotated.filter { $0.kind == .mcp && $0.origin == .personal }
+        items = MCPList.mergeDuplicates(annotated)
         plugins = inventory.plugins
         // Once per distinct message. The watcher reloads on every write under ~/.claude and
         // ~/.codex, and a diagnostic that is the same after each of them is one sentence, not a
@@ -778,11 +787,11 @@ final class AppModel {
             return
         }
         if item.kind == .mcp {
-            // An MCP server is a few lines inside ~/.claude.json rather than a file, so switching
-            // it off lifts the entry out and keeps it; switching it on puts back what was lifted.
-            perform(item.enabled ? "Disabled \(item.name)." : "Enabled \(item.name).") {
-                try mutations.setServer(item, enabled: !item.enabled)
-            }
+            // An MCP server is a few lines inside an assistant's settings rather than a file, so
+            // switching it off lifts the entry out and keeps it; switching it on puts back what
+            // was lifted. The row may be several assistants' rows folded into one, so every
+            // owner moves together — one file at a time, each the way that assistant does it.
+            toggleMCPServer(item)
             return
         }
         guard item.kind == .skill else {
@@ -819,6 +828,36 @@ final class AppModel {
         }
 
         perform("Enabled \(item.name).") { try mutations.enableSkill(item) }
+    }
+
+    /// One switch, every config it lives in.
+    ///
+    /// A folded list row stands for N assistants' own entries; each is switched through the
+    /// owner's existing path — Claude's lift-out, Codex's flag over its app-server, opencode's
+    /// `enabled` — and only the owners whose state would actually change are touched, so
+    /// flipping the row never re-writes an entry that is already where you want it. A
+    /// project's server keeps its own single path: only Claude has per-project MCP.
+    private func toggleMCPServer(_ item: Item) {
+        let message = item.enabled ? "Disabled \(item.name)." : "Enabled \(item.name)."
+        guard item.origin == .personal else {
+            perform(message) { try mutations.setServer(item, enabled: !item.enabled) }
+            return
+        }
+        let target = !item.enabled
+        let changing = mcpOwnerRows(named: item.name).filter { $0.enabled != target }
+        var failures: [String] = []
+        for owner in changing {
+            do { try mutations.setServer(owner, enabled: target) }
+            catch { failures.append(label(of: Mutations.owner(of: owner))) }
+        }
+        reload()
+        if failures.isEmpty {
+            statusMessage = message
+            errorMessage = nil
+        } else {
+            errorMessage = "Couldn't change \(item.name) for \(failures.joined(separator: ", "))."
+            statusMessage = nil
+        }
     }
 
     /// Takes a copy of something that lives in a repository and makes it yours everywhere.
@@ -1042,8 +1081,14 @@ final class AppModel {
         if hidden { hiddenAssistantIDs.insert(assistant.id) } else { hiddenAssistantIDs.remove(assistant.id) }
     }
 
-    /// Fills or removes a gap in the assistant dots.
+    /// Fills or removes a gap in the assistant dots — and, on the Assistants card, is the one
+    /// gesture for an MCP server too: ⊕ puts the server on that assistant (copying and
+    /// translating the definition), ✓ switches it off in that assistant's own config.
     func setAssistant(_ assistant: Assistant, on item: Item, present: Bool) {
+        if item.kind == .mcp {
+            setMCPServer(name: item.name, on: present, assistant: assistant.id)
+            return
+        }
         var done = present
             ? "\(assistant.label) now loads \(item.name)."
             : "\(assistant.label) no longer loads \(item.name)."
@@ -1098,6 +1143,139 @@ final class AppModel {
         } else {
             errorMessage = "Couldn't sync: \(failures.joined(separator: ", "))."
         }
+    }
+
+    // MARK: - The MCP sharing matrix
+
+    /// Whether the MCP tab shows the sharing matrix instead of the list. A view mode like the
+    /// sidebar's width: someone who lives in the matrix should find it there on every launch.
+    var showsMCPSharing = false {
+        didSet {
+            guard showsMCPSharing != oldValue else { return }
+            UserDefaults.standard.set(showsMCPSharing, forKey: Self.mcpSharingKey)
+        }
+    }
+
+    private static let mcpSharingKey = "mcpSharingView"
+
+    /// Whether the Add MCP sheet is up. The sheet lives on the Sharing face of the MCP tab,
+    /// where the one definition it writes is the thing the whole view is about.
+    var isAddingMCPServer = false
+
+    /// The matrix columns: the visible assistants whose own configs Loadout knows how to read
+    /// MCP servers from. Hiding one in Settings takes its column with it.
+    var mcpColumns: [Assistant] { MCPMatrix.columns(paths: paths, assistants: visibleAssistants) }
+
+    /// The matrix rows: personal-scope servers grouped by name across every assistant — built
+    /// from the raw owner rows, because a cell's state is one assistant's, never the folded
+    /// list row's.
+    var mcpMatrixRows: [MCPMatrixRow] {
+        MCPMatrix.rows(items: mcpOwners, assistants: mcpColumns.map(\.id))
+    }
+
+    /// Pressing a cell or an assistant on the detail card — the one gesture behind both, since
+    /// both answer the same question for one server and one assistant. Off switches it off the
+    /// owner's own way; on either puts a recorded one back or copies the definition in from an
+    /// assistant that already has it — translated into the target's format, never merged into a
+    /// definition already there.
+    func setMCPMatrixCell(_ row: MCPMatrixRow, assistant: String, on: Bool) {
+        setMCPServer(name: row.name, on: on, assistant: assistant)
+    }
+
+    func setMCPServer(name: String, on: Bool, assistant assistantID: String) {
+        let existing = mcpOwners.first {
+            $0.name == name && $0.assistants.contains(assistantID)
+        }
+        if on {
+            if let item = existing, !item.enabled {
+                perform("\(name) is back on for \(label(of: assistantID)).") {
+                    try mutations.setServer(item, enabled: true)
+                }
+                return
+            }
+            guard let source = mcpOwners.first(where: {
+                $0.name == name && $0.enabled && !$0.assistants.contains(assistantID)
+            }) else {
+                errorMessage = """
+                Loadout copies the definition from an assistant that has \(name) switched on — \
+                turn it on somewhere first, then put it on \(label(of: assistantID)).
+                """
+                statusMessage = nil
+                return
+            }
+            perform("\(name) now works in \(label(of: assistantID)).") {
+                try mutations.copyServer(from: source, to: assistantID)
+            }
+        } else if let item = existing, item.enabled {
+            perform("\(name) is off in \(label(of: assistantID)).") {
+                try mutations.setServer(item, enabled: false)
+            }
+        }
+    }
+
+    // The three with their own handling, plus every config file Loadout knows how to write.
+    // Anything else — a discovered assistant that keeps no MCP config — gets no ⊕ on the card
+    // and no column in the matrix, because there would be nothing to press it into.
+    private var mcpWritableIDs: Set<String> {
+        Set(["claude", "codex", "antigravity"]).union(MCPStore.stores(paths: paths).map(\.assistant))
+    }
+
+    /// The raw personal-scope rows for one server name — what an aggregate switch or remove
+    /// iterates. Empty for a name that only a project declares.
+    func mcpOwnerRows(named name: String) -> [Item] {
+        mcpOwners.filter { $0.name == name }
+    }
+
+    /// Whether the server is switched on in that assistant's own config — the card's ✓.
+    func mcpIsOn(name: String, for assistantID: String) -> Bool {
+        mcpOwners.contains {
+            $0.name == name && $0.assistants.contains(assistantID) && $0.enabled
+        }
+    }
+
+    /// Whether that assistant has the server at all, on or off — the difference between ⊕ and
+    /// a − that presses back on. Off servers still exist as rows (lifted into Loadout's
+    /// record), so the row's presence is the answer.
+    func mcpIsPresent(name: String, for assistantID: String) -> Bool {
+        mcpOwners.contains { $0.name == name && $0.assistants.contains(assistantID) }
+    }
+
+    func mcpIsWritable(_ assistantID: String) -> Bool { mcpWritableIDs.contains(assistantID) }
+
+    /// One new server, into every assistant chosen. One bad file must not lose the assistants
+    /// that worked, so each is reported for itself.
+    func addMCPServer(name: String, command: String, args: [String], url: String?, to: [String]) {
+        let entry: MCPEntry
+        if let url, !url.isEmpty {
+            entry = MCPEntry(url: url.trimmingCharacters(in: .whitespacesAndNewlines))
+        } else {
+            entry = MCPEntry(
+                command: command.trimmingCharacters(in: .whitespacesAndNewlines),
+                args: args
+            )
+        }
+        var failures: [String] = []
+        for assistant in to {
+            do { try mutations.addServer(name: name, entry: entry, to: assistant) }
+            catch { failures.append(label(of: assistant)) }
+        }
+        reload()
+        let names = to.map(label(of:))
+        if failures.isEmpty {
+            statusMessage = "\(name) added to \(names.joined(separator: ", "))."
+            errorMessage = nil
+        } else if failures.count == to.count {
+            errorMessage = "Couldn't add \(name): \(failures.joined(separator: ", "))."
+            statusMessage = nil
+        } else {
+            statusMessage = "\(name) added everywhere except \(failures.joined(separator: ", "))."
+            errorMessage = nil
+        }
+    }
+
+    /// The display name for an assistant id, asked of the registry rather than invented here.
+    private func label(of assistant: String) -> String {
+        assistants.first { $0.id == assistant }?.label ?? assistant.capitalized
     }
 
     /// Opens the note that precedes uninstalling a plugin.
@@ -1235,23 +1413,56 @@ final class AppModel {
         }
     }
 
-    /// An MCP server of your own, taken out of the assistant's settings for good.
+    /// An MCP server of your own, taken out of the assistants' settings for good.
     ///
     /// Its own call rather than a branch of `deleteSelected`, because the two are not the same act:
     /// that one moves a folder to the Trash and can be undone from there, and this one cuts lines
     /// out of a settings file, where the only way back is the copy Loadout takes first.
+    ///
+    /// A folded row means every owner's entry goes — except Codex's, which is Codex's to remove
+    /// with `codex mcp remove`; that skip is reported rather than silent.
     func removeSelectedServer() {
         guard let item = selected, item.kind == .mcp else { return }
-        perform("Removed \(item.name). A copy of the file before the change is in the backups.") {
-            try mutations.removeServer(item)
-            selectedID = nil
+        let base = "Removed \(item.name). A copy of the file before the change is in the backups."
+        guard item.origin == .personal else {
+            perform(base) {
+                try mutations.removeServer(item)
+                selectedID = nil
+            }
+            return
+        }
+        let owners = mcpOwnerRows(named: item.name)
+        var failures: [String] = []
+        var codexKept = false
+        for owner in owners {
+            if Mutations.owner(of: owner) == "codex", owners.count > 1 {
+                codexKept = true
+                continue
+            }
+            do { try mutations.removeServer(owner) }
+            catch { failures.append(label(of: Mutations.owner(of: owner))) }
+        }
+        if failures.isEmpty { selectedID = nil }
+        reload()
+        if failures.isEmpty {
+            statusMessage = base + (codexKept
+                ? " Codex keeps its own copy — remove it with `codex mcp remove`."
+                : "")
+            errorMessage = nil
+        } else {
+            errorMessage = "Couldn't remove \(item.name) from \(failures.joined(separator: ", "))."
+            statusMessage = nil
         }
     }
 
-    /// True for the servers this app may remove: yours, not the ones a repository ships — and not
-    /// Codex's, whose entry is a TOML table Codex itself removes with `codex mcp remove`.
+    /// True for the servers this app may remove: yours, not the ones a repository ships — and
+    /// not Codex's alone, whose entry is a TOML table Codex itself removes with `codex mcp remove`.
+    /// A row folded across several owners is removable when *any* owner is; the Codex copy among
+    /// them stays, and removing says so.
     func canRemove(_ item: Item) -> Bool {
-        item.kind == .mcp && !item.declaredByRepository && Mutations.owner(of: item) != "codex"
+        guard item.kind == .mcp, !item.declaredByRepository else { return false }
+        guard item.origin == .personal else { return Mutations.owner(of: item) != "codex" }
+        return mcpOwnerRows(named: item.name).contains { Mutations.owner(of: $0) != "codex" }
     }
 
     // MARK: - Assistant CLIs ("Ask")

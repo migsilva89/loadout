@@ -112,11 +112,15 @@ public enum AssistantRegistry {
                                    hasSkillsFolder: fm.fileExists(atPath: paths.codexSkills.path)))
         }
 
-        // Antigravity CLI keeps everything under `~/.gemini`, so the walk above never meets it:
-        // the Gemini CLI's own `~/.gemini/skills` is Gemini's, and agy reads
-        // `~/.gemini/config/skills` instead. Listed when the CLI has ever run on this machine.
+        // Antigravity CLI (`agy`) keeps everything under `~/.gemini`, so the walk above may never
+        // meet it: the Gemini CLI's own `~/.gemini/skills` is Gemini's, and agy reads
+        // `~/.gemini/config/skills` instead. A stray `~/.antigravity` folder *does* get found by
+        // the walk though, which would put the assistant in twice — two rows, and a duplicate
+        // column in the MCP matrix. The agy entry is the real one, so where the CLI has ever run
+        // on this machine it replaces whatever the walk found under that id.
         if fm.fileExists(atPath: paths.antigravityHome.path) {
             let descriptor = known["antigravity"]!
+            found.removeAll { $0.id == "antigravity" }
             found.append(Assistant(
                 id: "antigravity", label: descriptor.label, skillsRoot: paths.antigravitySkills,
                 appPath: descriptor.app.flatMap { fm.fileExists(atPath: $0) ? $0 : nil },

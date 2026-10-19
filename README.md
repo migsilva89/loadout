@@ -52,6 +52,7 @@ Or [download the DMG](../../releases/latest) and drag `Loadout.app` into `/Appli
 - **Help where the question is** — Settings › Help says in plain words what switching something off does to your files, where Loadout keeps its own, and reports a bug with the version and system already filled in
 - **A backup before every write** — if the copy fails, nothing is written. Deleting goes to the Trash, never `rm`
 - **One skill, every assistant** — share a skill across assistants as symlinks to a single copy, so one edit reaches all of them. Switching it off asks which assistants it should return to, and a skill never changes hands behind your back
+- **One server, every assistant** — the MCP tab's Sharing face puts every server in a grid against every assistant: a checked square means it is on there, an empty one puts it there, with the definition translated into that assistant's own config format. Cursor, Gemini CLI, Windsurf and opencode configs are read and written alongside Claude Code, Codex and Antigravity — and **Add MCP** writes one server into every assistant you tick at once
 
 ## Install
 

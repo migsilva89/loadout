@@ -144,7 +144,17 @@ public struct OffRecords: Sendable {
     var serversFile: URL { paths.support.appendingPathComponent("mcp-off.json") }
 
     static func serverKey(name: String, project: String?) -> String {
-        "\(project ?? "")\u{1}\(name)"
+        serverKey(assistant: "claude", name: name, project: project)
+    }
+
+    /// The same record file holds every assistant's lifted entries now, so the key says whose it
+    /// is. Claude keeps the legacy `project\u{1}name` form with no assistant in it — the records
+    /// that exist on disk were written that way, and a record that cannot be found is a server
+    /// with no way back on. Every other assistant is namespaced, and never has a project: only
+    /// Claude's MCP is per-project.
+    static func serverKey(assistant: String, name: String, project: String?) -> String {
+        guard assistant != "claude" else { return "\(project ?? "")\u{1}\(name)" }
+        return "\(assistant)\u{1}\(project ?? "")\u{1}\(name)"
     }
 
     public func servers() -> [String: String] {
@@ -170,18 +180,33 @@ public struct OffRecords: Sendable {
 
     /// The stored entry, as JSON text, or nil if this one is not switched off.
     public func server(named name: String, project: String? = nil) -> String? {
-        servers()[Self.serverKey(name: name, project: project)]
+        server(named: name, project: project, assistant: "claude")
+    }
+
+    public func server(named name: String, project: String?, assistant: String) -> String? {
+        servers()[Self.serverKey(assistant: assistant, name: name, project: project)]
     }
 
     public func rememberServer(_ json: String, named name: String, project: String? = nil) throws {
+        try rememberServer(json, named: name, project: project, assistant: "claude")
+    }
+
+    public func rememberServer(
+        _ json: String, named name: String, project: String?, assistant: String
+    ) throws {
         var all = servers()
-        all[Self.serverKey(name: name, project: project)] = json
+        all[Self.serverKey(assistant: assistant, name: name, project: project)] = json
         try write(ServerFile(version: 1, servers: all), to: serversFile)
     }
 
     public func forgetServer(named name: String, project: String? = nil) throws {
+        try forgetServer(named: name, project: project, assistant: "claude")
+    }
+
+    public func forgetServer(named name: String, project: String?, assistant: String) throws {
         var all = servers()
-        guard all.removeValue(forKey: Self.serverKey(name: name, project: project)) != nil else { return }
+        let key = Self.serverKey(assistant: assistant, name: name, project: project)
+        guard all.removeValue(forKey: key) != nil else { return }
         try write(ServerFile(version: 1, servers: all), to: serversFile)
     }
 

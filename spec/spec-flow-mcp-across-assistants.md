@@ -24,6 +24,10 @@ deleting a Claude entry that does not exist, or worse, one that does and shares 
    assistant — or to "in 2+" — appears on the MCP tab too. Two assistants with a server of the
    same name are two rows, not one: unlike a skill, a server is not a file that can be shared, and
    its config differs per assistant (`disabled` here, `enabled` there, an OAuth login elsewhere).
+   *(Superseded 2026-10-19 for the **list**: same-named personal rows now fold into one row per
+   name — see `spec/spec-flow-mcp-sharing-matrix.md`, AC12.10. The per-owner rows this flow
+   describes still exist on disk and in the inventory, and are what the matrix, the Assistants
+   card and every switch write through.)*
 3. **The switch does what each assistant does.** Off and on go through the owner's own mechanism,
    never through another owner's file:
 

@@ -27,6 +27,9 @@ public struct InventoryScanner: Sendable {
         )
         items += mcpServers()
         items += AntigravityMCP(paths: paths).items()
+        for store in MCPStore.stores(paths: paths) {
+            items += JSONMCP(paths: paths, store: store).items()
+        }
 
         let codex = CodexPlugins(paths: paths).scan(project: project)
         let claudePlugins = claudeInstalledPlugins(project: project)

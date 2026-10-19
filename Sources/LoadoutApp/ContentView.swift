@@ -125,6 +125,7 @@ struct ContentView: View {
             WelcomeSheet(model: model) { model.dismissWelcome() }
         }
         .sheet(isPresented: $model.isCreating) { NewSkillSheet(model: model) }
+        .sheet(isPresented: $model.isAddingMCPServer) { MCPAddSheet(model: model) }
         .sheet(item: $model.askCLI) { cli in CopilotSheet(model: model, cli: cli) }
         .sheet(isPresented: $model.isAddingAssistantCLI) { AssistantCLIFormSheet(model: model, editing: nil) }
         .sheet(item: $model.editingCustomAssistantCLI) { entry in AssistantCLIFormSheet(model: model, editing: entry) }

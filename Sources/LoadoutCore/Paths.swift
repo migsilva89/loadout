@@ -12,6 +12,9 @@ public struct Paths: Sendable {
     public let home: URL
     public let claude: URL
     public let projectsRoot: URL
+    /// Where `Paths.live()` found opencode's config, when the environment said so. Nil means
+    /// the `~/.config` default derived from `home`.
+    private let opencodeConfigOverride: URL?
     /// Everything Loadout itself owns — its backups, its usage index, the icons the owner
     /// drops in for the assistants that ship no Mac app.
     ///
@@ -22,12 +25,13 @@ public struct Paths: Sendable {
     public let support: URL
 
     public init(home: URL, claude: URL? = nil, projectsRoot: URL? = nil, support: URL? = nil,
-                codexExecutable: URL? = nil, codexHome: URL? = nil) {
+                codexExecutable: URL? = nil, codexHome: URL? = nil, opencodeConfig: URL? = nil) {
         self.codexExecutable = codexExecutable
         self.codexHome = codexHome ?? home.appendingPathComponent(".codex")
         self.home = home
         self.claude = claude ?? home.appendingPathComponent(".claude")
         self.projectsRoot = projectsRoot ?? home.appendingPathComponent("Projects")
+        self.opencodeConfigOverride = opencodeConfig
         self.support = support
             ?? home
                 .appendingPathComponent("Library/Application Support")
@@ -35,9 +39,17 @@ public struct Paths: Sendable {
     }
 
     public static func live() -> Paths {
-        Paths(home: FileManager.default.homeDirectoryForCurrentUser,
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        // opencode reads its global config from `XDG_CONFIG_HOME` when that is set, so the real
+        // location is decided here — the only place the environment is allowed to matter.
+        let opencode = ProcessInfo.processInfo.environment["XDG_CONFIG_HOME"].flatMap { xdg -> URL? in
+            guard xdg.hasPrefix("/") else { return nil }
+            return URL(fileURLWithPath: xdg).appendingPathComponent("opencode/opencode.json")
+        }
+        return Paths(home: home,
               codexExecutable: AssistantCLIRegistry.defaultLocate("codex"),
-              codexHome: ProcessInfo.processInfo.environment["CODEX_HOME"].map { URL(fileURLWithPath: $0) })
+              codexHome: ProcessInfo.processInfo.environment["CODEX_HOME"].map { URL(fileURLWithPath: $0) },
+              opencodeConfig: opencode)
     }
 
     public var codexConfig: URL { codexHome.appendingPathComponent("config.toml") }
@@ -60,6 +72,27 @@ public struct Paths: Sendable {
         case "antigravity": return antigravitySkills
         default: return home.appendingPathComponent(".\(id)/skills")
         }
+    }
+
+    // MARK: Other assistants' MCP configs
+
+    /// Cursor keeps its global MCP servers in a file of its own, in the same `mcpServers` shape
+    /// Claude uses.
+    public var cursorMCP: URL { home.appendingPathComponent(".cursor/mcp.json") }
+    /// The Gemini CLI's settings file, which also holds an `mcpServers` table.
+    public var geminiSettings: URL { home.appendingPathComponent(".gemini/settings.json") }
+    /// Windsurf's MCP config — `mcpServers` again, under Codeium's directory.
+    public var windsurfMCP: URL {
+        home.appendingPathComponent(".codeium/windsurf/mcp_config.json")
+    }
+    /// opencode's global config. Its MCP section is called `mcp` and its entries have a shape
+    /// of their own (`type`, an array `command`, `environment`), so this is a format rather than
+    /// just another `mcpServers` file.
+    ///
+    /// Always derived from the injected `home`, so a fixture home in a test keeps its own copy.
+    /// `Paths.live()` is the one that reads `XDG_CONFIG_HOME` and passes the real location in.
+    public var opencodeConfig: URL {
+        opencodeConfigOverride ?? home.appendingPathComponent(".config/opencode/opencode.json")
     }
 
     // MARK: Antigravity

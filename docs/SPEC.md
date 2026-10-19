@@ -115,6 +115,23 @@ See `spec/spec-flow-agents-mcp-frontmatter.md`. Every kind Loadout lists can now
 - **AC11.11** `[T]` A disabled server is still listed, marked off, with its command or URL readable — off, not forgotten.
 - **AC11.12** `[T]` The entry is remembered before it is removed, and `~/.claude.json` is snapshotted first; a server that is not there is refused rather than invented.
 
+### AC12 — The sharing matrix (2026-10-19)
+
+See `spec/spec-flow-mcp-sharing-matrix.md` for the flow behind these. The MCP tab gains a second
+face — one row per server, a column per MCP-capable assistant — and four more assistants' configs
+join the three that were already read and written.
+
+- **AC12.1** `[T]` Cursor (`~/.cursor/mcp.json`), Gemini CLI (`~/.gemini/settings.json`), Windsurf (`~/.codeium/windsurf/mcp_config.json`) and opencode (`~/.config/opencode/opencode.json`, honouring `XDG_CONFIG_HOME`) servers appear in the inventory, each row marked with its owner.
+- **AC12.2** `[T]` Switching one off works the way its format allows: opencode's `enabled` flag flips in place; the others lift the entry into a per-assistant record and the row stays listed, off and readable.
+- **AC12.3** `[T]` One assistant's lifted record never collides with another's server of the same name; Claude's existing records keep their key form and are never migrated or lost.
+- **AC12.4** `[T]` The Sharing face is the matrix: one row per server name, a column per MCP-capable assistant, a square per cell — on, off (a dash), or absent.
+- **AC12.5** `[T]` Pressing an absent square copies the definition from an assistant that has it, translated into the target's own format — opencode's array command and `environment`, Antigravity's `serverUrl` — and an assistant that already has the name keeps its own definition rather than merging.
+- **AC12.6** `[T]` Add MCP writes one definition into every assistant chosen, starts a config file that has never existed, refuses a name that assistant already has, and never writes over a file that cannot be parsed.
+- **AC12.7** `[T]` Codex cells switch on and off through its app-server as before; giving Codex a new server is refused with a line naming `codex mcp add`, and the Add sheet does not offer it.
+- **AC12.8** `[T]` Every write to every assistant's config is snapshotted first, like every other write.
+- **AC12.9** `[M]` The matrix header shows each assistant's mark and how many of its servers are on, and the List | Sharing switch remembers its position across launches.
+- **AC12.10** `[T]` The MCP list shows **one row per server name** — personal-scope rows owned by several assistants fold into one row carrying every owner's mark and the combined usage count, while project-scoped rows never fold. The row's switch moves every owner together, each through that assistant's own mechanism; the raw per-owner rows remain for the matrix, the Assistants card and every switch write. Tab counts, search and filters count the folded list.
+
 ### AC4 — Editing, creating, deleting
 
 - **AC4.1** `[M]` The detail has a `SKILL.md` editor in a monospaced typeface, and saves with `⌘S`.
