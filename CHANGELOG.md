@@ -42,6 +42,10 @@ The versions are what a release is tagged as; between tags, `main` is what is be
   instead of a link, so the two can differ. An assistant's separate copy can be removed on its
   own, with a confirmation, leaving the others.
 
+- **Remove my copy.** Once you have a personal copy of a plugin's or a repository's item, its
+  callout offers **Remove my copy**: your copy and every link to it go (to the Trash, with a
+  backup), and the plugin's or the repository's own is not touched.
+
 ### Fixed
 
 - **Deleting a shared skill, command or subagent left its links behind.** It trashed only the

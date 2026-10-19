@@ -920,6 +920,18 @@ final class AppModel {
         }
     }
 
+    /// Takes back the copy "Make personal copy" or "Make global" made, with every link to it.
+    func removeGlobalCopy(of item: Item) {
+        var message = "Removed your copy of \(item.name)."
+        perform("") {
+            let report = try mutations.removeGlobalCopy(of: item)
+            if !report.links.isEmpty {
+                message += " \(report.links.count) \(report.links.count == 1 ? "link" : "links") to it went too."
+            }
+        }
+        if errorMessage == nil { statusMessage = message }
+    }
+
     func dismissMakeGlobal() {
         pendingMakeGlobal = nil
         makeGlobalDestination = nil

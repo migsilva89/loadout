@@ -419,6 +419,26 @@ public struct Mutations: Sendable {
         return fm.fileExists(atPath: destination.path)
     }
 
+    /// Takes back the personal copy made from a plugin's or a repository's item: the way out of
+    /// "Make personal copy" and "Make global".
+    ///
+    /// Only ever the copy in your own folders — the plugin's or the repository's own is not touched —
+    /// and it goes the way deleting any personal item goes: every link to it removed, the real file
+    /// to the Trash with a snapshot.
+    @discardableResult
+    public func removeGlobalCopy(of item: Item) throws -> DeleteReport {
+        guard item.origin.isCopyable, let destination = globalLocation(of: item),
+              (try? fm.attributesOfItem(atPath: destination.path)) != nil
+        else { throw LoadoutError.notFound("your copy of \(item.name)") }
+        let wanted = destination.lastPathComponent
+        let mine = InventoryScanner(paths: paths).scanAll().items.first {
+            $0.kind == item.kind && $0.origin == .personal
+                && ($0.directory ?? $0.path)?.lastPathComponent == wanted
+        }
+        guard let mine else { throw LoadoutError.notFound("your copy of \(item.name)") }
+        return try delete(mine)
+    }
+
     @discardableResult
     public func makeGlobal(_ item: Item) throws -> URL {
         guard item.origin.isCopyable else { throw LoadoutError.notEditable(item.name) }

@@ -55,6 +55,8 @@ struct DetailView: View {
     @State private var filesExpanded = false
     /// The assistant whose separate copy is being asked about removing, so the question can name it.
     @State private var copyRemoval: Assistant?
+    /// Whether the question about taking back the personal copy is open.
+    @State private var confirmingOwnCopyRemoval = false
 
     /// The document's headings as the renderer reports them, and which of them is being read.
     /// Both arrive as preferences, and both change rarely: the list only when the text does, the
@@ -473,7 +475,22 @@ struct DetailView: View {
                 .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 8)
-            if !copied {
+            if copied {
+                Button {
+                    confirmingOwnCopyRemoval = true
+                } label: {
+                    Text("Remove my copy")
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundStyle(V2.issue)
+                        .padding(.horizontal, 12)
+                        .frame(height: 28)
+                        .background(V2.issue.opacity(0.12), in: RoundedRectangle(cornerRadius: 7))
+                        .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(V2.issue.opacity(0.35), lineWidth: 0.5))
+                }
+                .buttonStyle(.plain)
+                .help("Move your own copy of \(item.name) to the Trash, with every link to it. \(fromPlugin ? "The plugin's" : "The repository's") stays.")
+                .pointingHand()
+            } else {
                 Button {
                     model.makeGlobal(item)
                 } label: {
@@ -492,6 +509,16 @@ struct DetailView: View {
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(V2.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
+        .confirmationDialog(
+            "Remove your copy of \(item.name)?",
+            isPresented: $confirmingOwnCopyRemoval,
+            titleVisibility: .visible
+        ) {
+            Button("Move copy to Trash", role: .destructive) { model.removeGlobalCopy(of: item) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Your own copy moves to the Trash with a backup, and so does every link to it in other assistants. \(fromPlugin ? "The plugin's" : "The repository's") own is not touched.")
+        }
     }
 
     private func warningCallout(_ warning: String) -> some View {

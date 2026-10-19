@@ -4,9 +4,9 @@ import XCTest
 /// A plugin's skills are read-only and live in a cache an update replaces, so they cannot be
 /// shared. A personal copy is the way to share one.
 final class PluginCopyTests: XCTestCase {
-    private let fm = FileManager.default
+    let fm = FileManager.default
 
-    private func fixtureWithPlugin() throws -> (Fixture, Mutations, InventoryScanner) {
+    func fixtureWithPlugin() throws -> (Fixture, Mutations, InventoryScanner) {
         let fixture = Fixture()
         fixture.plugin("vercel", marketplace: "official", skills: ["deploy-helper"], commands: ["ship-it"])
         let plugin = InventoryScanner(paths: fixture.paths).installedPlugins().first!
@@ -22,7 +22,7 @@ final class PluginCopyTests: XCTestCase {
         return (fixture, Mutations(paths: fixture.paths), InventoryScanner(paths: fixture.paths))
     }
 
-    private func pluginItem(_ name: String, _ kind: ItemKind, _ scanner: InventoryScanner) -> Item {
+    func pluginItem(_ name: String, _ kind: ItemKind, _ scanner: InventoryScanner) -> Item {
         scanner.scanAll().items.first { $0.name == name && $0.kind == kind && !$0.origin.isEditable }!
     }
 
@@ -72,5 +72,33 @@ final class PluginCopyTests: XCTestCase {
         XCTAssertFalse(Origin.personal.isCopyable)
         XCTAssertTrue(Origin.plugin("x").isCopyable)
         XCTAssertTrue(Origin.project("x").isCopyable)
+    }
+}
+
+/// Taking back a personal copy.
+extension PluginCopyTests {
+    func testRemovingMyCopyTakesItAndItsLinksAndLeavesThePluginsOwn() throws {
+        let (fixture, mutations, scanner) = try fixtureWithPlugin()
+        try fm.createDirectory(at: fixture.paths.home.appendingPathComponent(".zzz/skills"), withIntermediateDirectories: true)
+        let zzz = AssistantRegistry.discover(paths: fixture.paths).first { $0.id == "zzz" }!
+        let theirs = pluginItem("deploy-helper", .skill, scanner)
+        try mutations.makeGlobal(theirs)
+        let mine = InventoryScanner(paths: fixture.paths).scanAll().items.first { $0.name == "deploy-helper" && $0.origin == .personal }!
+        try mutations.share(mine, with: zzz)
+
+        let report = try mutations.removeGlobalCopy(of: theirs)
+
+        XCTAssertFalse(mutations.hasGlobalCopy(of: theirs), "so the button reads Make personal copy again")
+        XCTAssertFalse(fixture.exists(fixture.paths.skills.appendingPathComponent("deploy-helper")))
+        XCTAssertNil(try? fm.attributesOfItem(atPath: zzz.skillsRoot.appendingPathComponent("deploy-helper").path), "no dangling link")
+        XCTAssertFalse(report.links.isEmpty)
+        XCTAssertTrue(fixture.exists(theirs.directory!.appendingPathComponent("SKILL.md")), "the plugin's own is untouched")
+    }
+
+    func testThereIsNothingToTakeBackBeforeACopyIsMade() throws {
+        let (fixture, mutations, scanner) = try fixtureWithPlugin()
+
+        XCTAssertThrowsError(try mutations.removeGlobalCopy(of: pluginItem("ship-it", .command, scanner)))
+        withExtendedLifetime(fixture) {}
     }
 }
