@@ -176,13 +176,22 @@ struct ContentView: View {
             : "Move \(name) to the Trash?"
     }
 
+    /// What leaving the Trash button on will do — including, for something several assistants load,
+    /// that every link to it goes as well, named.
+    private var trashMessage: String {
+        let base = "It moves to the Trash, and a copy stays in the Loadout backups."
+        guard let item = model.selected, item.origin == .personal, item.assistants.count > 1 else { return base }
+        let names = model.labels(of: item.assistants).joined(separator: ", ")
+        return base + " \(names) all load it, so every link to it is removed too and none of them will."
+    }
+
     private var destructiveMessage: String {
         model.removesServerOnConfirm
             ? """
             This server is a few lines inside the assistant's own settings rather than a file, so \
             there is no Trash to take it back from. Loadout copies that file to its backups first.
             """
-            : "The folder moves to the Trash, and a copy stays in the Loadout backups."
+            : trashMessage
     }
 
     /// The hairline between the columns, with a 12pt invisible grab strip straddling it: drag to

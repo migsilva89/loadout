@@ -105,6 +105,14 @@ public struct Item: Identifiable, Equatable, Sendable {
     /// is yours to remove, and one in here is the team's. Switching it off is recorded in your own
     /// config as a server you declined, so nobody else's checkout changes.
     public var declaredByRepository = false
+    /// The assistants whose entry for this item is the real file or folder rather than a link to
+    /// one. More than one means somebody made a separate copy; none means everything is a link to
+    /// the shared store.
+    public var realCopyIn: Set<String> = []
+    /// The assistant this item started in, when that is known: the one holding the real copy, or
+    /// the one Loadout recorded when the folder was moved to the shared store. Nil when it cannot
+    /// say — several separate copies, or a skill shared before Loadout kept the record.
+    public var original: String?
 
     public init(
         id: String,

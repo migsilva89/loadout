@@ -1493,10 +1493,36 @@ final class AppModel {
 
     func deleteSelected() {
         guard let item = selected else { return }
-        perform("Moved \(item.name) to the Trash.") {
-            try mutations.delete(item)
+        var message = "Moved \(item.name) to the Trash."
+        perform("") {
+            let report = try mutations.delete(item)
             selectedID = nil
+            if !report.links.isEmpty {
+                message += " Removed \(report.links.count) \(report.links.count == 1 ? "link" : "links") to it as well."
+            }
         }
+        // `perform` wrote the empty success line; the real one is known only after the call.
+        if errorMessage == nil { statusMessage = message }
+    }
+
+    /// A separate copy of a skill, command or subagent in another assistant — the file travels, and
+    /// from then on the two are free to differ.
+    func copyToAssistant(_ assistant: Assistant, on item: Item) {
+        var done = "Copied \(item.name) to \(assistant.label) as a file of its own."
+        if item.kind == .command, assistant.id != "claude" { done += " Claude-only frontmatter doesn't carry over." }
+        perform(done) { try mutations.copy(item, to: assistant) }
+    }
+
+    /// Takes one assistant's separate copy away, leaving every other assistant's.
+    func removeCopy(from assistant: Assistant, item: Item) {
+        perform("Removed \(assistant.label)'s copy of \(item.name). The others keep theirs.") {
+            try mutations.removeCopy(of: item, from: assistant)
+        }
+    }
+
+    /// The assistants named for a sentence: the labels, not the ids the folders carry.
+    func labels(of ids: Set<String>) -> [String] {
+        ids.map { id in everyAssistant.first { $0.id == id }?.label ?? id.capitalized }.sorted()
     }
 
     /// An MCP server of your own, taken out of the assistants' settings for good.

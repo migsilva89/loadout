@@ -342,6 +342,40 @@ enum SelfCheck {
         }
         model.selection = .skills
 
+        // Removing something takes every link to it along, and copying gives an assistant a file of
+        // its own. Both through the calls the Assistants card makes.
+        if let opencode = model.assistants.first(where: { $0.id == "opencode" }) {
+            model.selection = .commands
+            model.createCommand(name: "gone-soon", description: "Shared, then removed.")
+            let doomed = model.items.first { $0.kind == .command && $0.name == "gone-soon" }!
+            model.setAssistant(opencode, on: doomed, present: true)
+            let doomedLink = opencode.commandsRoot.appendingPathComponent("gone-soon.md")
+            check("the command is linked into opencode first", (try? FileManager.default.destinationOfSymbolicLink(atPath: doomedLink.path)) != nil)
+            check("and Claude is marked as the original",
+                  model.items.first { $0.name == "gone-soon" }?.original == "claude")
+            model.selectedID = doomed.id
+            model.deleteSelected()
+            check("deleting it removes the link in opencode as well",
+                  (try? FileManager.default.attributesOfItem(atPath: doomedLink.path)) == nil)
+            check("and the real file", !FileManager.default.fileExists(atPath: paths.commands.appendingPathComponent("gone-soon.md").path))
+            check("with the status line saying a link went too", model.statusMessage?.contains("link") == true)
+
+            model.createCommand(name: "kept-apart", description: "Copied, not linked.")
+            let source = model.items.first { $0.kind == .command && $0.name == "kept-apart" }!
+            model.copyToAssistant(opencode, on: source)
+            let copied = opencode.commandsRoot.appendingPathComponent("kept-apart.md")
+            check("copying puts a real file in opencode", FileManager.default.fileExists(atPath: copied.path)
+                  && (try? FileManager.default.destinationOfSymbolicLink(atPath: copied.path)) == nil)
+            let apart = model.items.first { $0.name == "kept-apart" }
+            check("both hold their own copy, so there is no single original",
+                  apart?.assistants == ["claude", "opencode"] && apart?.original == nil)
+            model.removeCopy(from: opencode, item: apart!)
+            check("removing opencode's copy leaves Claude's",
+                  !FileManager.default.fileExists(atPath: copied.path)
+                  && FileManager.default.fileExists(atPath: paths.commands.appendingPathComponent("kept-apart.md").path))
+            model.selection = .skills
+        }
+
         try! JSONSerialization.data(withJSONObject: [
             "numStartups": 7,
             "mcpServers": ["notebooklm": ["command": "npx notebooklm-mcp"]],

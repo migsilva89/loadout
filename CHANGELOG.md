@@ -33,6 +33,23 @@ The versions are what a release is tagged as; between tags, `main` is what is be
   pane (and the row's context menu) copies one into your own folders, where it can be edited and
   shared with other assistants from its Assistants card. The plugin keeps its own.
 
+- **The Assistants card says where the original is.** The assistant holding the real file is
+  marked ORIGINAL, and a hint under the grid explains the rule: a link can be removed on its own,
+  but the original cannot be taken out of its assistant — remove the skill, command or subagent
+  itself, and every link goes with it. For skills, which move to `~/.agents/skills` when shared,
+  Loadout now records which assistant they started in.
+- **Copy to another assistant.** A copy icon beside the plus gives an assistant a file of its own
+  instead of a link, so the two can differ. An assistant's separate copy can be removed on its
+  own, with a confirmation, leaving the others.
+
+### Fixed
+
+- **Deleting a shared skill, command or subagent left its links behind.** It trashed only the
+  entry the list showed first — often a link — so the real file kept loading and the other
+  assistants kept dangling links. Deleting now removes every link (including parked ones and
+  links under another name), then moves the real copies to the Trash, and the status line says
+  how many links went. The confirmation names the assistants affected.
+
 ### Changed
 
 - **Assistants that are not installed are hidden.** A leftover `~/.trae` no longer gives Trae a

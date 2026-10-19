@@ -53,6 +53,8 @@ struct DetailView: View {
     /// deliberately not remembered between selections: opening it on one skill should not make
     /// every other skill's card taller before you have even looked at it.
     @State private var filesExpanded = false
+    /// The assistant whose separate copy is being asked about removing, so the question can name it.
+    @State private var copyRemoval: Assistant?
 
     /// The document's headings as the renderer reports them, and which of them is being read.
     /// Both arrive as preferences, and both change rarely: the list only when the text does, the
@@ -918,8 +920,50 @@ struct DetailView: View {
                         assistantCell(assistant, item: item)
                     }
                 }
+                if let hint = sharingHint(item) {
+                    Text(hint)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(V2.textMid)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 13)
+                        .padding(.vertical, 10)
+                }
             }
         }
+        .confirmationDialog(
+            "Remove \(copyRemoval?.label ?? "this")'s copy of \(item.name)?",
+            isPresented: Binding(get: { copyRemoval != nil }, set: { if !$0 { copyRemoval = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Move copy to Trash", role: .destructive) {
+                if let assistant = copyRemoval { model.removeCopy(from: assistant, item: item) }
+                copyRemoval = nil
+            }
+            Button("Cancel", role: .cancel) { copyRemoval = nil }
+        } message: {
+            Text("It moves to the Trash with a backup. The other assistants keep their own.")
+        }
+    }
+
+    /// What the card cannot say with a glyph: where the one real file is, why its holder cannot be
+    /// unlinked, and what to do instead. Only where more than one assistant loads the item.
+    private func sharingHint(_ item: Item) -> String? {
+        guard item.kind == .skill || item.kind == .command || item.kind == .agent,
+              item.assistants.count > 1 else { return nil }
+        let noun = item.kind.briefingNoun
+        let holder = item.realCopyIn.count == 1 ? item.realCopyIn.first : nil
+        let named = (item.original ?? holder).flatMap { id in model.labels(of: [id]).first }
+        var text: String
+        if let holder, let label = model.labels(of: [holder]).first {
+            text = "\(label) holds the original; the others link to it. A link can be removed on its own, but the original cannot be taken out of \(label) — remove the \(noun) itself to do that, and every link goes with it."
+        } else if let named {
+            text = "\(named) is where this \(noun) started; every assistant now reads one shared copy. Remove a link to stop one assistant loading it, or remove the \(noun) itself to take it out of all of them."
+        } else {
+            text = "Linked assistants read one shared copy. Remove a link to stop one assistant loading this \(noun), or remove the \(noun) itself to take it out of all of them, links included."
+        }
+        text += " Use the copy icon to give an assistant a file of its own instead of a link."
+        return text
     }
 
     /// One cell needs about 200pt before the label starts truncating into initials.
@@ -1004,24 +1048,53 @@ struct DetailView: View {
         let has = item.assistants.contains(assistant.id)
         // "No skills folder yet" is a fact about skills; a command or a subagent has its own folder.
         let none = item.kind == .skill && !has && !assistant.hasSkillsFolder
-        // The one assistant that holds the last copy: unlinking there would take the skill with
+        let noun = item.kind.briefingNoun
+        let isReal = item.realCopyIn.contains(assistant.id)
+        let shared = item.assistants.count > 1
+        // The one assistant that holds the last copy: unlinking there would take the item with
         // it, so the row never becomes a click. `Mutations.unshare` refuses the same thing, but
         // refusing after the click means the app offered something it could not do. Read off the
-        // live item, so the moment a second assistant loads the skill this row is a button again.
-        let onlyCopy = has && item.assistants.count == 1
+        // live item, so the moment a second assistant loads it this row is a button again.
+        let onlyCopy = has && !shared
+        // The real file, with other assistants linking to it: it cannot be unlinked, only removed
+        // together with the item — which takes every link along.
+        let originalOfOthers = has && shared && isReal && item.realCopyIn.count == 1
+        // Somebody's own separate copy, while another assistant also has the item.
+        let separateCopy = has && shared && isReal && item.realCopyIn.count > 1
+        let tag: String? = {
+            guard has, shared else { return nil }
+            if separateCopy { return "copy" }
+            return item.original == assistant.id ? "original" : nil
+        }()
+        let others = model.labels(of: item.assistants.subtracting([assistant.id])).joined(separator: ", ")
 
         if onlyCopy {
             // Still reads as loaded — the check is true and worth seeing. Only the removal is
             // gone, dimmed the way a disabled control is.
             assistantRow(assistant, has: has, none: none)
-                .help("Only copy — removing it would delete the \(item.kind.briefingNoun). Disable it instead.")
+                .help("Only copy — removing it would delete the \(noun). Disable it instead.")
                 .opacity(0.55)
                 .spotlight(Spotlight.assistant(assistant.id))
+        } else if originalOfOthers {
+            assistantRow(assistant, has: has, none: none, tag: tag ?? "original")
+                .help("The original: \(others) link to this copy, so it can't be unlinked from \(assistant.label). To take this \(noun) out of \(assistant.label), remove the \(noun) itself — every link goes with it.")
+                .opacity(0.75)
+                .spotlight(Spotlight.assistant(assistant.id))
+        } else if separateCopy {
+            Button {
+                copyRemoval = assistant
+            } label: {
+                assistantRow(assistant, has: has, none: none, tag: tag)
+                    .help("\(assistant.label) has a copy of its own. Click to move that copy to the Trash; \(others) keep theirs.")
+            }
+            .buttonStyle(.plain)
+            .pointingHand()
+            .spotlight(Spotlight.assistant(assistant.id))
         } else {
             Button {
                 model.setAssistant(assistant, on: item, present: !has)
             } label: {
-                assistantRow(assistant, has: has, none: none)
+                assistantRow(assistant, has: has, none: none, tag: tag)
                     // On the content, not on the Button around it. A plain-styled button hands its
                     // tracking area to the label, and a tooltip hung outside that never fires —
                     // which is why no cell in this grid had one, whatever it showed.
@@ -1029,11 +1102,30 @@ struct DetailView: View {
             }
             .buttonStyle(.plain)
             .pointingHand()
+            // Beside the plus, for the assistants that do not have it: the same thing as a file of
+            // its own rather than a link.
+            .overlay(alignment: .trailing) {
+                if !has {
+                    Button {
+                        model.copyToAssistant(assistant, on: item)
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(V2.textMid)
+                            .frame(width: 26, height: 26)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.trailing, 34)
+                    .help("Copy this \(noun) into \(assistant.label) as a file of its own, instead of a link. The two can then differ.")
+                    .pointingHand()
+                }
+            }
             .spotlight(Spotlight.assistant(assistant.id))
         }
     }
 
-    private func assistantRow(_ assistant: Assistant, has: Bool, none: Bool) -> some View {
+    private func assistantRow(_ assistant: Assistant, has: Bool, none: Bool, tag: String? = nil) -> some View {
         HStack(spacing: 9) {
             AssistantMark(assistant: assistant, present: has || !none, size: 20)
             Text(assistant.label)
@@ -1041,6 +1133,18 @@ struct DetailView: View {
                 .foregroundStyle(Color.white.opacity(none ? 0.4 : 0.88))
                 .lineLimit(1)
                 .fixedSize()
+            if let tag {
+                // Small and quiet: it says which of the marks holds the real file, and the card's
+                // hint says what that means for removing it.
+                Text(tag.uppercased())
+                    .font(.system(size: 8.5, weight: .semibold))
+                    .kerning(0.4)
+                    .foregroundStyle(V2.accent)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1.5)
+                    .background(V2.accent.opacity(0.15), in: Capsule())
+                    .fixedSize()
+            }
             // Beside the name, not out in the state column: it belongs to this assistant,
             // and against the column it read as part of the word next to it.
             if let count = assistantUsage[assistant.id], count > 0 {
@@ -1075,8 +1179,10 @@ struct DetailView: View {
             : ""
         if has {
             // The glyph says carried; the tooltip is where "loaded" now lives in words.
-            return "Loaded in \(assistant.label). " + fired
-                + "Click to stop \(assistant.label) from loading this \(noun)."
+            let linkNote = item.original.flatMap { $0 == assistant.id ? nil : model.labels(of: [$0]).first }
+                .map { "It is a link to \($0)'s copy. " } ?? "It is a link. "
+            return "Loaded in \(assistant.label). " + fired + linkNote
+                + "Click to remove the link and stop \(assistant.label) loading this \(noun); the \(noun) itself stays."
         }
         if item.kind != .skill || assistant.hasSkillsFolder {
             // The one that reads as a contradiction until it is spelled out: used, not loaded.

@@ -882,9 +882,10 @@ public struct Mutations: Sendable {
         if fm.fileExists(atPath: canonical.path) { return canonical }
 
         // The real folder is whichever assistant holds a directory rather than a link.
-        let realCopies = assistants
-            .map { $0.skillsRoot.appendingPathComponent(name) }
-            .filter { fm.fileExists(atPath: $0.path) && !isSymlink($0) }
+        let holders = assistants
+            .map { (assistant: $0, folder: $0.skillsRoot.appendingPathComponent(name)) }
+            .filter { fm.fileExists(atPath: $0.folder.path) && !isSymlink($0.folder) }
+        let realCopies = holders.map(\.folder)
 
         guard let source = realCopies.first else { throw LoadoutError.notFound(name) }
         guard realCopies.count == 1 else {
@@ -900,6 +901,12 @@ public struct Mutations: Sendable {
             try fm.createSymbolicLink(at: source, withDestinationURL: canonical)
         } catch {
             throw LoadoutError.io("Couldn't share \(name): \(error.localizedDescription)")
+        }
+        // After the move every assistant holds a link, this one included; this is the only place
+        // that still knows where the folder began. A failure to record it costs the label, never
+        // the share.
+        if let owner = holders.first?.assistant.id {
+            try? OriginRecords(paths: paths).remember(.skill, named: name, assistant: owner)
         }
         return canonical
     }
@@ -1107,15 +1114,182 @@ public struct Mutations: Sendable {
         return folder
     }
 
-    /// Sends a skill to the Trash rather than deleting it (AC4.4).
-    public func delete(_ item: Item) throws {
+    /// What a deletion took away, for the line that says so.
+    public struct DeleteReport: Equatable, Sendable {
+        /// Links removed, as `~`-relative paths.
+        public var links: [String] = []
+        /// Real copies moved to the Trash, likewise.
+        public var copies: [String] = []
+
+        public init(links: [String] = [], copies: [String] = []) {
+            self.links = links
+            self.copies = copies
+        }
+    }
+
+    /// Sends an item to the Trash rather than deleting it (AC4.4), and everything that points at it.
+    ///
+    /// A personal skill, command or subagent can be in several assistants at once — one real file
+    /// and a link in each of the others, or separate copies. Taking out only the entry the list
+    /// happened to show first left the real file loading in one assistant and a dangling link in
+    /// the rest, so this takes out every one: the links first and the real copies last, so a
+    /// failure halfway never leaves a link pointing at nothing. Real copies go to the Trash with a
+    /// snapshot; links are only removed, since a link holds nothing to lose.
+    @discardableResult
+    public func delete(_ item: Item) throws -> DeleteReport {
         guard item.isEditable else { throw LoadoutError.notEditable(item.name) }
         guard let target = item.directory ?? item.path else { throw LoadoutError.notFound(item.name) }
-        try backups.snapshot(target)
+        guard case .personal = item.origin, item.kind != .mcp else {
+            try backups.snapshot(target)
+            try trash(target, named: item.name)
+            return DeleteReport(copies: [display(target)])
+        }
+
+        let entries = entries(of: item)
+        var links = entries.filter { isSymlink($0) }
+        let copies = entries.filter { !isSymlink($0) }
+        // A link under another name that points at one of these copies is as dead as the rest once
+        // they are gone.
+        let targets = Set(copies.map { $0.resolvingSymlinksInPath().path })
+        for root in liveAndParkedRoots(for: item) {
+            for child in (try? fm.contentsOfDirectory(atPath: root.path)) ?? [] {
+                let url = root.appendingPathComponent(child)
+                if isSymlink(url), !links.contains(url), targets.contains(url.resolvingSymlinksInPath().path) {
+                    links.append(url)
+                }
+            }
+        }
+
+        var report = DeleteReport()
+        for link in links {
+            try backups.snapshot(link)
+            do { try fm.removeItem(at: link) }
+            catch { throw LoadoutError.io("Couldn't remove the link at \(display(link)): \(error.localizedDescription)") }
+            report.links.append(display(link))
+        }
+        for copy in copies {
+            try backups.snapshot(copy)
+            try trash(copy, named: item.name)
+            report.copies.append(display(copy))
+        }
+        if report.links.isEmpty && report.copies.isEmpty { throw LoadoutError.notFound(item.name) }
+        if item.kind == .skill { try? records.forget(item.name) }
+        try? OriginRecords(paths: paths).forget(item.kind, named: item.name)
+        return report
+    }
+
+    private func trash(_ target: URL, named name: String) throws {
         do {
             try fm.trashItem(at: target, resultingItemURL: nil)
         } catch {
-            throw LoadoutError.io("Couldn't move \(item.name) to the Trash: \(error.localizedDescription)")
+            throw LoadoutError.io("Couldn't move \(name) to the Trash: \(error.localizedDescription)")
         }
+    }
+
+    private func display(_ url: URL) -> String {
+        url.path.replacingOccurrences(of: paths.home.path, with: "~")
+    }
+
+    /// The folders an item of this kind can sit in, switched on or parked: each assistant's own, and
+    /// for skills the shared store.
+    func liveAndParkedRoots(for item: Item) -> [URL] {
+        var live: [URL]
+        switch item.kind {
+        case .skill:
+            live = AssistantRegistry.discover(paths: paths).map(\.skillsRoot) + [paths.sharedSkills]
+        case .command:
+            live = AssistantRegistry.discover(paths: paths).map(\.commandsRoot) + [paths.commands]
+        case .agent:
+            live = AssistantRegistry.discover(paths: paths).compactMap(\.agentsRoot) + [paths.agents]
+        default:
+            return []
+        }
+        var seen = Set<String>()
+        live = live.filter { seen.insert($0.standardizedFileURL.path).inserted }
+        return live + live.map {
+            $0.deletingLastPathComponent().appendingPathComponent($0.lastPathComponent + "-off")
+        }
+    }
+
+    /// Every entry for this item by name — links and real ones — in any of those folders.
+    func entries(of item: Item) -> [URL] {
+        guard let name = (item.directory ?? item.path)?.lastPathComponent else { return [] }
+        return liveAndParkedRoots(for: item)
+            .map { $0.appendingPathComponent(name) }
+            .filter { (try? fm.attributesOfItem(atPath: $0.path)) != nil }
+    }
+
+    // MARK: - Copying to another assistant
+
+    /// Puts a separate copy of a skill, command or subagent into another assistant.
+    ///
+    /// The other half of sharing: a link keeps one file and one edit, a copy lets the two drift —
+    /// which is sometimes the point, as when Codex wants its own wording. Never over something that
+    /// is already there.
+    @discardableResult
+    public func copy(_ item: Item, to assistant: Assistant) throws -> URL {
+        guard item.origin == .personal, item.enabled, let source = item.directory ?? item.path else {
+            throw LoadoutError.notEditable(item.name)
+        }
+        let root: URL
+        switch item.kind {
+        case .skill: root = assistant.skillsRoot
+        case .command: root = assistant.commandsRoot
+        case .agent:
+            guard let agents = assistant.agentsRoot else {
+                throw LoadoutError.io("\(assistant.label) doesn't load subagents from a folder, so there is nowhere to put \(item.name).")
+            }
+            root = agents
+        default: throw LoadoutError.notEditable(item.name)
+        }
+        let destination = root.appendingPathComponent(source.lastPathComponent)
+        guard (try? fm.attributesOfItem(atPath: destination.path)) == nil else {
+            throw LoadoutError.alreadyExists(destination)
+        }
+        do {
+            try fm.createDirectory(at: root, withIntermediateDirectories: true)
+            // Resolved first: copying a link would copy the link, and a copy is meant to be a file.
+            try fm.copyItem(at: source.resolvingSymlinksInPath(), to: destination)
+        } catch {
+            throw LoadoutError.io("Couldn't copy \(item.name) to \(assistant.label): \(error.localizedDescription)")
+        }
+        return destination
+    }
+
+    /// Takes a separate copy out of one assistant, leaving the others.
+    ///
+    /// Refused while it is the only way an assistant loads the item or while another assistant
+    /// links to it — that is the original, and the way to remove an original is to remove the item.
+    public func removeCopy(of item: Item, from assistant: Assistant) throws {
+        guard item.assistants.count > 1 else {
+            throw LoadoutError.io("\(item.name) only exists in \(assistant.label). Removing it there would lose it — delete it instead.")
+        }
+        let root: URL?
+        switch item.kind {
+        case .skill: root = assistant.skillsRoot
+        case .command: root = assistant.commandsRoot
+        case .agent: root = assistant.agentsRoot
+        default: root = nil
+        }
+        guard let root, let name = (item.directory ?? item.path)?.lastPathComponent else {
+            throw LoadoutError.notEditable(item.name)
+        }
+        let entry = root.appendingPathComponent(name)
+        guard !isSymlink(entry) else {
+            throw LoadoutError.io("\(item.name) in \(assistant.label) is a link, not a copy. Unlink it instead.")
+        }
+        let path = entry.resolvingSymlinksInPath().path
+        for other in liveAndParkedRoots(for: item) {
+            for child in (try? fm.contentsOfDirectory(atPath: other.path)) ?? [] {
+                let url = other.appendingPathComponent(child)
+                if isSymlink(url), url.resolvingSymlinksInPath().path == path {
+                    throw LoadoutError.io(
+                        "Other assistants load \(item.name) through this copy, so it is the original. To remove it from \(assistant.label), remove \(item.name) itself — that removes every link too."
+                    )
+                }
+            }
+        }
+        try backups.snapshot(entry)
+        try trash(entry, named: item.name)
     }
 }

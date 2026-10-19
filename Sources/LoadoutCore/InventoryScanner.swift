@@ -82,10 +82,12 @@ public struct InventoryScanner: Sendable {
     /// dark — because seeing the gap is the whole point.
     func personalSkills() -> [Item] {
         var byName: [String: Item] = [:]
+        var real: [String: Set<String>] = [:]
 
         for assistant in assistants {
             for folder in skillFolders(in: assistant.skillsRoot) {
                 let name = folder.lastPathComponent
+                if !isSymlink(folder) { real[name, default: []].insert(assistant.id) }
                 if var existing = byName[name] {
                     existing.assistants.insert(assistant.id)
                     byName[name] = existing
@@ -97,7 +99,26 @@ public struct InventoryScanner: Sendable {
             }
         }
 
-        return byName.values.sorted { $0.name < $1.name }
+        return byName.map { name, item in
+            var item = item
+            item.realCopyIn = real[name] ?? []
+            item.original = original(of: .skill, named: name, real: item.realCopyIn, holders: item.assistants)
+            return item
+        }.sorted { $0.name < $1.name }
+    }
+
+    /// Where something started: the one assistant holding a real copy, or — when everyone holds a
+    /// link — the one Loadout wrote down when it moved the folder to the shared store.
+    func original(of kind: ItemKind, named name: String, real: Set<String>, holders: Set<String>) -> String? {
+        if real.count == 1 { return real.first }
+        guard real.isEmpty, holders.count > 1,
+              let recorded = OriginRecords(paths: paths).assistant(for: kind, named: name),
+              holders.contains(recorded) else { return nil }
+        return recorded
+    }
+
+    func isSymlink(_ url: URL) -> Bool {
+        (try? fm.attributesOfItem(atPath: url.path))?[.type] as? FileAttributeType == .typeSymbolicLink
     }
 
     /// Everything parked in a `skills-off`, wherever it is parked, minus the matching live copy
@@ -288,10 +309,12 @@ public struct InventoryScanner: Sendable {
     /// worth seeing.
     func personalCommands() -> [Item] {
         var byName: [String: Item] = [:]
+        var real: [String: Set<String>] = [:]
 
         for assistant in assistants {
             for file in markdownFiles(in: assistant.commandsRoot) {
                 let stem = file.deletingPathExtension().lastPathComponent
+                if !isSymlink(file) { real[stem, default: []].insert(assistant.id) }
                 if var existing = byName[stem] {
                     existing.assistants.insert(assistant.id)
                     byName[stem] = existing
@@ -301,6 +324,12 @@ public struct InventoryScanner: Sendable {
                     byName[stem] = item
                 }
             }
+        }
+        for (stem, item) in byName {
+            var item = item
+            item.realCopyIn = real[stem] ?? []
+            item.original = original(of: .command, named: stem, real: item.realCopyIn, holders: item.assistants)
+            byName[stem] = item
         }
 
         var off: [String: Item] = [:]
@@ -326,6 +355,7 @@ public struct InventoryScanner: Sendable {
     /// a machine with nothing else sees exactly what it saw before.
     func personalAgents() -> [Item] {
         var byName: [String: Item] = [:]
+        var real: [String: Set<String>] = [:]
         var roots: [(id: String, live: URL)] = assistants.compactMap { assistant in
             assistant.agentsRoot.map { (assistant.id, $0) }
         }
@@ -334,6 +364,7 @@ public struct InventoryScanner: Sendable {
         for root in roots {
             for file in markdownFiles(in: root.live) {
                 let stem = file.deletingPathExtension().lastPathComponent
+                if !isSymlink(file) { real[stem, default: []].insert(root.id) }
                 if var existing = byName[stem] {
                     existing.assistants.insert(root.id)
                     byName[stem] = existing
@@ -343,6 +374,12 @@ public struct InventoryScanner: Sendable {
                     byName[stem] = item
                 }
             }
+        }
+        for (stem, item) in byName {
+            var item = item
+            item.realCopyIn = real[stem] ?? []
+            item.original = original(of: .agent, named: stem, real: item.realCopyIn, holders: item.assistants)
+            byName[stem] = item
         }
 
         var off: [String: Item] = [:]
