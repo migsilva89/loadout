@@ -905,7 +905,11 @@ final class AppModel {
         do {
             let destination = try mutations.makeGlobal(item)
             makeGlobalDestination = readablePath(destination)
-            statusMessage = "Copied \(item.name) to your \(item.kind.briefingNoun)s. The project keeps its own."
+            if case .plugin = item.origin {
+                statusMessage = "Copied \(item.name) to your \(item.kind.briefingNoun)s. Share it from its Assistants card."
+            } else {
+                statusMessage = "Copied \(item.name) to your \(item.kind.briefingNoun)s. The project keeps its own."
+            }
             errorMessage = nil
             reload()
         } catch {

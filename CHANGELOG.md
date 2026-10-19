@@ -28,6 +28,11 @@ The versions are what a release is tagged as; between tags, `main` is what is be
   their owners. Claude and Codex show their own mark rather than the Claude and ChatGPT apps'
   icons, which are different products. A file in `cli-icons/` still wins.
 
+- **Make personal copy, for plugin skills, commands and subagents.** Plugin files are read-only
+  and live in a cache an update replaces, so they could not be shared. The button in the detail
+  pane (and the row's context menu) copies one into your own folders, where it can be edited and
+  shared with other assistants from its Assistants card. The plugin keeps its own.
+
 ### Changed
 
 - **Assistants that are not installed are hidden.** A leftover `~/.trae` no longer gives Trae a

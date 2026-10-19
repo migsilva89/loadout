@@ -1011,6 +1011,16 @@ struct MakeGlobalWarningSheet: View {
         let noun = item.kind.briefingNoun
         let repository: String
         if case .project(let name) = item.origin { repository = name } else { repository = "the repository" }
+        if case .plugin(let plugin) = item.origin {
+            if model.makeGlobalDestination != nil {
+                return "\(item.name) is one of your \(noun)s now: edit it, and share it with your other assistants from its Assistants card. The \(plugin) plugin keeps the one it shipped, and the two are separate files."
+            }
+            return """
+                \(item.name) is copied into your own \(noun)s, where you can edit it and share it with your \
+                other assistants. The \(plugin) plugin keeps its own, so its updates stop reaching your copy — \
+                and anything the \(noun) uses from outside its own folder stays with the plugin.
+                """
+        }
         if model.makeGlobalDestination != nil {
             return "\(item.name) is one of your \(noun)s from now on, so every project sees it. \(repository) keeps the one it had, and the two are separate files."
         }

@@ -385,8 +385,12 @@ public struct Mutations: Sendable {
 
     // MARK: - Out of a repository, into your own
 
-    /// Copies a project's skill, command or subagent into the personal directory, so it works in
-    /// every project instead of only that one.
+    /// Copies a project's — or a plugin's — skill, command or subagent into the personal directory,
+    /// so it works in every project instead of only that one, and can be edited and shared.
+    ///
+    /// A plugin's files are read-only and live in a versioned cache that an update replaces, so
+    /// they can be neither edited nor linked into another assistant; a copy is the way to have
+    /// either. What stays behind is whatever the skill reaches outside its own folder.
     ///
     /// A copy, not a move: what is inside a repository belongs to whoever works in that repository,
     /// and moving it out would take it away from them at their next pull. The price is two of them
@@ -411,13 +415,13 @@ public struct Mutations: Sendable {
     /// What the button beside it reads from: offering "Make global" for the second time, and then
     /// failing with "already exists", is the app forgetting what it did a moment ago.
     public func hasGlobalCopy(of item: Item) -> Bool {
-        guard case .project = item.origin, let destination = globalLocation(of: item) else { return false }
+        guard item.origin.isCopyable, let destination = globalLocation(of: item) else { return false }
         return fm.fileExists(atPath: destination.path)
     }
 
     @discardableResult
     public func makeGlobal(_ item: Item) throws -> URL {
-        guard case .project = item.origin else { throw LoadoutError.notEditable(item.name) }
+        guard item.origin.isCopyable else { throw LoadoutError.notEditable(item.name) }
         guard let source = item.directory ?? item.path else { throw LoadoutError.notFound(item.name) }
 
         let destinationRoot: URL

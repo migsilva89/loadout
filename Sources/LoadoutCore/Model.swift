@@ -54,6 +54,12 @@ public enum Origin: Equatable, Hashable, Codable, Sendable {
         case .plugin: return false
         }
     }
+
+    /// Whether a copy of it can be taken into your own folders: anything that is not yours already.
+    public var isCopyable: Bool {
+        if case .personal = self { return false }
+        return true
+    }
 }
 
 /// One row in the inventory.

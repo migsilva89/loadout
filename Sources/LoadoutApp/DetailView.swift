@@ -178,6 +178,8 @@ struct DetailView: View {
             }
             if case .project(let repository) = item.origin, item.kind != .mcp {
                 projectCallout(item, repository: repository)
+            } else if case .plugin(let plugin) = item.origin, item.kind == .skill || item.kind == .command || item.kind == .agent {
+                projectCallout(item, repository: plugin, fromPlugin: true)
             }
             if detailsCollapsed {
                 DetailsSummaryStrip(summary: summary(item)) { toggleDetails() }
@@ -440,24 +442,29 @@ struct DetailView: View {
     /// but only if the click can be found. As a link at the end of a row it could not: the first
     /// person to go looking for it walked past it twice. So it says what the limit is and offers
     /// the way out in the same breath, once, on the items where it is true.
-    private func projectCallout(_ item: Item, repository: String) -> some View {
+    private func projectCallout(_ item: Item, repository: String, fromPlugin: Bool = false) -> some View {
         // Once your copy exists there is nothing left to offer here, so the button goes and the row
         // is left saying what is true: this one belongs to the repository. Where the copy went was
         // said by the dialog that made it, path and all — leaving a live button beside a copy that
         // was already taken is how "Make global" came to be clicked twice.
         let copied = model.hasGlobalCopy(of: item)
         return HStack(spacing: 12) {
-            Image(systemName: copied ? "checkmark.circle.fill" : "folder.badge.gearshape")
+            Image(systemName: copied ? "checkmark.circle.fill" : (fromPlugin ? "puzzlepiece.extension" : "folder.badge.gearshape"))
                 .font(.system(size: 15))
                 .foregroundStyle(copied ? V2.ok : V2.accent)
             VStack(alignment: .leading, spacing: 2) {
-                Text(copied ? "You have your own copy of this" : "Only works inside \(repository)")
+                Text(copied ? "You have your own copy of this"
+                     : (fromPlugin ? "Comes with the \(repository) plugin" : "Only works inside \(repository)"))
                     .font(.system(size: 12.5, weight: .medium))
                     .foregroundStyle(V2.text)
                 Text(
-                    copied
-                        ? "Yours works in every project. This one is \(repository)'s, and the two are separate files."
-                        : "Make a copy of your own and it works in every project. The repository keeps its own, so nobody else loses it."
+                    fromPlugin
+                        ? (copied
+                            ? "Yours can be edited and shared with other assistants. This one is the plugin's, and the two are separate files."
+                            : "It is read-only, and only the plugin that ships it loads it. Make a personal copy to edit it and share it with your other assistants. The plugin keeps its own.")
+                        : copied
+                            ? "Yours works in every project. This one is \(repository)'s, and the two are separate files."
+                            : "Make a copy of your own and it works in every project. The repository keeps its own, so nobody else loses it."
                 )
                 .font(.system(size: 11.5))
                 .foregroundStyle(V2.textMid)
@@ -468,7 +475,7 @@ struct DetailView: View {
                 Button {
                     model.makeGlobal(item)
                 } label: {
-                    Text("Make global")
+                    Text(fromPlugin ? "Make personal copy" : "Make global")
                         .font(.system(size: 12.5, weight: .medium))
                         .foregroundStyle(Color.white)
                         .padding(.horizontal, 12)
@@ -476,7 +483,7 @@ struct DetailView: View {
                         .background(V2.accent, in: RoundedRectangle(cornerRadius: 7))
                 }
                 .buttonStyle(.plain)
-                .help("Copy \(item.name) into your own \(item.kind.briefingNoun)s, leaving the repository's copy where it is")
+                .help("Copy \(item.name) into your own \(item.kind.briefingNoun)s, leaving the \(fromPlugin ? "plugin's" : "repository's") copy where it is")
                 .pointingHand()
             }
         }
