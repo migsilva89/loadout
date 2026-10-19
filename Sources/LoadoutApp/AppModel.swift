@@ -1180,7 +1180,8 @@ final class AppModel {
             guard item.origin == .personal, item.enabled, !item.assistants.isEmpty,
                   !item.assistants.contains(assistant.id) else { return false }
             switch item.kind {
-            case .skill, .command: return true
+            case .skill: return true
+            case .command: return assistant.supportsCommands
             case .agent: return assistant.agentsRoot != nil
             case .mcp, .plugin: return false
             }

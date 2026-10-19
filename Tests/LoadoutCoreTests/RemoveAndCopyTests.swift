@@ -9,7 +9,7 @@ final class RemoveAndCopyTests: XCTestCase {
     /// Claude Code, plus two assistants with folders (`zzz`, `yyy`) and opencode with its agent folder.
     private func machine() -> Fixture {
         let fixture = Fixture()
-        for id in ["zzz", "yyy"] {
+        for id in ["zzz", "yyy", "cursor", "codex"] {
             try! fm.createDirectory(at: fixture.paths.home.appendingPathComponent(".\(id)/skills"), withIntermediateDirectories: true)
         }
         try! fm.createDirectory(
@@ -47,7 +47,7 @@ final class RemoveAndCopyTests: XCTestCase {
                      fixture.paths.home.appendingPathComponent(".yyy/skills"), fixture.paths.sharedSkills] {
             XCTAssertTrue(gone(root.appendingPathComponent("shared-one")), root.path)
         }
-        XCTAssertEqual(report.links.count, 3, "Claude's, zzz's and yyy's")
+        XCTAssertEqual(report.links.count, 3, "Claude, zzz and yyy: \(report.links)")
         XCTAssertEqual(report.copies.count, 1, "the one real folder")
     }
 
@@ -56,7 +56,7 @@ final class RemoveAndCopyTests: XCTestCase {
         fixture.command("ship")
         fixture.agent("reviewer")
         let mutations = Mutations(paths: fixture.paths)
-        let zzz = assistant("zzz", fixture)
+        let zzz = assistant("cursor", fixture)
         let opencode = assistant("opencode", fixture)
         let commandLink = try mutations.shareCommand(item("ship", .command, fixture)!, with: zzz)
         let agentLink = try mutations.shareAgent(item("reviewer", .agent, fixture)!, with: opencode)
@@ -73,13 +73,13 @@ final class RemoveAndCopyTests: XCTestCase {
         let fixture = machine()
         fixture.command("ship")
         let mutations = Mutations(paths: fixture.paths)
-        try mutations.shareCommand(item("ship", .command, fixture)!, with: assistant("zzz", fixture))
+        try mutations.shareCommand(item("ship", .command, fixture)!, with: assistant("cursor", fixture))
         try mutations.setCommand(item("ship", .command, fixture)!, enabled: false)
 
         try mutations.delete(item("ship", .command, fixture)!)
 
-        for root in [fixture.paths.home.appendingPathComponent(".zzz/prompts-off"),
-                     fixture.paths.home.appendingPathComponent(".zzz/commands-off"),
+        for root in [fixture.paths.home.appendingPathComponent(".cursor/prompts-off"),
+                     fixture.paths.home.appendingPathComponent(".cursor/commands-off"),
                      fixture.paths.home.appendingPathComponent(".claude/commands-off")] {
             XCTAssertTrue(gone(root.appendingPathComponent("ship.md")), root.path)
         }
@@ -89,7 +89,7 @@ final class RemoveAndCopyTests: XCTestCase {
         let fixture = machine()
         fixture.command("ship")
         let real = fixture.paths.commands.appendingPathComponent("ship.md")
-        let odd = fixture.paths.home.appendingPathComponent(".zzz/commands")
+        let odd = fixture.paths.home.appendingPathComponent(".cursor/commands")
         try fm.createDirectory(at: odd, withIntermediateDirectories: true)
         try fm.createSymbolicLink(at: odd.appendingPathComponent("shipping.md"), withDestinationURL: real)
 
@@ -114,13 +114,13 @@ final class RemoveAndCopyTests: XCTestCase {
     func testACommandsOriginalIsTheAssistantHoldingTheRealFile() throws {
         let fixture = machine()
         fixture.command("ship")
-        try Mutations(paths: fixture.paths).shareCommand(item("ship", .command, fixture)!, with: assistant("zzz", fixture))
+        try Mutations(paths: fixture.paths).shareCommand(item("ship", .command, fixture)!, with: assistant("cursor", fixture))
 
         let shared = item("ship", .command, fixture)!
 
         XCTAssertEqual(shared.original, "claude")
         XCTAssertEqual(shared.realCopyIn, ["claude"])
-        XCTAssertEqual(shared.assistants, ["claude", "zzz"])
+        XCTAssertEqual(shared.assistants, ["claude", "cursor"])
     }
 
     func testASkillRemembersWhereItStartedAfterEveryoneHoldsALink() throws {
@@ -170,9 +170,9 @@ final class RemoveAndCopyTests: XCTestCase {
         let fixture = machine()
         fixture.command("ship")
         let mutations = Mutations(paths: fixture.paths)
-        try mutations.shareCommand(item("ship", .command, fixture)!, with: assistant("zzz", fixture))
+        try mutations.shareCommand(item("ship", .command, fixture)!, with: assistant("cursor", fixture))
 
-        let copy = try mutations.copy(item("ship", .command, fixture)!, to: assistant("yyy", fixture))
+        let copy = try mutations.copy(item("ship", .command, fixture)!, to: assistant("codex", fixture))
 
         XCTAssertFalse(linked(copy))
         XCTAssertTrue(try String(contentsOf: copy, encoding: .utf8).contains("Faz isto"))
@@ -208,7 +208,7 @@ final class RemoveAndCopyTests: XCTestCase {
         let fixture = machine()
         fixture.command("ship")
         let mutations = Mutations(paths: fixture.paths)
-        try mutations.shareCommand(item("ship", .command, fixture)!, with: assistant("zzz", fixture))
+        try mutations.shareCommand(item("ship", .command, fixture)!, with: assistant("cursor", fixture))
 
         XCTAssertThrowsError(try mutations.removeCopy(of: item("ship", .command, fixture)!, from: assistant("claude", fixture))) { error in
             XCTAssertTrue((error as? LoadoutError)?.errorDescription?.contains("remove ship itself") == true)

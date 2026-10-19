@@ -58,6 +58,15 @@ public struct Assistant: Identifiable, Hashable, Sendable {
         )
     }
 
+    /// Whether sharing a command with this assistant does anything. True for the assistants known
+    /// to read markdown commands, and for any whose commands folder is already there — somebody is
+    /// using it, whatever the table knows. Everyone else is not offered a command, rather than
+    /// being handed a file in a folder they never read.
+    public var supportsCommands: Bool {
+        AssistantRegistry.commandAssistants.contains(id)
+            || FileManager.default.fileExists(atPath: commandsRoot.path)
+    }
+
     /// Where this assistant keeps subagent files, or nil when it keeps none Loadout knows about.
     ///
     /// Not every assistant has the idea. Those that do read a markdown file with frontmatter from
@@ -127,6 +136,11 @@ public enum AssistantRegistry {
     static let commandFolders: [String: [String]] = [
         "opencode": ["commands", "command"],
     ]
+
+    /// The assistants known to read slash commands from a folder of markdown files — their own
+    /// documentation says so. Gemini's commands are TOML and Copilot has no such folder, so a
+    /// markdown file written there would be a file nobody loads.
+    static let commandAssistants: Set<String> = ["claude", "codex", "cursor", "opencode", "factory", "droid"]
 
     /// The assistants that read subagents from a folder of markdown files, and what that folder is
     /// called. Deliberately short: each entry is an assistant whose own documentation says it loads

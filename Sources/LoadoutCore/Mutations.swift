@@ -315,6 +315,7 @@ public struct Mutations: Sendable {
     @discardableResult
     public func shareCommand(_ item: Item, with assistant: Assistant) throws -> URL {
         guard item.kind == .command else { throw LoadoutError.notEditable(item.name) }
+        guard assistant.supportsCommands else { throw Self.noCommands(assistant) }
         return try linkFile(of: item, into: assistant.commandsRoot, for: assistant)
     }
 
@@ -346,6 +347,10 @@ public struct Mutations: Sendable {
             throw LoadoutError.notEditable(item.name)
         }
         try unlinkFile(of: item, from: root, for: assistant)
+    }
+
+    private static func noCommands(_ assistant: Assistant) -> LoadoutError {
+        .io("\(assistant.label) isn't known to load slash commands from a folder of markdown files, so a command put there would never run. Nothing was changed.")
     }
 
     private func linkFile(of item: Item, into root: URL, for assistant: Assistant) throws -> URL {
@@ -1254,7 +1259,9 @@ public struct Mutations: Sendable {
         let root: URL
         switch item.kind {
         case .skill: root = assistant.skillsRoot
-        case .command: root = assistant.commandsRoot
+        case .command:
+            guard assistant.supportsCommands else { throw Self.noCommands(assistant) }
+            root = assistant.commandsRoot
         case .agent:
             guard let agents = assistant.agentsRoot else {
                 throw LoadoutError.io("\(assistant.label) doesn't load subagents from a folder, so there is nowhere to put \(item.name).")

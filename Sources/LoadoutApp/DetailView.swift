@@ -912,9 +912,15 @@ struct DetailView: View {
     // MARK: - Assistants card
 
     private func assistantsCard(_ item: Item) -> some View {
-        // A subagent can only be handed to an assistant that reads them from a folder; showing the
-        // others would be showing a square that does nothing when pressed.
-        let assistants = model.visibleAssistants.filter { item.kind != .agent || $0.agentsRoot != nil }
+        // A subagent or a command can only be handed to an assistant that reads them from a folder;
+        // showing the others would be showing a square that does nothing when pressed.
+        let assistants = model.visibleAssistants.filter {
+            switch item.kind {
+            case .agent: return $0.agentsRoot != nil
+            case .command: return $0.supportsCommands || item.assistants.contains($0.id)
+            default: return true
+            }
+        }
         // For an MCP server "loaded" means switched on in that assistant's own config — the
         // row it lives in is a separate item per assistant, so `item.assistants` alone would
         // count only this row's owner and every other cell would read as empty.

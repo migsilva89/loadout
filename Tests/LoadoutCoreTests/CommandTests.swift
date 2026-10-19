@@ -260,3 +260,29 @@ extension CommandTests {
         XCTAssertThrowsError(try mutations.makeGlobal(mine))
     }
 }
+
+/// Commands are only offered to assistants that load them.
+extension CommandTests {
+    func testAnAssistantThatReadsNoMarkdownCommandsIsNotOfferedOne() throws {
+        let fixture = Fixture()
+        command("ship", in: fixture)
+        try fm.createDirectory(at: fixture.paths.home.appendingPathComponent(".copilot/skills"), withIntermediateDirectories: true)
+        let copilot = AssistantRegistry.discover(paths: fixture.paths) { _ in nil }.first { $0.id == "copilot" }!
+        XCTAssertFalse(copilot.supportsCommands)
+
+        XCTAssertThrowsError(try Mutations(paths: fixture.paths).shareCommand(item("ship", in: fixture), with: copilot))
+        XCTAssertFalse(fm.fileExists(atPath: copilot.commandsRoot.path), "no folder invented for it")
+    }
+
+    func testKnownAssistantsAndOnesAlreadyUsingACommandsFolderAreOffered() throws {
+        let fixture = Fixture()
+        try fm.createDirectory(at: fixture.paths.home.appendingPathComponent(".codex/prompts"), withIntermediateDirectories: true)
+        try fm.createDirectory(at: fixture.paths.home.appendingPathComponent(".hermes/skills"), withIntermediateDirectories: true)
+        let found = AssistantRegistry.discover(paths: fixture.paths) { _ in nil }
+        XCTAssertTrue(found.first { $0.id == "codex" }!.supportsCommands, "known")
+
+        try fm.createDirectory(at: fixture.paths.home.appendingPathComponent(".hermes/commands"), withIntermediateDirectories: true)
+        let hermes = AssistantRegistry.discover(paths: fixture.paths) { _ in nil }.first { $0.id == "hermes" }!
+        XCTAssertTrue(hermes.supportsCommands, "somebody already uses its folder")
+    }
+}
