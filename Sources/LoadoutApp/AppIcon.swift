@@ -60,28 +60,34 @@ enum AppIconCache {
         return nil
     }
 
-    /// The icon for an assistant or CLI id: the user's own file first, then the installed app,
-    /// then nothing — and the caller draws initials.
+    /// The icon for an assistant or CLI id, most specific first: the user's own file; the built-in
+    /// mark where the installed app is a different product from the agent (Claude, Codex); the
+    /// installed app; the built-in mark; and then nothing, and the caller draws initials.
     static func icon(forID id: String, appPath: String?) -> NSImage? {
         if let key = cache["id:\(id)"] { return key }
+        let resolved: NSImage?
         if let mine = userIcon(for: id) {
-            cache["id:\(id)"] = mine
-            return mine
+            resolved = mine
+        } else if AssistantGlyphs.preferredOverApp.contains(id),
+                  let glyph = AssistantGlyphs.image(for: id, hue: AssistantBrand.hex(for: id)) {
+            resolved = glyph
+        } else if let fromApp = icon(atPath: appPath) {
+            resolved = fromApp
+        } else {
+            resolved = AssistantGlyphs.image(for: id, hue: AssistantBrand.hex(for: id))
         }
-        if let fromApp = icon(atPath: appPath) {
-            cache["id:\(id)"] = fromApp
-            return fromApp
-        }
-        return nil
+        if let resolved { cache["id:\(id)"] = resolved }
+        return resolved
     }
 
     /// Where a given id's icon came from, so the UI never has to leave it a mystery.
     static func iconSource(for id: String, appPath: String?) -> String {
         if userIcon(for: id) != nil { return "Custom" }
+        if AssistantGlyphs.preferredOverApp.contains(id) { return "Built in" }
         if let appPath, FileManager.default.fileExists(atPath: appPath) {
             return "From \(URL(fileURLWithPath: appPath).lastPathComponent)"
         }
-        return "No icon"
+        return AssistantGlyphs.has(id) ? "Built in" : "No icon"
     }
 
     /// Copies a chosen image in as `<id>.png`. Copies, never moves: the original stays put.

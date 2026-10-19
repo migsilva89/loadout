@@ -25,7 +25,7 @@ enum SheetShot {
         }
 
         NSApplication.shared.appearance = NSAppearance(named: .darkAqua)
-        let model = AppModel(paths: Self.paths())
+        let model = AppModel(paths: Self.paths(), locate: AppModel.everythingInstalled)
 
         let view: AnyView
         switch name {

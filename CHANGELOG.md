@@ -4,6 +4,39 @@ Notable changes, newest first. Dates are the day the work landed on `main`.
 
 The versions are what a release is tagged as; between tags, `main` is what is being used daily.
 
+## Unreleased
+
+### Added
+
+- **Plugin management for Claude Code, Codex and opencode.** The Plugins tab has **Install…**
+  (a searchable catalogue for Claude Code and Codex, a package field for opencode, and an
+  **Add a marketplace** field for Claude Code), **Update** per plugin and **Update all**, and
+  **Remove** for all three. Loadout asks each assistant's own tool to do the work —
+  `claude plugin install|update`, `opencode plugin add|update|remove`, Codex's local protocol —
+  after copying the files that tool is about to change into the Loadout backups. Typed names are
+  checked so they cannot become flags. opencode's plugins (the `plugin` list in its config and
+  the scripts in its `plugins` folder) are now listed; opencode has no switch for one, so
+  removing is how you stop it loading.
+- **Subagents can be shared between assistants.** The same Assistants card that shares skills
+  and commands now shares subagents, as links to one file, with every assistant that reads a
+  folder of markdown agents: Claude Code, Cursor, Gemini CLI, Factory and opencode. Assistants
+  with no such folder are not offered one. *Sync all with …* now covers commands and subagents
+  too. Switching a shared command or subagent off now takes every copy out of service.
+- **Real marks for the assistants.** Claude Code, Codex, opencode, Cursor, Windsurf, Gemini,
+  Antigravity, Copilot, Trae, Kiro and Command Code get their own logo instead of two letters;
+  the outlines come from the MIT-licensed `@lobehub/icons-static-svg` set and the marks belong to
+  their owners. Claude and Codex show their own mark rather than the Claude and ChatGPT apps'
+  icons, which are different products. A file in `cli-icons/` still wins.
+
+### Changed
+
+- **Assistants that are not installed are hidden.** A leftover `~/.trae` no longer gives Trae a
+  column, a mark or a row in Settings. An assistant counts as installed when its Mac app or its
+  command-line tool is found; the scanner still reads the folders of the others, so a skill
+  linked into one is not lost.
+- **opencode is found from `~/.config/opencode`** even when nothing made a `~/.opencode`, and its
+  commands and subagents are read from the folders it actually uses.
+
 ## 0.6.3 — 2026-10-18
 
 ### Changed

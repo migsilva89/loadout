@@ -298,4 +298,89 @@ struct CodexPlugins {
         if enabled { try records.forgetPluginEntry(relative, in: plugin.id) }
         return file.deletingLastPathComponent()
     }
+
+    // MARK: - Installing, updating and removing
+
+    /// Every plugin Codex's marketplaces offer. `plugin/installed` lists a marketplace's plugins
+    /// whether or not they are installed, with the flag that says which.
+    func catalog() throws -> [PluginCatalogEntry] {
+        let connection = try CodexConnection(paths: paths)
+        defer { connection.close() }
+        return Self.catalog(from: try marketplaces(connection))
+    }
+
+    static func catalog(from marketplaces: [[String: Any]]) -> [PluginCatalogEntry] {
+        marketplaces.flatMap { marketplace -> [PluginCatalogEntry] in
+            let market = marketplace["name"] as? String ?? ""
+            return (marketplace["plugins"] as? [[String: Any]] ?? []).compactMap { summary in
+                guard let key = summary["id"] as? String, let name = summary["name"] as? String else { return nil }
+                let interface = summary["interface"] as? [String: Any]
+                return PluginCatalogEntry(
+                    assistant: "codex", spec: key, name: name,
+                    summary: interface?["shortDescription"] as? String ?? summary["description"] as? String ?? "",
+                    marketplace: market, installed: summary["installed"] as? Bool == true,
+                    marketplacePath: marketplace["path"] as? String
+                )
+            }
+        }
+        .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    /// Installs a plugin from a marketplace Codex already knows. Adding a marketplace is a
+    /// separate act that stays in Codex: it decides what code Codex will run.
+    func install(_ entry: PluginCatalogEntry) throws -> PluginOutcome {
+        let params = try Self.installParams(pluginName: entry.name, marketplacePath: entry.marketplacePath)
+        let connection = try CodexConnection(paths: paths, timeout: 120)
+        defer { connection.close() }
+        try Backups(paths: paths).snapshot(paths.codexConfig)
+        let response = try connection.call("plugin/install", params)
+        return Self.outcome(of: response, verb: "Installed", plugin: entry.name)
+    }
+
+    /// Asks Codex to install the plugin again from its marketplace, which is how it picks up the
+    /// version the marketplace now carries.
+    func update(_ plugin: PluginInfo) throws -> PluginOutcome {
+        let connection = try CodexConnection(paths: paths, timeout: 120)
+        defer { connection.close() }
+        guard let marketplace = try marketplaces(connection).first(where: { entry in
+            (entry["plugins"] as? [[String: Any]] ?? []).contains { $0["id"] as? String == plugin.nativeKey }
+        }) else { throw LoadoutError.notFound("\(plugin.name) in any Codex marketplace") }
+        let params = try Self.installParams(pluginName: plugin.name, marketplacePath: marketplace["path"] as? String)
+        try Backups(paths: paths).snapshot(paths.codexConfig)
+        let response = try connection.call("plugin/install", params)
+        return Self.outcome(of: response, verb: "Updated", plugin: plugin.name)
+    }
+
+    func uninstall(_ plugin: PluginInfo) throws -> PluginOutcome {
+        let connection = try CodexConnection(paths: paths, timeout: 60)
+        defer { connection.close() }
+        try Backups(paths: paths).snapshot(paths.codexConfig)
+        _ = try connection.call("plugin/uninstall", Self.uninstallParams(for: plugin))
+        return PluginOutcome(summary: "Removed \(plugin.name) from Codex.")
+    }
+
+    private func marketplaces(_ connection: CodexConnection) throws -> [[String: Any]] {
+        let installed = try connection.call("plugin/installed", ["cwds": [paths.home.path]])
+        guard let marketplaces = installed["marketplaces"] as? [[String: Any]] else {
+            throw LoadoutError.io("Codex returned an unsupported plugin inventory. Update Codex and reload.")
+        }
+        return marketplaces
+    }
+
+    static func installParams(pluginName: String, marketplacePath: String?) throws -> [String: Any] {
+        guard let marketplacePath, !marketplacePath.isEmpty else {
+            throw LoadoutError.io("Codex didn't say where this plugin's marketplace is. Update Codex and try again.")
+        }
+        return ["marketplacePath": marketplacePath, "pluginName": pluginName]
+    }
+
+    static func uninstallParams(for plugin: PluginInfo) -> [String: Any] {
+        ["pluginId": plugin.nativeKey]
+    }
+
+    private static func outcome(of response: [String: Any], verb: String, plugin: String) -> PluginOutcome {
+        let needSignIn = (response["appsNeedingAuth"] as? [[String: Any]] ?? []).compactMap { $0["name"] as? String }
+        guard !needSignIn.isEmpty else { return PluginOutcome(summary: "\(verb) \(plugin).") }
+        return PluginOutcome(summary: "\(verb) \(plugin). Sign in to \(needSignIn.joined(separator: ", ")) in Codex to use it.")
+    }
 }

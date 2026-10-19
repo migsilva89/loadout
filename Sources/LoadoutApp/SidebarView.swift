@@ -723,7 +723,7 @@ struct SidebarRow: View {
                                 : (isEnabled ? V2.text : V2.textDim)
                         )
                         .lineLimit(1)
-                    if item.kind == .skill || item.kind == .command {
+                    if item.kind == .skill || item.kind == .command || item.kind == .agent {
                         HStack(spacing: 3) {
                             ForEach(marks, id: \.id) { assistant in
                                 AssistantMark(assistant: assistant, present: true, size: 14)

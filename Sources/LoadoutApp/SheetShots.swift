@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import LoadoutCore
 
 /// Draws the app's sheets to PNG files, so they can be checked without anyone sitting in front of
 /// the app.
@@ -36,6 +37,24 @@ enum SheetShots {
                     to: directory.appendingPathComponent("project-warning.png"))
             model.pendingProjectDisable = nil
         }
+
+        // The install sheet, from a catalogue written here rather than read from a real assistant.
+        model.pluginCatalog = [
+            PluginCatalogEntry(assistant: "claude", spec: "vercel@official", name: "vercel", summary: "Deploy and manage projects on Vercel from the assistant, with the CLI and its skills.", marketplace: "official", installCount: 4210),
+            PluginCatalogEntry(assistant: "claude", spec: "swift-lsp@official", name: "swift-lsp", summary: "Language server for Swift.", marketplace: "official", installCount: 980, installed: true),
+            PluginCatalogEntry(assistant: "claude", spec: "caveman@caveman", name: "caveman", summary: "Ultra-compressed communication mode.", marketplace: "caveman", installCount: 120),
+        ]
+        model.pluginInstallAssistant = "claude"
+        model.pluginReceipt = "Installed vercel."
+        capture(InstallPluginSheet(model: model), size: CGSize(width: 560, height: 520),
+                to: directory.appendingPathComponent("install-plugin-claude.png"))
+        model.pluginInstallAssistant = "opencode"
+        model.pluginReceipt = nil
+        model.pluginInstallError = "opencode couldn't finish: package not found."
+        capture(InstallPluginSheet(model: model), size: CGSize(width: 560, height: 300),
+                to: directory.appendingPathComponent("install-plugin-opencode.png"))
+        model.pluginInstallError = nil
+        model.pluginCatalog = []
 
         model.selection = .commands
         capture(NewSkillSheet(model: model), size: CGSize(width: 460, height: 320),

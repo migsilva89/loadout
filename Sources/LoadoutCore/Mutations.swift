@@ -205,6 +205,11 @@ public struct Mutations: Sendable {
         guard item.kind == .command || item.kind == .agent, let file = item.path else {
             throw LoadoutError.notEditable(item.name)
         }
+        // Yours, and possibly linked into other assistants: one switch has to take every copy
+        // out of service, or the row stays on with nothing visibly changed.
+        if plugin == nil, case .personal = item.origin {
+            return try setPersonalFile(item, file: file, enabled: enabled)
+        }
         let root = file.deletingLastPathComponent()
         let name = root.lastPathComponent
         let live = enabled ? name.replacingOccurrences(of: "-off", with: "") : name
@@ -221,6 +226,45 @@ public struct Mutations: Sendable {
             }
         }
         return moved
+    }
+
+    /// Switches a personal command or subagent in every assistant that holds a copy of it.
+    ///
+    /// The real file and the links pointing at it are moved in an order that never leaves a live
+    /// link dangling: links first and the file last on the way out, the file first on the way back.
+    private func setPersonalFile(_ item: Item, file: URL, enabled: Bool) throws -> URL {
+        var liveRoots: [URL] = AssistantRegistry.discover(paths: paths).compactMap {
+            item.kind == .agent ? $0.agentsRoot : $0.commandsRoot
+        }
+        let own = file.deletingLastPathComponent()
+        liveRoots.append(
+            own.lastPathComponent.hasSuffix("-off")
+                ? own.deletingLastPathComponent()
+                    .appendingPathComponent(String(own.lastPathComponent.dropLast(4)))
+                : own
+        )
+
+        var seen = Set<String>()
+        var copies: [(source: URL, destination: URL)] = []
+        for live in liveRoots where seen.insert(live.standardizedFileURL.path).inserted {
+            let parked = live.deletingLastPathComponent()
+                .appendingPathComponent(live.lastPathComponent + "-off")
+            let source = (enabled ? parked : live).appendingPathComponent(file.lastPathComponent)
+            guard (try? fm.attributesOfItem(atPath: source.path)) != nil else { continue }
+            copies.append((source, enabled ? live : parked))
+        }
+        let ordered = copies.sorted { a, b in
+            // Links before the real file when switching off, the other way round when switching on.
+            isSymlink(a.source) != isSymlink(b.source) ? isSymlink(a.source) != enabled : false
+        }
+        var result: URL?
+        for copy in ordered {
+            let moved = try move(copy.source, into: copy.destination)
+            if copy.source.deletingLastPathComponent().standardizedFileURL
+                == own.standardizedFileURL || result == nil { result = moved }
+        }
+        guard let result else { throw LoadoutError.notFound(item.name) }
+        return result
     }
 
     /// Creates `<name>.md` from a template, in the personal commands directory or a project's.
@@ -270,13 +314,50 @@ public struct Mutations: Sendable {
     /// vocabulary and are dead text to Codex — so the caller says so before calling this (AC10.12).
     @discardableResult
     public func shareCommand(_ item: Item, with assistant: Assistant) throws -> URL {
-        guard item.kind == .command, let file = item.path else {
+        guard item.kind == .command else { throw LoadoutError.notEditable(item.name) }
+        return try linkFile(of: item, into: assistant.commandsRoot, for: assistant)
+    }
+
+    /// Removes an assistant's link to a command. Never removes the only real copy.
+    public func unshareCommand(_ item: Item, from assistant: Assistant) throws {
+        guard item.kind == .command else { throw LoadoutError.notEditable(item.name) }
+        try unlinkFile(of: item, from: assistant.commandsRoot, for: assistant)
+    }
+
+    /// Makes another assistant load a subagent, by linking to the one file.
+    ///
+    /// The same mechanism as a command, and the same caveat: the file travels, its vocabulary does
+    /// not entirely. `tools` and `model` mean what each assistant says they mean, so the caller
+    /// says so. An assistant that reads no subagent folder has nowhere to be linked into, and this
+    /// refuses rather than make a folder nobody reads.
+    @discardableResult
+    public func shareAgent(_ item: Item, with assistant: Assistant) throws -> URL {
+        guard item.kind == .agent else { throw LoadoutError.notEditable(item.name) }
+        guard let root = assistant.agentsRoot else {
+            throw LoadoutError.io(
+                "\(assistant.label) doesn't load subagents from a folder, so there is nowhere to put \(item.name)."
+            )
+        }
+        return try linkFile(of: item, into: root, for: assistant)
+    }
+
+    public func unshareAgent(_ item: Item, from assistant: Assistant) throws {
+        guard item.kind == .agent, let root = assistant.agentsRoot else {
             throw LoadoutError.notEditable(item.name)
         }
-        let link = assistant.commandsRoot.appendingPathComponent(file.lastPathComponent)
-        guard !fm.fileExists(atPath: link.path) else { throw LoadoutError.alreadyExists(link) }
+        try unlinkFile(of: item, from: root, for: assistant)
+    }
+
+    private func linkFile(of item: Item, into root: URL, for assistant: Assistant) throws -> URL {
+        guard let file = item.path else { throw LoadoutError.notEditable(item.name) }
+        let link = root.appendingPathComponent(file.lastPathComponent)
+        // `attributesOfItem` does not follow links, so a link whose target has gone still counts
+        // as being there: writing over it would be writing over somebody's file.
+        guard (try? fm.attributesOfItem(atPath: link.path)) == nil else {
+            throw LoadoutError.alreadyExists(link)
+        }
         do {
-            try fm.createDirectory(at: assistant.commandsRoot, withIntermediateDirectories: true)
+            try fm.createDirectory(at: root, withIntermediateDirectories: true)
             try fm.createSymbolicLink(at: link, withDestinationURL: file.resolvingSymlinksInPath())
         } catch {
             throw LoadoutError.io(
@@ -286,12 +367,9 @@ public struct Mutations: Sendable {
         return link
     }
 
-    /// Removes an assistant's link to a command. Never removes the only real copy.
-    public func unshareCommand(_ item: Item, from assistant: Assistant) throws {
-        guard item.kind == .command, let file = item.path else {
-            throw LoadoutError.notEditable(item.name)
-        }
-        let link = assistant.commandsRoot.appendingPathComponent(file.lastPathComponent)
+    private func unlinkFile(of item: Item, from root: URL, for assistant: Assistant) throws {
+        guard let file = item.path else { throw LoadoutError.notEditable(item.name) }
+        let link = root.appendingPathComponent(file.lastPathComponent)
         guard isSymlink(link) else {
             throw LoadoutError.io(
                 "The file in \(assistant.label) is the real copy of \(item.name), not a link. Nothing was changed."

@@ -15,7 +15,7 @@ enum SelfCheck {
 
         let paths = Paths(home: root)
         try! FileManager.default.createDirectory(at: paths.skills, withIntermediateDirectories: true)
-        let model = AppModel(paths: paths)
+        let model = AppModel(paths: paths, locate: AppModel.everythingInstalled)
         var failures: [String] = []
         var total = 0
 
@@ -313,6 +313,35 @@ enum SelfCheck {
             FileManager.default.fileExists(atPath: paths.agents.appendingPathComponent("reviewer.md").path)
         )
 
+        // A subagent handed to the assistants that read them from a folder: opencode keeps its own
+        // under ~/.config/opencode, and Codex has no such folder, so it is not offered one.
+        let opencodeAgents = paths.opencodeConfig.deletingLastPathComponent().appendingPathComponent("agent")
+        try! FileManager.default.createDirectory(at: opencodeAgents, withIntermediateDirectories: true)
+        model.reload()
+        let reviewer = model.items.first { $0.kind == .agent && $0.name == "reviewer" }!
+        check("a subagent starts in Claude only", reviewer.assistants == ["claude"])
+        check("Codex is not offered one", model.assistants.first { $0.id == "codex" }?.agentsRoot == nil)
+        if let opencode = model.assistants.first(where: { $0.id == "opencode" }) {
+            model.setAssistant(opencode, on: reviewer, present: true)
+            check("giving it to opencode links it into opencode's own folder",
+                  (try? FileManager.default.destinationOfSymbolicLink(
+                      atPath: opencodeAgents.appendingPathComponent("reviewer.md").path
+                  )) != nil)
+            let both = model.items.first { $0.kind == .agent && $0.name == "reviewer" }
+            check("and both marks light up", both?.assistants == ["claude", "opencode"])
+            check("with the vocabulary caveat said out loud", model.statusMessage?.contains("tools and model") == true)
+            model.toggle(both!)
+            check("switching it off takes both copies",
+                  !FileManager.default.fileExists(atPath: paths.agents.appendingPathComponent("reviewer.md").path)
+                  && (try? FileManager.default.attributesOfItem(atPath: opencodeAgents.appendingPathComponent("reviewer.md").path)) == nil)
+            model.toggle(model.items.first { $0.kind == .agent && $0.name == "reviewer" }!)
+            check("and on brings both back",
+                  model.items.first { $0.kind == .agent && $0.name == "reviewer" }?.assistants == ["claude", "opencode"])
+        } else {
+            check("opencode is found from its config folder alone", false)
+        }
+        model.selection = .skills
+
         try! JSONSerialization.data(withJSONObject: [
             "numStartups": 7,
             "mcpServers": ["notebooklm": ["command": "npx notebooklm-mcp"]],
@@ -350,7 +379,10 @@ enum SelfCheck {
         )
         // The repository is a repository because it holds a `.claude`, which is what the search
         // looks for — the same rule a real machine is judged by, rather than a listing file.
-        let projectModel = AppModel(paths: paths, roots: ProjectRoots(folders: [paths.projectsRoot]))
+        let projectModel = AppModel(
+            paths: paths, roots: ProjectRoots(folders: [paths.projectsRoot]),
+            locate: AppModel.everythingInstalled
+        )
         projectModel.hasSeenProjectSkillWarning = false
         projectModel.changeContext(to: projectModel.projects.first)
         let fromRepo = projectModel.items.first { $0.name == "from-repo" }!

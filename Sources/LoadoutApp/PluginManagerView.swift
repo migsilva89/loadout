@@ -8,24 +8,85 @@ struct PluginManagerView: View {
     @Bindable var model: AppModel
 
     var body: some View {
-        ScrollView {
-            LazyVStack(spacing: 1) {
-                ForEach(model.plugins) { plugin in
-                    PluginManagerRow(model: model, plugin: plugin)
+        VStack(spacing: 0) {
+            toolbar
+            Hairline(color: Color.white.opacity(0.06))
+            ScrollView {
+                LazyVStack(spacing: 1) {
+                    ForEach(model.plugins) { plugin in
+                        PluginManagerRow(model: model, plugin: plugin)
+                    }
+                }
+                .padding(6)
+            }
+            .overlay {
+                if model.plugins.isEmpty {
+                    ContentUnavailableView(
+                        "No plugins installed",
+                        systemImage: "puzzlepiece.extension",
+                        description: Text("Install one with the button above, or through Claude Code, Codex or opencode themselves.")
+                    )
                 }
             }
-            .padding(6)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .overlay {
-            if model.plugins.isEmpty {
-                ContentUnavailableView(
-                    "No plugins installed",
-                    systemImage: "puzzlepiece.extension",
-                    description: Text("Plugins installed through Claude Code or Codex will show up here.")
-                )
+    }
+
+    /// Install is always there; Update all only when something can be updated, and while it runs
+    /// it says so instead of letting the button be pressed again.
+    private var toolbar: some View {
+        let updatable = model.plugins.filter(model.canUpdate)
+        let updating = updatable.contains { model.busyPlugins.contains($0.id) }
+        return HStack(spacing: 8) {
+            PluginActionButton(title: "Install…", systemImage: "plus", prominent: true) {
+                model.openPluginInstaller()
+            }
+            .disabled(model.pluginAssistants.isEmpty)
+            .help(model.pluginAssistants.isEmpty
+                ? "None of Claude Code, Codex or opencode is installed here"
+                : "Find a plugin and install it into Claude Code, Codex or opencode")
+            Spacer(minLength: 6)
+            if !updatable.isEmpty {
+                PluginActionButton(
+                    title: updating ? "Updating…" : "Update all", systemImage: "arrow.triangle.2.circlepath"
+                ) { model.updateAllPlugins() }
+                .disabled(updating)
+                .help("Ask Claude Code, Codex and opencode to update every plugin they can")
             }
         }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+    }
+}
+
+/// The small rounded button the plugin screens share, in the house style of the sheets' own.
+struct PluginActionButton: View {
+    let title: String
+    var systemImage: String?
+    var prominent = false
+    var destructive = false
+    let action: () -> Void
+    @Environment(\.isEnabled) private var isEnabled
+
+    private var tint: Color { destructive ? V2.issue : (prominent ? V2.accent : V2.textMid) }
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                if let systemImage {
+                    Image(systemName: systemImage).font(.system(size: 11, weight: .semibold))
+                }
+                Text(title).font(.system(size: 12.5, weight: .medium))
+            }
+            .foregroundStyle(tint)
+            .padding(.horizontal, 12)
+            .frame(height: 28)
+            .background(tint.opacity(prominent || destructive ? 0.14 : 0.08), in: RoundedRectangle(cornerRadius: 7))
+            .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(tint.opacity(0.35), lineWidth: 0.5))
+            .opacity(isEnabled ? 1 : 0.5)
+        }
+        .buttonStyle(.plain)
+        .pointingHand()
     }
 }
 
@@ -56,11 +117,12 @@ struct PluginManagerRow: View {
     /// repository decided about this one, which is the more useful thing to know there.
     private var subtitle: String {
         if let repositoryChoice = plugin.repositoryChoice, let name = model.context?.name {
-            return "v\(plugin.version) · \(repositoryChoice ? "on" : "off") in \(name)"
+            return "\([plugin.versionLabel, "\(repositoryChoice ? "on" : "off") in \(name)"].filter { !$0.isEmpty }.joined(separator: " · "))"
         }
         return model.context == nil
-            ? "\(plugin.assistantLabel) · \(itemCount) \(itemCount == 1 ? "item" : "items") · v\(plugin.version)"
-            : "\(plugin.assistantLabel) · v\(plugin.version) · global"
+            ? ([plugin.assistantLabel, "\(itemCount) \(itemCount == 1 ? "item" : "items")", plugin.versionLabel]
+                .filter { !$0.isEmpty }.joined(separator: " · "))
+            : ([plugin.assistantLabel, plugin.versionLabel, "global"].filter { !$0.isEmpty }.joined(separator: " · "))
     }
 
     /// Why the switch is not yours to flip here, or nil when it is.
@@ -118,7 +180,7 @@ struct PluginManagerRow: View {
         .padding(.horizontal, 9)
         .padding(.vertical, 7)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .help("\(plugin.name) — v\(plugin.version), \(itemCount) \(itemCount == 1 ? "item" : "items")")
+        .help("\(plugin.name) — \(plugin.versionLabel.isEmpty ? "" : plugin.versionLabel + ", ")\(itemCount) \(itemCount == 1 ? "item" : "items")")
     }
 }
 
@@ -196,7 +258,7 @@ struct PluginDetailView: View {
                         plugin.enabled ? "Turn the whole plugin off" : "Turn the whole plugin on"
                     ))
             }
-            Text("\(plugin.assistantLabel) · v\(plugin.version)\(plugin.marketplace.isEmpty ? "" : " · from \(plugin.marketplace)")")
+            Text("\(plugin.assistantLabel)\(plugin.versionLabel.isEmpty ? "" : " · " + plugin.versionLabel)\(plugin.marketplace.isEmpty ? "" : " · from \(plugin.marketplace)")")
                 .font(.system(size: 12))
                 .foregroundStyle(V2.textDim)
             // Said out loud rather than left to a tooltip: a switch that will not move needs a
@@ -223,7 +285,7 @@ struct PluginDetailView: View {
                 .foregroundStyle(V2.textDim)
             VStack(spacing: 1) {
                 factRow("From", plugin.marketplace.isEmpty ? "an unnamed marketplace" : plugin.marketplace)
-                factRow("Version", plugin.version.isEmpty ? "not recorded" : "v\(plugin.version)")
+                factRow("Version", plugin.versionLabel.isEmpty ? "not recorded" : plugin.versionLabel)
                 factRow("Ships", model.pluginContents(plugin))
                 factRow("Location", model.readablePath(of: plugin), mono: true) {
                     Button("Reveal") { model.revealPlugin(plugin) }
@@ -235,31 +297,46 @@ struct PluginDetailView: View {
                 }
             }
             HStack(spacing: 10) {
-                Button {
-                    model.removePlugin(plugin)
-                } label: {
-                    Text("Remove plugin…")
-                        .font(.system(size: 12.5, weight: .medium))
-                        .foregroundStyle(V2.issue)
-                        .padding(.horizontal, 12)
-                        .frame(height: 28)
-                        .background(V2.issue.opacity(0.12), in: RoundedRectangle(cornerRadius: 7))
-                        .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(V2.issue.opacity(0.35), lineWidth: 0.5))
+                if model.canUpdate(plugin) {
+                    PluginActionButton(
+                        title: model.busyPlugins.contains(plugin.id) ? "Updating…" : "Update",
+                        systemImage: "arrow.triangle.2.circlepath"
+                    ) { model.updatePlugin(plugin) }
+                    .disabled(model.busyPlugins.contains(plugin.id))
+                    .help("Ask \(plugin.assistantLabel) to fetch the newest version of \(plugin.name). "
+                        + "A session that is already running picks it up when it restarts.")
                 }
-                .buttonStyle(.plain)
-                .help("Uninstall \(plugin.name): its folder to the Trash and its entry out of Claude Code's register")
-                .disabled(plugin.assistant != "claude")
-                .pointingHand()
+                PluginActionButton(title: "Remove plugin…", destructive: true) { model.removePlugin(plugin) }
+                    .disabled(!model.canRemove(plugin) || model.busyPlugins.contains(plugin.id))
+                    .help(removeHelp)
                 // Said beside the button, not only inside the dialog it opens: switching off and
                 // removing are two different things, and somebody who only wants the plugin quiet
                 // should be able to tell before pressing anything.
-                Text(plugin.assistant == "codex"
-                     ? "To remove this plugin, open Codex. Switching it off here keeps its files."
-                     : "Switching it off above keeps the files. This takes them away.")
+                Text(removeNote)
                     .font(.system(size: 11.5))
                     .foregroundStyle(V2.textFaint)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.top, 2)
+        }
+    }
+
+    private var removeHelp: String {
+        switch plugin.assistant {
+        case "codex": return "Uninstall \(plugin.name) through Codex"
+        case "opencode":
+            return plugin.nativeKey.hasPrefix("local:")
+                ? "Move \(plugin.name) to the Trash"
+                : "Take \(plugin.name) out of opencode's configuration"
+        default: return "Uninstall \(plugin.name): its folder to the Trash and its entry out of Claude Code's register"
+        }
+    }
+
+    private var removeNote: String {
+        switch plugin.assistant {
+        case "codex": return "Codex does the removal. Switching it off above keeps the files."
+        case "opencode": return "opencode has no switch for a plugin, so removing is how you stop it loading."
+        default: return "Switching it off above keeps the files. This takes them away."
         }
     }
 

@@ -8,9 +8,11 @@ public struct InventoryScanner: Sendable {
     public let assistants: [Assistant]
     private var fm: FileManager { .default }
 
-    public init(paths: Paths) {
+    /// - Parameter locate: how a command-line tool is found, which decides which assistants count
+    ///   as installed. Injected so a self-check or a test can say what is on the machine.
+    public init(paths: Paths, locate: (String) -> URL? = AssistantCLIRegistry.defaultLocate) {
         self.paths = paths
-        self.assistants = AssistantRegistry.discover(paths: paths)
+        self.assistants = AssistantRegistry.discover(paths: paths, locate: locate)
     }
 
     // MARK: - Whole inventory
@@ -21,10 +23,7 @@ public struct InventoryScanner: Sendable {
         items += personalSkills()
         items += disabledSkills()
         items += personalCommands()
-        items += markdownItems(in: paths.agents, kind: .agent, origin: .personal)
-        items += markdownItems(
-            in: paths.agentsOff, kind: .agent, origin: .personal, enabled: false
-        )
+        items += personalAgents()
         items += mcpServers()
         items += AntigravityMCP(paths: paths).items()
         for store in MCPStore.stores(paths: paths) {
@@ -33,7 +32,8 @@ public struct InventoryScanner: Sendable {
 
         let codex = CodexPlugins(paths: paths).scan(project: project)
         let claudePlugins = claudeInstalledPlugins(project: project)
-        let plugins = (claudePlugins + codex.plugins).sorted { $0.name < $1.name }
+        let plugins = (claudePlugins + codex.plugins + OpenCodePlugins(paths: paths).scan())
+            .sorted { $0.name < $1.name }
         // Before reading them: an update may have brought back skills the user turned off.
         reapplyPluginChoices(claudePlugins)
         for plugin in claudePlugins {
@@ -309,8 +309,52 @@ public struct InventoryScanner: Sendable {
                 .appendingPathComponent(assistant.commandsRoot.lastPathComponent + "-off")
             for file in markdownFiles(in: root) {
                 let stem = file.deletingPathExtension().lastPathComponent
-                guard byName[stem] == nil, off[stem] == nil else { continue }
+                // A link parked while its real file was parked elsewhere reads as nothing, and must
+                // not win over the file it points at.
+                guard byName[stem] == nil, off[stem] == nil, fm.fileExists(atPath: file.path) else { continue }
                 off[stem] = markdownItem(at: file, kind: .command, origin: .personal, enabled: false)
+            }
+        }
+
+        return (Array(byName.values) + Array(off.values)).sorted { $0.name < $1.name }
+    }
+
+    // MARK: - Subagents
+
+    /// Subagents across every assistant that reads them from a folder, merged into one row each —
+    /// the same shape as commands, for the same reason. Claude Code's own folder is always read, so
+    /// a machine with nothing else sees exactly what it saw before.
+    func personalAgents() -> [Item] {
+        var byName: [String: Item] = [:]
+        var roots: [(id: String, live: URL)] = assistants.compactMap { assistant in
+            assistant.agentsRoot.map { (assistant.id, $0) }
+        }
+        if !roots.contains(where: { $0.id == "claude" }) { roots.insert(("claude", paths.agents), at: 0) }
+
+        for root in roots {
+            for file in markdownFiles(in: root.live) {
+                let stem = file.deletingPathExtension().lastPathComponent
+                if var existing = byName[stem] {
+                    existing.assistants.insert(root.id)
+                    byName[stem] = existing
+                } else {
+                    var item = markdownItem(at: file, kind: .agent, origin: .personal, enabled: true)
+                    item.assistants = [root.id]
+                    byName[stem] = item
+                }
+            }
+        }
+
+        var off: [String: Item] = [:]
+        for root in roots {
+            let parked = root.live.deletingLastPathComponent()
+                .appendingPathComponent(root.live.lastPathComponent + "-off")
+            for file in markdownFiles(in: parked) {
+                let stem = file.deletingPathExtension().lastPathComponent
+                // A link parked while its real file was parked elsewhere reads as nothing, and must
+                // not win over the file it points at.
+                guard byName[stem] == nil, off[stem] == nil, fm.fileExists(atPath: file.path) else { continue }
+                off[stem] = markdownItem(at: file, kind: .agent, origin: .personal, enabled: false)
             }
         }
 
@@ -364,7 +408,8 @@ public struct InventoryScanner: Sendable {
     // MARK: - Plugins
 
     public func installedPlugins(project: Project? = nil) -> [PluginInfo] {
-        (claudeInstalledPlugins(project: project) + CodexPlugins(paths: paths).scan(project: project).plugins)
+        (claudeInstalledPlugins(project: project) + CodexPlugins(paths: paths).scan(project: project).plugins
+            + OpenCodePlugins(paths: paths).scan())
             .sorted { $0.name < $1.name }
     }
 

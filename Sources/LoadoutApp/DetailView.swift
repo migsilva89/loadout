@@ -243,7 +243,7 @@ struct DetailView: View {
         if item.kind == .mcp {
             return item.origin == .personal && !item.declaredByRepository
         }
-        return (item.kind == .skill || item.kind == .command)
+        return (item.kind == .skill || item.kind == .command || item.kind == .agent)
             && item.origin == .personal && model.isEffectivelyEnabled(item)
     }
 
@@ -876,7 +876,9 @@ struct DetailView: View {
     // MARK: - Assistants card
 
     private func assistantsCard(_ item: Item) -> some View {
-        let assistants = model.visibleAssistants
+        // A subagent can only be handed to an assistant that reads them from a folder; showing the
+        // others would be showing a square that does nothing when pressed.
+        let assistants = model.visibleAssistants.filter { item.kind != .agent || $0.agentsRoot != nil }
         // For an MCP server "loaded" means switched on in that assistant's own config — the
         // row it lives in is a separate item per assistant, so `item.assistants` alone would
         // count only this row's owner and every other cell would read as empty.
@@ -993,7 +995,8 @@ struct DetailView: View {
     @ViewBuilder
     private func skillAssistantCell(_ assistant: Assistant, item: Item) -> some View {
         let has = item.assistants.contains(assistant.id)
-        let none = !has && !assistant.hasSkillsFolder
+        // "No skills folder yet" is a fact about skills; a command or a subagent has its own folder.
+        let none = item.kind == .skill && !has && !assistant.hasSkillsFolder
         // The one assistant that holds the last copy: unlinking there would take the skill with
         // it, so the row never becomes a click. `Mutations.unshare` refuses the same thing, but
         // refusing after the click means the app offered something it could not do. Read off the
@@ -1004,7 +1007,7 @@ struct DetailView: View {
             // Still reads as loaded — the check is true and worth seeing. Only the removal is
             // gone, dimmed the way a disabled control is.
             assistantRow(assistant, has: has, none: none)
-                .help("Only copy — removing it would delete the skill. Disable it instead.")
+                .help("Only copy — removing it would delete the \(item.kind.briefingNoun). Disable it instead.")
                 .opacity(0.55)
                 .spotlight(Spotlight.assistant(assistant.id))
         } else {
@@ -1015,7 +1018,7 @@ struct DetailView: View {
                     // On the content, not on the Button around it. A plain-styled button hands its
                     // tracking area to the label, and a tooltip hung outside that never fires —
                     // which is why no cell in this grid had one, whatever it showed.
-                    .help(assistantHelp(assistant, has: has))
+                    .help(assistantHelp(assistant, item: item, has: has))
             }
             .buttonStyle(.plain)
             .pointingHand()
@@ -1057,7 +1060,8 @@ struct DetailView: View {
         .contentShape(Rectangle())
     }
 
-    private func assistantHelp(_ assistant: Assistant, has: Bool) -> String {
+    private func assistantHelp(_ assistant: Assistant, item: Item, has: Bool) -> String {
+        let noun = item.kind.briefingNoun
         let count = assistantUsage[assistant.id] ?? 0
         let fired = count > 0
             ? "\(assistant.label) fired it \(uses(count)) in \(model.usageWindowLabel). "
@@ -1065,12 +1069,12 @@ struct DetailView: View {
         if has {
             // The glyph says carried; the tooltip is where "loaded" now lives in words.
             return "Loaded in \(assistant.label). " + fired
-                + "Click to stop \(assistant.label) from loading this skill."
+                + "Click to stop \(assistant.label) from loading this \(noun)."
         }
-        if assistant.hasSkillsFolder {
+        if item.kind != .skill || assistant.hasSkillsFolder {
             // The one that reads as a contradiction until it is spelled out: used, not loaded.
             let past = count > 0 ? "It isn't loaded there now. " : ""
-            return fired + past + "Click to add this skill to \(assistant.label)."
+            return fired + past + "Click to add this \(noun) to \(assistant.label)."
         }
         return "\(assistant.label) doesn't have a skills folder yet. Click to create \(assistant.skillsRoot.path) and add this skill."
     }

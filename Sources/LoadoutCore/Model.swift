@@ -192,7 +192,20 @@ public struct PluginInfo: Identifiable, Equatable, Sendable {
     public var nativeKey: String
     /// A provider or policy may expose an installation without a local enable switch.
     public var toggleUnavailableReason: String?
-    public var assistantLabel: String { assistant == "codex" ? "Codex" : "Claude Code" }
+    /// `v1.2.0` for a number, the word itself for `local`, and nothing at all when the plugin has no
+    /// version to show — never a bare "v" or "vlocal".
+    public var versionLabel: String {
+        guard let first = version.first else { return "" }
+        return first.isNumber ? "v\(version)" : version
+    }
+
+    public var assistantLabel: String {
+        switch assistant {
+        case "codex": return "Codex"
+        case "opencode": return "opencode"
+        default: return "Claude Code"
+        }
+    }
     /// `"vercel@claude-plugins-official"` — the key `enabledPlugins` uses.
     public var id: String
     public var name: String

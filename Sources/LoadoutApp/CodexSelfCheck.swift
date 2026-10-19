@@ -53,7 +53,7 @@ enum CodexSelfCheck {
 
             """
             try config.write(to: paths.codexConfig, atomically: true, encoding: .utf8)
-            let model = AppModel(paths: paths)
+            let model = AppModel(paths: paths, locate: AppModel.everythingInstalled)
             model.reload()
             if let error = model.errorMessage { print("Provider diagnostic: \(error)") }
             check("native Codex inventory has no diagnostics", model.errorMessage == nil)

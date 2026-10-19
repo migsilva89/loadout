@@ -226,6 +226,10 @@ public enum AssistantCLIRegistry {
         candidates += [
             "\(home)/.local/bin/\(name)",
             "\(home)/.opencode/bin/\(name)",
+            "\(home)/.bun/bin/\(name)",
+            "\(home)/.npm-global/bin/\(name)",
+            "\(home)/.cargo/bin/\(name)",
+            "\(home)/.factory/bin/\(name)",
             "/opt/homebrew/bin/\(name)",
             "/usr/local/bin/\(name)",
         ]

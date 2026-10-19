@@ -856,9 +856,11 @@ struct RemovePluginSheet: View {
                         .keyboardShortcut(.cancelAction)
                         .help("Leave the plugin installed")
                         .pointingHand()
-                    Button("Move to Trash") { model.confirmRemovePlugin() }
+                    if model.pluginRemovalRunning { ProgressView().controlSize(.small) }
+                    Button(confirmTitle) { model.confirmRemovePlugin() }
                         .keyboardShortcut(.defaultAction)
-                        .help("Uninstall it: folder to the Trash, entry out of Claude Code's register")
+                        .disabled(model.pluginRemovalRunning)
+                        .help(confirmHelp)
                         .pointingHand()
                 }
             }
@@ -878,9 +880,43 @@ struct RemovePluginSheet: View {
         return "Remove the \(plugin?.name ?? "") plugin?"
     }
 
+    /// opencode's own script is a file and goes to the Trash; everything else is the assistant's
+    /// to uninstall, so the button says what is going to happen.
+    private var movesToTrash: Bool {
+        guard let plugin else { return true }
+        return plugin.assistant == "claude" || plugin.nativeKey.hasPrefix("local:")
+    }
+
+    private var confirmTitle: String { movesToTrash ? "Move to Trash" : "Remove" }
+
+    private var confirmHelp: String {
+        switch plugin?.assistant {
+        case "codex": return "Ask Codex to uninstall it"
+        case "opencode": return movesToTrash ? "Move the file to the Trash" : "Take it out of opencode's configuration"
+        default: return "Uninstall it: folder to the Trash, entry out of Claude Code's register"
+        }
+    }
+
     private var message: String {
         if let error = model.pluginRemovalError { return error }
         guard let plugin else { return "" }
+        switch plugin.assistant {
+        case "codex":
+            return model.pluginRemovalDone
+                ? "\(plugin.name) is uninstalled from Codex. A copy of its configuration is in the Loadout backups. Codex keeps the \(plugin.marketplace) marketplace, so it can be installed again."
+                : "Codex uninstalls \(plugin.name) itself, and \(model.pluginContents(plugin)) go with it. A copy of Codex's configuration goes to the Loadout backups first, and the \(plugin.marketplace) marketplace stays."
+        case "opencode":
+            if plugin.nativeKey.hasPrefix("local:") {
+                return model.pluginRemovalDone
+                    ? "\(plugin.name) is in the Trash, with a copy in the Loadout backups."
+                    : "\(plugin.name) is a file in opencode's plugins folder. It moves to the Trash, with a copy in the Loadout backups first."
+            }
+            return model.pluginRemovalDone
+                ? "\(plugin.name) is out of opencode's configuration. A copy of the file is in the Loadout backups. A running opencode stops loading it when it restarts."
+                : "opencode takes \(plugin.name) out of its configuration. A copy of that file goes to the Loadout backups first, and a running opencode stops loading it when it restarts."
+        default:
+            break
+        }
         if model.pluginRemovalDone {
             return """
                 \(plugin.name) is out of Claude Code's register and its folder is in the Trash, with a \

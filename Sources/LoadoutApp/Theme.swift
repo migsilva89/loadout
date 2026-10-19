@@ -309,8 +309,10 @@ enum AssistantBrand {
     /// slate rather than a hue invented for it. Command Code and Hermes get one too: both
     /// draw themselves in white on black, so a hue here would be a hue nobody chose.
     static func color(for id: String) -> Color {
-        Color(hex: hues[id] ?? 0x8A8F98)
+        Color(hex: hex(for: id))
     }
+
+    static func hex(for id: String) -> UInt32 { hues[id] ?? 0x8A8F98 }
 }
 
 // MARK: - Shared pieces

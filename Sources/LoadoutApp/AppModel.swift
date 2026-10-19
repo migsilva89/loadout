@@ -177,12 +177,33 @@ final class AppModel {
     /// A plugin waiting on the "this is what will happen" note before it is uninstalled. Non-nil is
     /// what shows the sheet, and it stays non-nil afterwards to say how it went.
     var pendingPluginRemoval: PluginInfo?
+    /// The Install plugin sheet, the plugins it can offer, and which commands are in flight.
+    /// Plain properties because the logic that drives them lives in `AppModel+Plugins.swift`.
+    var isInstallingPlugin = false
+    var pluginInstallAssistant = "claude"
+    var pluginCatalog: [PluginCatalogEntry] = []
+    var pluginCatalogError: String?
+    var isLoadingPluginCatalog = false
+    /// Plugin ids being updated or removed, and the specs being installed, so a button can say it
+    /// is working and cannot be pressed twice.
+    var busyPlugins: Set<String> = []
+    /// The last thing a plugin command said, shown in the sheet it was started from.
+    var pluginReceipt: String?
+    /// What went wrong with the last install, in the sheet that asked: a modal sheet and an
+    /// app-wide alert do not reliably share the screen.
+    var pluginInstallError: String?
 
     let paths: Paths
     /// Re-made on every reload rather than kept for the life of the app: it discovers the
     /// assistants on the machine at the moment it is built, and installing one — or giving an
     /// existing one its first `skills` folder — used to need a relaunch to be seen.
     private(set) var scanner: InventoryScanner
+    /// How a command-line tool is found. It decides which assistants count as installed, and is a
+    /// property rather than a call so a self-check pointed at a throwaway home can say that
+    /// everything is, instead of inheriting what happens to be installed on the machine running it.
+    @ObservationIgnored let locate: @Sendable (String) -> URL?
+    /// A locator that finds every tool, for runs against a throwaway home.
+    nonisolated static let everythingInstalled: @Sendable (String) -> URL? = { URL(fileURLWithPath: "/usr/bin/\($0)") }
     private var inventoryGeneration = 0
     let mutations: Mutations
     let copilot = Copilot()
@@ -257,7 +278,11 @@ final class AppModel {
     /// - Parameter roots: the folders to search for repositories. Given explicitly only by the
     ///   self-check, which points the app at a throwaway home and must not inherit the folders the
     ///   person at this keyboard happens to work in.
-    init(paths: Paths = .live(), roots injectedRoots: ProjectRoots? = nil) {
+    init(
+        paths: Paths = .live(), roots injectedRoots: ProjectRoots? = nil,
+        locate: @escaping @Sendable (String) -> URL? = AssistantCLIRegistry.defaultLocate
+    ) {
+        self.locate = locate
         // Before anything opens a file: Loadout's own backups, index and icons used to sit
         // inside ~/.claude, and this is the launch that moves them into the app's own folder.
         // Ahead of `UsageIndex` above all — opening the index first would create an empty one
@@ -267,7 +292,7 @@ final class AppModel {
         // Where the owner's own assistant icons are read from, told once rather than looked up
         // from the home directory again — a fixture home gets its own, like everything else.
         AppIconCache.userIconDirectory = paths.cliIcons
-        self.scanner = InventoryScanner(paths: paths)
+        self.scanner = InventoryScanner(paths: paths, locate: locate)
         self.mutations = Mutations(paths: paths)
         self.usageIndex = try? UsageIndex(paths: paths)
         let roots = injectedRoots ?? ProjectRoots.load(home: paths.home)
@@ -508,7 +533,7 @@ final class AppModel {
         inventoryGeneration += 1
         // A machine can gain an assistant while the app is open. Discovering them costs one
         // directory listing, and doing it here is what lets a new one appear without a relaunch.
-        scanner = InventoryScanner(paths: paths)
+        scanner = InventoryScanner(paths: paths, locate: locate)
         let inventory = showsEverything
             ? scanner.scanEverything(projects: projects)
             : scanner.scanAll(project: context)
@@ -524,7 +549,7 @@ final class AppModel {
     private func reloadOffMainThread() {
         inventoryGeneration += 1
         let generation = inventoryGeneration
-        let scanner = InventoryScanner(paths: paths)
+        let scanner = InventoryScanner(paths: paths, locate: locate)
         let everything = showsEverything
         let projects = projects
         let context = context
@@ -818,7 +843,7 @@ final class AppModel {
         if case .personal = item.origin {
             // Coming back is a choice, not an undo: which assistants load it again is exactly
             // what the app cannot guess for someone.
-            let proposal = mutations.restoreProposal(for: item, assistants: assistants)
+            let proposal = mutations.restoreProposal(for: item, assistants: everyAssistant)
             restoring = RestoringSkill(
                 item: item,
                 chosen: Set(proposal.assistants.isEmpty ? [] : proposal.assistants),
@@ -957,7 +982,7 @@ final class AppModel {
             } else if item.kind == .mcp {
                 try mutations.setServer(item, enabled: false)
             } else {
-                try mutations.disableSkill(item, assistants: assistants)
+                try mutations.disableSkill(item, assistants: everyAssistant)
             }
         }
     }
@@ -994,7 +1019,7 @@ final class AppModel {
         guard !chosen.isEmpty else { return }
         let where_ = chosen.map(\.label).joined(separator: " and ")
         perform("Enabled \(restoring.item.name) in \(where_).") {
-            try mutations.enableSkill(restoring.item, into: chosen, assistants: assistants)
+            try mutations.enableSkill(restoring.item, into: chosen, assistants: everyAssistant)
         }
     }
 
@@ -1006,8 +1031,16 @@ final class AppModel {
         disable(item)
     }
 
-    /// Every assistant found on this machine, in the order the row shows them.
-    var assistants: [Assistant] { scanner.assistants }
+    /// Every assistant installed on this machine, in the order the row shows them.
+    ///
+    /// Not the ones that merely left a dot-directory behind: an uninstalled assistant has nothing
+    /// to share a skill with, and a column for it in the MCP matrix is a switch into the void.
+    /// The scanner still reads their folders — a skill linked into one is still a skill — and
+    /// `everyAssistant` is there for the code that has to see them.
+    var assistants: [Assistant] { scanner.assistants.filter(\.isInstalled) }
+
+    /// Installed or not: what the file operations walk, so a leftover link is still found.
+    var everyAssistant: [Assistant] { scanner.assistants }
 
     /// Whether the plugin an item came from is switched off as a whole — which is a different
     /// fact from the item's own switch, and has to be said separately or one of them ends up lying.
@@ -1098,8 +1131,19 @@ final class AppModel {
         if item.kind == .command, present, assistant.id != "claude" {
             done += " Claude-only frontmatter doesn't carry over."
         }
+        // The same is true of a subagent's `tools` and `model`: the file is shared, and each
+        // assistant reads its own vocabulary out of it.
+        if item.kind == .agent, present, assistant.id != "claude" {
+            done += " Fields like tools and model are read by each assistant its own way."
+        }
         perform(done) {
-            if item.kind == .command {
+            if item.kind == .agent {
+                if present {
+                    try mutations.shareAgent(item, with: assistant)
+                } else {
+                    try mutations.unshareAgent(item, from: assistant)
+                }
+            } else if item.kind == .command {
                 if present {
                     try mutations.shareCommand(item, with: assistant)
                 } else {
@@ -1113,15 +1157,21 @@ final class AppModel {
         }
     }
 
-    /// Everything one assistant has and the other does not.
+    /// Everything another assistant has that this one does not: skills and commands anywhere, and
+    /// subagents where this assistant reads them from a folder at all.
     func gaps(for assistant: Assistant) -> [Item] {
-        items.filter {
-            $0.kind == .skill && $0.origin == .personal && $0.enabled
-                && !$0.assistants.contains(assistant.id) && !$0.assistants.isEmpty
+        items.filter { item in
+            guard item.origin == .personal, item.enabled, !item.assistants.isEmpty,
+                  !item.assistants.contains(assistant.id) else { return false }
+            switch item.kind {
+            case .skill, .command: return true
+            case .agent: return assistant.agentsRoot != nil
+            case .mcp, .plugin: return false
+            }
         }
     }
 
-    /// Gives an assistant every skill it is missing, in one go.
+    /// Gives an assistant every skill, command and subagent it is missing, in one go.
     func syncAll(to assistant: Assistant) {
         let missing = gaps(for: assistant)
         guard !missing.isEmpty else {
@@ -1131,14 +1181,18 @@ final class AppModel {
         var failures: [String] = []
         for item in missing {
             do {
-                try mutations.share(item, with: assistant)
+                switch item.kind {
+                case .command: try mutations.shareCommand(item, with: assistant)
+                case .agent: try mutations.shareAgent(item, with: assistant)
+                default: try mutations.share(item, with: assistant)
+                }
             } catch {
                 failures.append(item.name)
             }
         }
         reload()
         if failures.isEmpty {
-            statusMessage = "\(assistant.label) now loads \(missing.count) \(missing.count == 1 ? "skill" : "skills")."
+            statusMessage = "\(assistant.label) now loads \(missing.count) \(missing.count == 1 ? "item" : "items")."
             errorMessage = nil
         } else {
             errorMessage = "Couldn't sync: \(failures.joined(separator: ", "))."
@@ -1278,12 +1332,8 @@ final class AppModel {
         assistants.first { $0.id == assistant }?.label ?? assistant.capitalized
     }
 
-    /// Opens the note that precedes uninstalling a plugin.
+    /// Opens the note that precedes uninstalling a plugin, for any of the assistants that has them.
     func removePlugin(_ plugin: PluginInfo) {
-        guard plugin.assistant == "claude" else {
-            errorMessage = "Remove this plugin in Codex. You can turn it off here without removing its files."
-            return
-        }
         pendingPluginRemoval = plugin
         pluginRemovalDone = false
         pluginRemovalError = nil
@@ -1292,6 +1342,10 @@ final class AppModel {
     /// The note was read; take the plugin out and keep the sheet up to say what happened.
     func confirmRemovePlugin() {
         guard let plugin = pendingPluginRemoval else { return }
+        guard plugin.assistant == "claude" else {
+            removeThroughAssistant(plugin)
+            return
+        }
         do {
             try mutations.removePlugin(plugin)
             pluginRemovalDone = true
@@ -1307,6 +1361,31 @@ final class AppModel {
         }
     }
 
+    /// Codex and opencode take their own plugins out: one through its local protocol, the other
+    /// through its CLI. Slow enough to be felt, so it runs off the main thread with the sheet
+    /// saying so.
+    private func removeThroughAssistant(_ plugin: PluginInfo) {
+        guard !pluginRemovalRunning else { return }
+        pluginRemovalRunning = true
+        let service = PluginService(paths: paths, locate: locate)
+        Task.detached {
+            let result = Result { try service.uninstall(plugin) }
+            await MainActor.run { [self] in
+                pluginRemovalRunning = false
+                switch result {
+                case .success(let outcome):
+                    pluginRemovalDone = true
+                    statusMessage = outcome.summary
+                    errorMessage = nil
+                    if selectedPluginID == plugin.id { selectedPluginID = nil }
+                    reload()
+                case .failure(let error):
+                    pluginRemovalError = (error as? LoadoutError)?.errorDescription ?? error.localizedDescription
+                }
+            }
+        }
+    }
+
     func dismissPluginRemoval() {
         pendingPluginRemoval = nil
         pluginRemovalDone = false
@@ -1315,6 +1394,7 @@ final class AppModel {
 
     private(set) var pluginRemovalDone = false
     private(set) var pluginRemovalError: String?
+    private(set) var pluginRemovalRunning = false
 
     /// What a plugin ships, counted by kind, for the line that says what removing it takes away.
     func pluginContents(_ plugin: PluginInfo) -> String {
@@ -1325,7 +1405,9 @@ final class AppModel {
             guard total > 0 else { return nil }
             return "\(total) \(noun)\(total == 1 ? "" : "s")"
         }
-        guard !parts.isEmpty else { return "nothing this app can see" }
+        guard !parts.isEmpty else {
+            return plugin.assistant == "opencode" ? "code opencode runs, not files this app lists" : "nothing this app can see"
+        }
         guard parts.count > 1 else { return parts[0] }
         return parts.dropLast().joined(separator: ", ") + " and " + parts[parts.count - 1]
     }
