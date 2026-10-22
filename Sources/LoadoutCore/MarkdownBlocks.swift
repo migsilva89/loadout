@@ -39,6 +39,9 @@ public enum MarkdownBlock: Equatable, Sendable {
 /// rules. Deliberately small — a full CommonMark engine would be a dependency bought to render
 /// documents that are, in practice, this simple.
 public enum MarkdownBlocks {
+    /// The document's blocks, top to bottom. Each line goes to the first rule that claims it; a line
+    /// no rule claims joins the open paragraph, which a blank line or any other block closes.
+    /// Frontmatter counts only when the first line is `---` and a later `---` closes it.
     public static func parse(_ text: String) -> [MarkdownBlock] {
         var blocks: [MarkdownBlock] = []
         var lines = text.components(separatedBy: "\n")

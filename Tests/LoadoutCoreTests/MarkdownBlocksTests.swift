@@ -75,4 +75,60 @@ final class MarkdownBlocksTests: XCTestCase {
             [.paragraph("Above."), .rule, .paragraph("Below."), .rule]
         )
     }
+
+    // MARK: - Boundaries between rules
+
+    func testARuleAndABulletAreToldApartByWhatFollowsTheMarker() {
+        XCTAssertEqual(
+            MarkdownBlocks.parse("A\n---\n- one\n***\n* two"),
+            [.paragraph("A"), .rule, .bullet("one"), .rule, .bullet("two")]
+        )
+    }
+
+    func testAHeadingEndsTheParagraphAboveItWithoutABlankLine() {
+        XCTAssertEqual(
+            MarkdownBlocks.parse("Some text\n# Heading"),
+            [.paragraph("Some text"), .heading(level: 1, text: "Heading")]
+        )
+    }
+
+    func testALineOfOnlySpacesEndsAParagraph() {
+        XCTAssertEqual(
+            MarkdownBlocks.parse("First\n   \nSecond"),
+            [.paragraph("First"), .paragraph("Second")]
+        )
+    }
+
+    func testAnIndentedHeadingIsStillAHeading() {
+        XCTAssertEqual(MarkdownBlocks.parse("  ## Indented"), [.heading(level: 2, text: "Indented")])
+    }
+
+    func testADecimalOrALongNumberIsNotANumberedItem() {
+        XCTAssertEqual(
+            MarkdownBlocks.parse("1.5 litres\n\n1234. x"),
+            [.paragraph("1.5 litres"), .paragraph("1234. x")]
+        )
+    }
+
+    func testABareQuoteMarkerIsAnEmptyQuote() {
+        XCTAssertEqual(MarkdownBlocks.parse(">"), [.quote("")])
+    }
+
+    func testAnUnclosedFenceRunsToTheEndAsCode() {
+        XCTAssertEqual(
+            MarkdownBlocks.parse("Before\n```\ncode line\n# not a heading"),
+            [.paragraph("Before"), .code("code line\n# not a heading")]
+        )
+    }
+
+    func testAnOpeningDashLineWithoutAClosingOneIsNotFrontmatter() {
+        XCTAssertEqual(
+            MarkdownBlocks.parse("---\nname: x\n\nBody"),
+            [.rule, .paragraph("name: x"), .paragraph("Body")]
+        )
+    }
+
+    func testAnEmptyDocumentHasNoBlocks() {
+        XCTAssertEqual(MarkdownBlocks.parse(""), [])
+    }
 }
