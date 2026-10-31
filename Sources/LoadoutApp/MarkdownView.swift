@@ -172,7 +172,7 @@ struct MarkdownView: View {
             case .paragraph(let value), .quote(let value), .bullet(let value): text = value
             case .numbered(_, let value): text = value
             case .code(let code): text = code.components(separatedBy: "\n").first ?? ""
-            case .heading, .rule, .frontmatter: continue
+            case .heading, .rule, .table, .frontmatter: continue
             }
             // The card clamps to three lines; carrying a whole section past that is waste.
             return String(text.prefix(300))
@@ -296,6 +296,57 @@ struct MarkdownView: View {
 
         case .rule:
             Hairline(color: Color.white.opacity(0.07)).padding(.vertical, 8)
+
+        case .table(let table):
+            // The container's full width, like a code block: a table squeezed into the prose
+            // measure wraps every cell into a column of single words. Cells wrap past that.
+            Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 0) {
+                GridRow {
+                    ForEach(Array(table.header.enumerated()), id: \.offset) { column, cell in
+                        tableCell(cell, alignment: table.alignments[column], header: true)
+                            .gridColumnAlignment(Self.horizontal(table.alignments[column]))
+                    }
+                }
+                Hairline(color: Color.white.opacity(0.16)).gridCellUnsizedAxes(.horizontal)
+                ForEach(Array(table.rows.enumerated()), id: \.offset) { index, row in
+                    if index > 0 {
+                        Hairline(color: Color.white.opacity(0.07)).gridCellUnsizedAxes(.horizontal)
+                    }
+                    GridRow {
+                        ForEach(Array(row.enumerated()), id: \.offset) { column, cell in
+                            tableCell(cell, alignment: table.alignments[column], header: false)
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, 9)
+        }
+    }
+
+    private func tableCell(_ text: String, alignment: MarkdownTable.Alignment, header: Bool) -> some View {
+        Text(inline(text))
+            .font(.system(size: fontSize - 1, weight: header ? .semibold : .regular, design: design))
+            .lineSpacing(fontSize * 0.3)
+            .foregroundStyle(header ? Color.white : body_)
+            .multilineTextAlignment(Self.text(alignment))
+            .padding(.vertical, 6)
+            .textSelection(.enabled)
+    }
+
+    private static func horizontal(_ alignment: MarkdownTable.Alignment) -> HorizontalAlignment {
+        switch alignment {
+        case .leading: .leading
+        case .center: .center
+        case .trailing: .trailing
+        }
+    }
+
+    private static func text(_ alignment: MarkdownTable.Alignment) -> TextAlignment {
+        switch alignment {
+        case .leading: .leading
+        case .center: .center
+        case .trailing: .trailing
         }
     }
 
