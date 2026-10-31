@@ -4,6 +4,15 @@ Notable changes, newest first. Dates are the day the work landed on `main`.
 
 The versions are what a release is tagged as; between tags, `main` is what is being used daily.
 
+## 0.6.4 — 2026-10-31
+
+### Fixed
+
+- **Tables in the preview.** A Markdown table in a skill or command file showed as one line of
+  pipes and dashes. The Preview tab now draws it as a table, with a header row, column
+  alignment, and bold, `code` and links inside the cells. Tables inside a list item or a quote
+  are not drawn yet. Thanks to @g7xu, who reported it and wrote the fix. (#16, #23, #25)
+
 ## 0.6.3 — 2026-10-18
 
 ### Changed
