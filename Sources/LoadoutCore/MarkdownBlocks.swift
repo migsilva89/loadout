@@ -42,9 +42,10 @@ public enum MarkdownBlock: Equatable, Sendable {
 /// render documents that are, in practice, this simple.
 public enum MarkdownBlocks {
     /// The document's blocks, top to bottom. Each line goes to the first rule that claims it; a line
-    /// no rule claims starts a table when a matching delimiter row follows it, and otherwise joins
-    /// the open paragraph, which a blank line or any other block closes. Frontmatter counts only
-    /// when the first line is `---` and a later `---` closes it.
+    /// no rule claims joins the open table when it has a `|`, starts a table when a matching
+    /// delimiter row follows it, and otherwise joins the open paragraph. A blank line or any other
+    /// block closes whichever is open. Frontmatter counts only when the first line is `---` and a
+    /// later `---` closes it.
     public static func parse(_ text: String) -> [MarkdownBlock] {
         var blocks: [MarkdownBlock] = []
         var lines = text.components(separatedBy: "\n")
@@ -60,7 +61,10 @@ public enum MarkdownBlocks {
         }
 
         var paragraph: [String] = []
-        func flushParagraph() {
+        var table: MarkdownTable?
+        func closeOpenBlock() {
+            if let open = table { blocks.append(.table(open)) }
+            table = nil
             let joined = paragraph.joined(separator: " ").trimmingCharacters(in: .whitespaces)
             if !joined.isEmpty { blocks.append(.paragraph(joined)) }
             paragraph = []
@@ -72,7 +76,7 @@ public enum MarkdownBlocks {
             let line = raw.trimmingCharacters(in: .whitespaces)
 
             if line.hasPrefix("```") {
-                flushParagraph()
+                closeOpenBlock()
                 var code: [String] = []
                 index += 1
                 while index < lines.count,
@@ -86,51 +90,46 @@ public enum MarkdownBlocks {
             }
 
             if line.isEmpty {
-                flushParagraph()
+                closeOpenBlock()
             } else if line == "---" || line == "***" || line.hasPrefix("___") {
-                flushParagraph()
+                closeOpenBlock()
                 blocks.append(.rule)
             } else if line.hasPrefix("#") {
-                flushParagraph()
+                closeOpenBlock()
                 let level = line.prefix(while: { $0 == "#" }).count
                 blocks.append(.heading(
                     level: level,
                     text: String(line.dropFirst(level)).trimmingCharacters(in: .whitespaces)
                 ))
             } else if line.hasPrefix("- ") || line.hasPrefix("* ") || line.hasPrefix("+ ") {
-                flushParagraph()
+                closeOpenBlock()
                 blocks.append(.bullet(String(line.dropFirst(2))))
             } else if line.hasPrefix("> ") || line == ">" {
-                flushParagraph()
+                closeOpenBlock()
                 blocks.append(.quote(String(line.dropFirst(1)).trimmingCharacters(in: .whitespaces)))
             } else if let marker = numberedMarker(line) {
-                flushParagraph()
+                closeOpenBlock()
                 blocks.append(.numbered(
                     marker: marker,
                     text: String(line.dropFirst(marker.count)).trimmingCharacters(in: .whitespaces)
                 ))
-            } else if let found = MarkdownTable.read(lines, at: index) {
+            } else if let width = table?.header.count, line.contains("|") {
                 // Last among the rules, as on GitHub: a heading, bullet, quote or numbered
-                // item that contains a pipe stays what it is, even over a delimiter row.
-                flushParagraph()
-                blocks.append(.table(found.table))
+                // item that contains a pipe stays what it is, even inside or over a table.
+                table?.rows.append(MarkdownTable.row(line, width: width))
+            } else if let found = MarkdownTable.start(lines, at: index) {
+                closeOpenBlock()
+                table = found.table
                 index = found.next
                 continue
             } else {
+                if table != nil { closeOpenBlock() }
                 paragraph.append(line)
             }
             index += 1
         }
-        flushParagraph()
+        closeOpenBlock()
         return blocks
-    }
-
-    /// Mirrors the rules in `parse`: a block added there must be added here too.
-    static func opensBlock(_ line: String) -> Bool {
-        line.hasPrefix("```") || line == "---" || line == "***" || line.hasPrefix("___")
-            || line.hasPrefix("#") || line.hasPrefix("- ") || line.hasPrefix("* ")
-            || line.hasPrefix("+ ") || line.hasPrefix("> ") || line == ">"
-            || numberedMarker(line) != nil
     }
 
     /// `1.` or `12)` at the start of a line.
@@ -162,23 +161,20 @@ public struct MarkdownTable: Equatable, Sendable {
         self.rows = rows
     }
 
-    /// Nil unless `lines[start + 1]` is a delimiter row with as many cells as the header.
-    static func read(_ lines: [String], at start: Int) -> (table: MarkdownTable, next: Int)? {
+    /// The empty table whose header is `lines[start]`, and the index of its first body line. Nil
+    /// unless `lines[start + 1]` is a delimiter row with as many cells as the header.
+    static func start(_ lines: [String], at start: Int) -> (table: MarkdownTable, next: Int)? {
         guard start + 1 < lines.count, lines[start].contains("|"),
               let alignments = alignments(lines[start + 1]) else { return nil }
         let header = cells(lines[start])
         guard header.count == alignments.count else { return nil }
+        return (MarkdownTable(header: header, alignments: alignments, rows: []), start + 2)
+    }
 
-        var rows: [[String]] = []
-        var index = start + 2
-        while index < lines.count {
-            let line = lines[index].trimmingCharacters(in: .whitespaces)
-            guard !line.isEmpty, line.contains("|"), !MarkdownBlocks.opensBlock(line) else { break }
-            let row = cells(line)
-            rows.append(header.indices.map { $0 < row.count ? row[$0] : "" })
-            index += 1
-        }
-        return (MarkdownTable(header: header, alignments: alignments, rows: rows), index)
+    /// A body row cut or padded to `width` cells.
+    static func row(_ line: String, width: Int) -> [String] {
+        let cells = cells(line)
+        return (0..<width).map { $0 < cells.count ? cells[$0] : "" }
     }
 
     private static func alignments(_ line: String) -> [Alignment]? {
