@@ -48,7 +48,7 @@ Sources/
 ├─ LoadoutCore/     the UI-less library — the rules and the tests live here
 │  ├─ Paths           every path, injected — this is what makes real testing possible
 │  ├─ Frontmatter     a forgiving YAML reader, including > and | blocks
-│  ├─ MarkdownBlocks  the reading pane's block reader: headings, lists, quotes, code, rules
+│  ├─ MarkdownBlocks  the reading pane's block reader: headings, lists, quotes, code, rules, tables
 │  ├─ InventoryScanner scans skills, commands, subagents, plugins and MCP
 │  ├─ Mutations       create, save, move, delete — always after a snapshot
 │  ├─ UsageIndex      an incremental SQLite index over the session logs
