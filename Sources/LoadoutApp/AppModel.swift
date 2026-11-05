@@ -809,16 +809,42 @@ final class AppModel {
         if case .personal = item.origin {
             // Coming back is a choice, not an undo: which assistants load it again is exactly
             // what the app cannot guess for someone.
-            let proposal = mutations.restoreProposal(for: item, assistants: assistants)
+            let proposal = mutations.restoreProposal(
+                for: item, assistants: assistants, hidden: hiddenAssistantIDs
+            )
+            // What the record names but Settings hides. Never ticked, and said out loud, because
+            // that link does not come back.
+            let recorded = mutations.restoreProposal(for: item, assistants: assistants).assistants
+            let leftOut = assistants
+                .filter { recorded.contains($0.id) && hiddenAssistantIDs.contains($0.id) }
+                .map(\.label)
+            // Parked from the shared store with nobody to offer: there is nothing to ask, it goes
+            // back where it was.
+            if item.inSharedStore, proposal.assistants.isEmpty {
+                let note = leftOut.isEmpty ? "" : " Hidden in Settings, so not linked: \(leftOut.joined(separator: ", "))."
+                perform("Enabled \(item.name) in the shared folder.\(note)") {
+                    try mutations.enableSkill(item, assistants: assistants, hidden: hiddenAssistantIDs)
+                }
+                return
+            }
             restoring = RestoringSkill(
                 item: item,
-                chosen: Set(proposal.assistants.isEmpty ? [] : proposal.assistants),
-                remembered: proposal.remembered
+                chosen: Set(proposal.assistants),
+                remembered: proposal.remembered,
+                leftOut: leftOut
             )
             return
         }
 
         perform("Enabled \(item.name).") { try mutations.enableSkill(item) }
+    }
+
+    /// What the switch on a skill in the shared store does. Nil for every other row.
+    static func sharedSwitchHint(for item: Item) -> String? {
+        guard item.kind == .skill, item.inSharedStore else { return nil }
+        return item.enabled
+            ? "Disable — moves it to ~/.agents/skills-off and removes any links, so nothing reading ~/.agents/skills sees it"
+            : "Enable — moves it back to ~/.agents/skills, with any links it had"
     }
 
     /// Takes a copy of something that lives in a repository and makes it yours everywhere.
@@ -950,7 +976,8 @@ final class AppModel {
     /// Puts a skill back into the assistants picked in the sheet (AC3.6, AC3.7).
     func confirmRestore() {
         guard let restoring else { return }
-        let chosen = assistants.filter { restoring.chosen.contains($0.id) }
+        // Only what the sheet could show. A tick nobody can see is not a choice.
+        let chosen = visibleAssistants.filter { restoring.chosen.contains($0.id) }
         self.restoring = nil
         guard !chosen.isEmpty else { return }
         let where_ = chosen.map(\.label).joined(separator: " and ")
@@ -1532,7 +1559,9 @@ final class AppModel {
         // `~/.claude.json` itself, not the folder it sits in — that folder is the home directory,
         // and watching a home means being woken by every download and every editor's autosave.
         var directories = [paths.skills, paths.skillsOff, paths.commands, paths.agents,
-                           paths.agentsOff, paths.sharedSkills, paths.pluginCache,
+                           paths.agentsOff, paths.sharedSkills,
+                           paths.sharedSkills.deletingLastPathComponent().appendingPathComponent("skills-off"),
+                           paths.pluginCache,
                            paths.claudeJSON, paths.codexConfig, paths.codexPluginCache]
         directories += plugins.filter { $0.assistant == "codex" }.map(\.installPath)
         for assistant in scanner.assistants {
@@ -1579,6 +1608,8 @@ struct RestoringSkill: Identifiable {
     var item: Item
     var chosen: Set<String>
     var remembered: Bool
+    /// Assistants the record names but Settings hides, by label.
+    var leftOut: [String] = []
 
     var id: String { item.id }
 }

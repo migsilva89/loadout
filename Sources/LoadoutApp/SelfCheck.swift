@@ -617,6 +617,56 @@ enum SelfCheck {
         model.errorMessage = nil
         model.showsAskPanel = false
 
+        // A skill only the shared store holds: listed and editable, its switch left alone, and
+        // handed to an assistant only when somebody asks.
+        let storeFolder = paths.sharedSkills.appendingPathComponent("from-the-store")
+        try! FileManager.default.createDirectory(at: storeFolder, withIntermediateDirectories: true)
+        try! "---\nname: from-the-store\ndescription: In the store.\n---\n\nBody.".write(
+            to: storeFolder.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8
+        )
+        model.reload()
+        func stored() -> Item? { model.items.first { $0.kind == .skill && $0.name == "from-the-store" } }
+        check("a skill only the shared store holds is listed", stored()?.isSharedOnly == true)
+        model.toggle(stored()!)
+        let storeOff = paths.sharedSkills.deletingLastPathComponent()
+            .appendingPathComponent("skills-off/from-the-store")
+        check("switching it off parks it beside the store",
+              FileManager.default.fileExists(atPath: storeOff.path) && !FileManager.default.fileExists(atPath: storeFolder.path))
+        model.toggle(stored()!)
+        check("switching it on asks nothing and puts it back",
+              model.restoring == nil && FileManager.default.fileExists(atPath: storeFolder.path)
+              && stored()?.isSharedOnly == true && stored()?.enabled == true)
+        let selectionBeforeStore = model.selectedID
+        model.select(stored()!.id)
+        model.draft = "---\nname: from-the-store\ndescription: Edited here.\n---\n\nBody."
+        model.isDirty = true
+        model.save()
+        check("editing it saves in the store", stored()?.description == "Edited here.")
+        check("and links it to nobody", stored()?.assistants.isEmpty == true)
+        if let codex = model.assistants.first(where: { $0.id == "codex" }) {
+            let codexLink = codex.skillsRoot.appendingPathComponent("from-the-store")
+            check("Sync all does not sweep it up", !model.gaps(for: codex).contains { $0.name == "from-the-store" })
+            model.setAssistant(codex, on: stored()!, present: true)
+            check("asking links it to that assistant", stored()?.assistants == ["codex"]
+                && (try? FileManager.default.destinationOfSymbolicLink(atPath: codexLink.path)) != nil)
+            model.setAssistant(codex, on: stored()!, present: false)
+            check("and taking it back leaves it listed in the store", stored()?.isSharedOnly == true
+                && !FileManager.default.fileExists(atPath: codexLink.path))
+
+            // Linked from exactly one assistant: it has to come back as it was, not as that
+            // assistant's private copy.
+            model.setAssistant(codex, on: stored()!, present: true)
+            model.toggle(stored()!)
+            check("off takes the one link with it", !FileManager.default.fileExists(atPath: codexLink.path))
+            model.toggle(stored()!)
+            check("on asks, proposing that assistant", model.restoring?.chosen == ["codex"])
+            model.confirmRestore()
+            check("and it comes back in the store with that link", stored()?.assistants == ["codex"]
+                && FileManager.default.fileExists(atPath: storeFolder.appendingPathComponent("SKILL.md").path)
+                && (try? FileManager.default.destinationOfSymbolicLink(atPath: codexLink.path)) != nil)
+        }
+        model.select(selectionBeforeStore)
+
         // Delete
         model.select(model.items.first { $0.name == "self-check-skill" }?.id)
         model.deleteSelected()

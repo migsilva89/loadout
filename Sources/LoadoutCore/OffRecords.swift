@@ -55,20 +55,22 @@ public struct OffRecords: Sendable {
         return file.entries
     }
 
-    public func entry(named name: String) -> Entry? {
-        entries().first { $0.name == name }
+    /// `owner` tells apart two different skills parked under one name, each with its own owner.
+    public func entry(named name: String, owner: String? = nil) -> Entry? {
+        entries().first { $0.name == name && (owner == nil || $0.owner == owner) }
     }
 
     public func remember(_ entry: Entry) throws {
-        var all = entries().filter { $0.name != entry.name }
+        var all = entries().filter { $0.name != entry.name || $0.owner != entry.owner }
         all.append(entry)
         try writeSkills(all)
     }
 
-    public func forget(_ name: String) throws {
+    public func forget(_ name: String, owner: String? = nil) throws {
         let all = entries()
-        guard all.contains(where: { $0.name == name }) else { return }
-        try writeSkills(all.filter { $0.name != name })
+        let remaining = all.filter { $0.name != name || (owner != nil && $0.owner != owner) }
+        guard remaining.count != all.count else { return }
+        try writeSkills(remaining)
     }
 
     private func writeSkills(_ entries: [Entry]) throws {

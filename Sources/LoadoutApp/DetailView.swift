@@ -388,6 +388,7 @@ struct DetailView: View {
         if item.pluginID != nil, model.pluginIsOff(for: item) {
             return "Turn on the plugin before changing this \(noun)"
         }
+        if let hint = AppModel.sharedSwitchHint(for: item) { return hint }
         if item.kind == .mcp {
             return item.enabled
                 ? "Turn off to lift this server out of the assistant's configuration, keeping what it said so you can put it back"
@@ -421,6 +422,7 @@ struct DetailView: View {
             }
         }
         let kind = item.kind.label
+        if item.inSharedStore { return "Shared \(kind.lowercased())" }
         switch item.origin {
         case .personal: return "Personal \(kind.lowercased())"
         case .project(let name): return "\(kind) in \(name)"
@@ -783,6 +785,9 @@ struct DetailView: View {
     /// repository" and "from a plugin" leave out.
     private func sourceHelp(_ item: Item) -> String {
         let noun = item.kind.briefingNoun
+        if item.inSharedStore {
+            return "In ~/.agents/skills. The Assistants card below shows which assistants link to it"
+        }
         switch item.origin {
         case .personal:
             return "Yours, in your home folder, so every project can load this \(noun)"
@@ -910,7 +915,7 @@ struct DetailView: View {
         // it, so the row never becomes a click. `Mutations.unshare` refuses the same thing, but
         // refusing after the click means the app offered something it could not do. Read off the
         // live item, so the moment a second assistant loads the skill this row is a button again.
-        let onlyCopy = has && item.assistants.count == 1
+        let onlyCopy = has && item.assistants.count == 1 && !item.inSharedStore
 
         if onlyCopy {
             // Still reads as loaded — the check is true and worth seeing. Only the removal is

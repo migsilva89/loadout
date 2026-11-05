@@ -768,7 +768,13 @@ struct RestoreSkillSheet: View {
                 }
             }
 
-            Text(chosenCount > 1
+            if let leftOut = model.restoring?.leftOut, !leftOut.isEmpty {
+                Text("Hidden in Settings, so not ticked and not linked: \(leftOut.joined(separator: ", ")).")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Text(chosenCount > 1 || model.restoring?.item.inSharedStore == true
                 ? "The folder goes to ~/.agents/skills, and each one gets a link to it — one copy, one edit."
                 : "The folder goes straight into that assistant, with no link left anywhere else.")
                 .font(.caption)

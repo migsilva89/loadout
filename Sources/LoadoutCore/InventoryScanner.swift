@@ -77,24 +77,58 @@ public struct InventoryScanner: Sendable {
     /// Personal skills, merged across assistants: one row per skill, carrying the set of
     /// assistants that load it. A skill only Codex has still shows up — with the Claude dot
     /// dark — because seeing the gap is the whole point.
+    ///
+    /// The shared store is read too, because nothing obliges an assistant to link to it: a folder
+    /// only the store holds is a row with no assistants at all. Whether something belongs to a
+    /// stored folder is settled by where it really leads, never by its name, so a private copy that
+    /// happens to share a name stays a row of its own.
     func personalSkills() -> [Item] {
-        var byName: [String: Item] = [:]
+        let stored = skillFolders(in: paths.sharedSkills)
+        let storedIdentities = Set(stored.map(identity))
+        var rows: [String: Item] = [:]
 
         for assistant in assistants {
             for folder in skillFolders(in: assistant.skillsRoot) {
-                let name = folder.lastPathComponent
-                if var existing = byName[name] {
+                let real = identity(of: folder)
+                let isStored = storedIdentities.contains(real)
+                // A real path always holds a slash and a folder name never does, so the two kinds
+                // of key can't meet.
+                let key = isStored ? real : folder.lastPathComponent
+                if var existing = rows[key] {
                     existing.assistants.insert(assistant.id)
-                    byName[name] = existing
+                    rows[key] = existing
                 } else {
                     var item = skill(at: folder, origin: .personal, enabled: true)
                     item.assistants = [assistant.id]
-                    byName[name] = item
+                    rows[key] = isStored ? storedRow(item, folder: folder) : item
                 }
             }
         }
 
-        return byName.values.sorted { $0.name < $1.name }
+        for folder in stored where rows[identity(of: folder)] == nil {
+            rows[identity(of: folder)] = storedRow(
+                skill(at: folder, origin: .personal, enabled: true), folder: folder
+            )
+        }
+
+        return rows.values.sorted {
+            $0.name == $1.name ? $0.id < $1.id : $0.name < $1.name
+        }
+    }
+
+    /// The store's rows have an id space of their own, whether anything else shares the name or
+    /// not. An id that passed to the other row when a private copy came or went would carry the
+    /// selection across with it, and an unsaved draft would be saved into the wrong skill.
+    private func storedRow(_ item: Item, folder: URL) -> Item {
+        var stored = item
+        stored.inSharedStore = true
+        stored.id = "skill:\(Origin.personal.label):shared:\(folder.lastPathComponent)"
+        return stored
+    }
+
+    /// What a folder really is on disk, whichever links it was reached through.
+    func identity(of folder: URL) -> String {
+        folder.resolvingSymlinksInPath().path
     }
 
     /// Everything parked in a `skills-off`, wherever it is parked, minus the matching live copy
@@ -112,17 +146,22 @@ public struct InventoryScanner: Sendable {
             (live: $0.skillsRoot,
              off: $0.skillsRoot.deletingLastPathComponent().appendingPathComponent("skills-off"))
         }
-        roots.append(
+        // First, so a link parked elsewhere that leads into it gives way to the real folder.
+        roots.insert(
             (live: paths.sharedSkills,
-             off: paths.sharedSkills.deletingLastPathComponent().appendingPathComponent("skills-off"))
+             off: paths.sharedSkills.deletingLastPathComponent().appendingPathComponent("skills-off")),
+            at: 0
         )
 
         let globallyLive = Set(roots.flatMap { skillFolders(in: $0.live).map(\.lastPathComponent) })
+        var seen = Set(roots.flatMap { skillFolders(in: $0.live).map(identity) })
         var parked: [Item] = []
         for root in roots {
             let liveHere = Set(skillFolders(in: root.live).map(\.lastPathComponent))
             for folder in skillFolders(in: root.off) where !liveHere.contains(folder.lastPathComponent) {
-                parked.append(skill(at: folder, origin: .personal, enabled: false))
+                guard seen.insert(identity(of: folder)).inserted else { continue }
+                let item = skill(at: folder, origin: .personal, enabled: false)
+                parked.append(root.live == paths.sharedSkills ? storedRow(item, folder: folder) : item)
             }
         }
         let parkedCounts = Dictionary(grouping: parked, by: \.name).mapValues(\.count)

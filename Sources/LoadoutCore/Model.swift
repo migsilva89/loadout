@@ -99,6 +99,10 @@ public struct Item: Identifiable, Equatable, Sendable {
     /// is yours to remove, and one in here is the team's. Switching it off is recorded in your own
     /// config as a server you declined, so nobody else's checkout changes.
     public var declaredByRepository = false
+    /// True for a skill whose folder really is in `~/.agents/skills`, or parked beside it, whether
+    /// or not any assistant links to it. A private copy that only shares its name stays false, so
+    /// the two can never be taken for each other.
+    public var inSharedStore = false
 
     public init(
         id: String,
@@ -117,13 +121,15 @@ public struct Item: Identifiable, Equatable, Sendable {
         budget: Budget = Budget(),
         pluginID: String? = nil,
         projectDirectory: String? = nil,
-        declaredByRepository: Bool = false
+        declaredByRepository: Bool = false,
+        inSharedStore: Bool = false
     ) {
         self.assistants = assistants
         self.budget = budget
         self.pluginID = pluginID
         self.projectDirectory = projectDirectory
         self.declaredByRepository = declaredByRepository
+        self.inSharedStore = inSharedStore
         self.id = id
         self.name = name
         self.kind = kind
@@ -140,6 +146,10 @@ public struct Item: Identifiable, Equatable, Sendable {
 
     /// Plugin-owned files are never ours to rewrite.
     public var isEditable: Bool { origin.isEditable && kind != .mcp && kind != .plugin }
+
+    /// In the shared store with no assistant linked to it. Something else may well read that folder
+    /// directly, but the disk can't say what, so no assistant is named on its behalf.
+    public var isSharedOnly: Bool { inSharedStore && assistants.isEmpty }
 }
 
 /// How much an item has actually been used, mined from session transcripts.
