@@ -35,9 +35,14 @@ public struct Mutations: Sendable {
     }
 
     /// Finds the owner of a personal skill: the one place holding a directory rather than a link.
-    public func owner(of name: String, assistants: [Assistant]) throws -> Owner {
+    ///
+    /// `includingShared: false` is for a private copy: the store may hold a different skill of the
+    /// same name, and that folder is not this one's to act on.
+    public func owner(
+        of name: String, assistants: [Assistant], includingShared: Bool = true
+    ) throws -> Owner {
         let shared = paths.sharedSkills.appendingPathComponent(name)
-        if fm.fileExists(atPath: shared.path), !isSymlink(shared) {
+        if includingShared, fm.fileExists(atPath: shared.path), !isSymlink(shared) {
             return Owner(id: OffRecords.sharedOwner, root: paths.sharedSkills)
         }
         let real = assistants.filter { assistant in
@@ -82,43 +87,86 @@ public struct Mutations: Sendable {
         }
 
         let assistants = assistants.isEmpty ? AssistantRegistry.discover(paths: paths) : assistants
-        let owner = try owner(of: item.name, assistants: assistants)
-        let loadedBy = assistants
-            .filter { fm.fileExists(atPath: $0.skillsRoot.appendingPathComponent(item.name).path) }
+        let name = folderName(of: item)
+        // A store entry that is itself a link has its real folder elsewhere, and looking for the
+        // owner among assistants could find somebody else's private copy of that name.
+        guard !item.inSharedStore || !isSymlink(paths.sharedSkills.appendingPathComponent(name)) else {
+            throw LoadoutError.io(
+                "\(item.name) in ~/.agents/skills is a link to another folder, so Loadout can't switch it off. Nothing was changed."
+            )
+        }
+        let owner = try owner(of: name, assistants: assistants, includingShared: item.inSharedStore)
+        // The assistants on this row, not every one holding the name: another's copy or link can
+        // be a different skill, and switching this one off must leave it loading.
+        let onThisRow = assistants.filter { item.assistants.contains($0.id) }
+        // Refused here, not at the move: by then its links would already be gone.
+        let parkedAt = offRoot(for: owner.root).appendingPathComponent(name)
+        guard !isOccupied(parkedAt) else { throw LoadoutError.alreadyExists(parkedAt) }
+        let loadedBy = onThisRow
+            .filter { fm.fileExists(atPath: $0.skillsRoot.appendingPathComponent(name).path) }
             .map(\.id)
 
-        for assistant in assistants where assistant.skillsRoot != owner.root {
-            let link = assistant.skillsRoot.appendingPathComponent(item.name)
+        // Remembered first: failing here changes nothing, and failing later must not leave a
+        // parked skill with no word of the links it had.
+        try records.remember(OffRecords.Entry(
+            name: item.name, owner: owner.id, assistants: loadedBy, disabledAt: Date()
+        ))
+
+        for assistant in onThisRow where assistant.skillsRoot != owner.root {
+            let link = assistant.skillsRoot.appendingPathComponent(name)
             guard fm.fileExists(atPath: link.path), isSymlink(link) else { continue }
             try backups.snapshot(link)
             try? fm.removeItem(at: link)
         }
 
-        let parked = try move(
-            owner.root.appendingPathComponent(item.name), into: offRoot(for: owner.root)
-        )
-        try records.remember(OffRecords.Entry(
-            name: item.name, owner: owner.id, assistants: loadedBy, disabledAt: Date()
-        ))
-        return parked
+        return try move(owner.root.appendingPathComponent(name), into: offRoot(for: owner.root))
+    }
+
+    /// The folder a row's actions apply to. The name on the row comes from the frontmatter and can
+    /// differ, and in the store that name can even be another skill's folder.
+    private func folderName(of item: Item) -> String {
+        item.directory?.lastPathComponent ?? item.name
     }
 
     /// Which assistants a disabled skill should come back to, as far as anyone can tell.
     ///
     /// The off-record when there is one; otherwise just the assistant whose `skills-off` is holding
     /// it, and the caller says out loud that it could not tell (AC3.9).
-    public func restoreProposal(for item: Item, assistants: [Assistant] = []) -> (assistants: [String], remembered: Bool) {
+    ///
+    /// `hidden` is what Settings keeps out of view. Nobody can see or untick those, so they are
+    /// never proposed: a link has to be something the person chose.
+    public func restoreProposal(
+        for item: Item, assistants: [Assistant] = [], hidden: Set<String> = []
+    ) -> (assistants: [String], remembered: Bool) {
         let assistants = assistants.isEmpty ? AssistantRegistry.discover(paths: paths) : assistants
-        if let entry = records.entry(named: item.name), !entry.assistants.isEmpty {
-            return (entry.assistants, true)
+        if let owner = parkedOwner(of: item, among: assistants),
+           let entry = records.entry(named: item.name, owner: owner) {
+            // Only the ones still on this machine: a tick for an assistant that has gone can be
+            // neither shown nor honoured.
+            let known = entry.assistants.filter { id in
+                !hidden.contains(id) && assistants.contains { $0.id == id }
+            }
+            if !known.isEmpty { return (known, true) }
         }
-        guard let folder = item.directory else { return ([], false) }
+        guard let here = parkedAssistant(of: item, among: assistants), !hidden.contains(here.id) else {
+            return ([], false)
+        }
+        return ([here.id], false)
+    }
+
+    /// The assistant whose `skills-off` is holding a parked skill.
+    private func parkedAssistant(of item: Item, among assistants: [Assistant]) -> Assistant? {
+        guard let folder = item.directory else { return nil }
         let parent = folder.deletingLastPathComponent().deletingLastPathComponent()
-        let here = assistants.first {
+        return assistants.first {
             $0.skillsRoot.deletingLastPathComponent().resolvingSymlinksInPath().path
                 == parent.resolvingSymlinksInPath().path
         }
-        return (here.map { [$0.id] } ?? [], false)
+    }
+
+    /// Who a parked skill's off-record is filed under.
+    private func parkedOwner(of item: Item, among assistants: [Assistant]) -> String? {
+        item.inSharedStore ? OffRecords.sharedOwner : parkedAssistant(of: item, among: assistants)?.id
     }
 
     /// Puts a disabled skill back, into the assistants the caller chose (AC3.6, AC3.7).
@@ -127,7 +175,9 @@ public struct Mutations: Sendable {
     /// means the shared store holds it and each gets a link — the same shape `share` produces, so
     /// there is one sharing mechanism in the app rather than two.
     @discardableResult
-    public func enableSkill(_ item: Item, into chosen: [Assistant] = [], assistants: [Assistant] = []) throws -> URL {
+    public func enableSkill(
+        _ item: Item, into chosen: [Assistant] = [], assistants: [Assistant] = [], hidden: Set<String> = []
+    ) throws -> URL {
         guard item.kind == .skill else {
             throw LoadoutError.notEditable("Only skills can be enabled this way: \(item.name)")
         }
@@ -144,31 +194,39 @@ public struct Mutations: Sendable {
         }
 
         let assistants = assistants.isEmpty ? AssistantRegistry.discover(paths: paths) : assistants
-        let targets = chosen.isEmpty ? fallbackTargets(for: item, among: assistants) : chosen
-        guard let first = targets.first else { throw LoadoutError.notFound(item.name) }
+        let targets = chosen.isEmpty ? fallbackTargets(for: item, among: assistants, hidden: hidden) : chosen
+        let recordOwner = parkedOwner(of: item, among: assistants)
 
-        if targets.count == 1 {
-            // `move` refuses an occupied destination, so this path was already safe.
-            let restored = try move(folder, into: first.skillsRoot)
-            try records.forget(item.name)
-            return restored
+        // A skill parked from the shared store goes back to the store however many assistants were
+        // chosen, even none. Moving it into a single assistant would turn it into that assistant's
+        // private copy, and take it from whatever reads the store.
+        if !item.inSharedStore {
+            guard let first = targets.first else { throw LoadoutError.notFound(item.name) }
+            if targets.count == 1 {
+                // `move` refuses an occupied destination, so this path was already safe.
+                let restored = try move(folder, into: first.skillsRoot)
+                try records.forget(item.name, owner: recordOwner)
+                return restored
+            }
         }
 
         // Nothing moves until every destination is known to be free. Skipping an assistant that
         // already had something of that name looked like success, left that assistant on its own
         // stale copy, and threw away the record of where the skill belonged — so there was no
         // longer anything to tell the user what had not happened.
+        let name = folder.lastPathComponent
+        let home = paths.sharedSkills.appendingPathComponent(name)
+        guard !isOccupied(home) else { throw LoadoutError.alreadyExists(home) }
         for assistant in targets {
-            let link = assistant.skillsRoot.appendingPathComponent(item.name)
-            guard fm.fileExists(atPath: link.path) else { continue }
-            throw LoadoutError.alreadyExists(link)
+            let link = assistant.skillsRoot.appendingPathComponent(name)
+            guard !isOccupied(link) else { throw LoadoutError.alreadyExists(link) }
         }
 
-        // Several: the real folder belongs in the shared store, and every one of them links to it.
+        // The real folder belongs in the shared store, and every one chosen links to it.
         let canonical = try move(folder, into: paths.sharedSkills)
         var restored = canonical
         for assistant in targets {
-            let link = assistant.skillsRoot.appendingPathComponent(item.name)
+            let link = assistant.skillsRoot.appendingPathComponent(name)
             do {
                 try fm.createDirectory(at: assistant.skillsRoot, withIntermediateDirectories: true)
                 try fm.createSymbolicLink(at: link, withDestinationURL: canonical)
@@ -177,18 +235,20 @@ public struct Mutations: Sendable {
                     "\(item.name) is back in the shared folder, but linking it to \(assistant.label) failed: \(error.localizedDescription)"
                 )
             }
-            if assistant.id == first.id { restored = link }
+            if assistant.id == targets.first?.id { restored = link }
         }
-        try records.forget(item.name)
+        try records.forget(item.name, owner: recordOwner)
         return restored
     }
 
     /// No choice given and no record to read: the assistant whose `skills-off` holds the folder,
     /// or Claude as the last resort on a machine where even that cannot be worked out.
-    private func fallbackTargets(for item: Item, among assistants: [Assistant]) -> [Assistant] {
-        let proposal = restoreProposal(for: item, assistants: assistants).assistants
+    private func fallbackTargets(for item: Item, among assistants: [Assistant], hidden: Set<String>) -> [Assistant] {
+        let proposal = restoreProposal(for: item, assistants: assistants, hidden: hidden).assistants
         let matched = assistants.filter { proposal.contains($0.id) }
         if !matched.isEmpty { return matched }
+        // Parked from the store with nobody recorded: back to the store, linked to no one.
+        if item.inSharedStore { return [] }
         return assistants.filter { $0.skillsRoot == paths.skills }
     }
 
@@ -627,8 +687,20 @@ public struct Mutations: Sendable {
         guard item.kind == .skill, case .personal = item.origin else {
             throw LoadoutError.notEditable(item.name)
         }
-        let canonical = try promoteToShared(named: item.name, across: AssistantRegistry.discover(paths: paths))
-        let link = assistant.skillsRoot.appendingPathComponent(item.name)
+        let name = folderName(of: item)
+        // A private copy, with a different skill of its name in the store. `promoteToShared` would
+        // hand that other folder back, and this assistant would load something nobody asked for.
+        let stored = paths.sharedSkills.appendingPathComponent(name)
+        if !item.inSharedStore, fm.fileExists(atPath: stored.path) {
+            throw LoadoutError.alreadyExists(stored)
+        }
+        let link = assistant.skillsRoot.appendingPathComponent(name)
+        // A live link leading anywhere else is a different skill, listed on a row of its own.
+        if item.inSharedStore, isSymlink(link), fm.fileExists(atPath: link.path),
+           link.resolvingSymlinksInPath().path != stored.resolvingSymlinksInPath().path {
+            throw LoadoutError.alreadyExists(link)
+        }
+        let canonical = try promoteToShared(named: name, across: AssistantRegistry.discover(paths: paths))
 
         if let existing = try? fm.destinationOfSymbolicLink(atPath: link.path) {
             // Already linked somewhere. Only repoint it if it is pointing at the wrong place.
@@ -654,14 +726,15 @@ public struct Mutations: Sendable {
     /// Stops an assistant from loading a skill, by removing its link.
     ///
     /// Only ever removes a symlink. If that assistant's folder holds the only real copy, the
-    /// operation is refused — the point is to unlink, never to lose the skill.
+    /// operation is refused — the point is to unlink, never to lose the skill. The last link to a
+    /// folder in the shared store is free to go: the folder stays, and stays listed.
     public func unshare(_ item: Item, from assistant: Assistant) throws {
-        guard item.assistants.count > 1 else {
+        guard item.assistants.count > 1 || item.inSharedStore else {
             throw LoadoutError.io(
                 "\(item.name) only exists in \(assistant.label). Removing it there would lose it — use Disable instead."
             )
         }
-        let link = assistant.skillsRoot.appendingPathComponent(item.name)
+        let link = assistant.skillsRoot.appendingPathComponent(folderName(of: item))
         guard isSymlink(link) else {
             throw LoadoutError.io(
                 "The folder in \(assistant.label) is the real copy of \(item.name), not a link. Nothing was changed."
@@ -703,6 +776,11 @@ public struct Mutations: Sendable {
             throw LoadoutError.io("Couldn't share \(name): \(error.localizedDescription)")
         }
         return canonical
+    }
+
+    /// Whether something is at this path, a link pointing at nothing included.
+    private func isOccupied(_ url: URL) -> Bool {
+        fm.fileExists(atPath: url.path) || isSymlink(url)
     }
 
     func isSymlink(_ url: URL) -> Bool {

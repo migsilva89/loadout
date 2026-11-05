@@ -29,6 +29,7 @@ A native Mac app for viewing and managing what coding assistants load: skills, c
 |---|---|
 | Personal skills | `~/.claude/skills/<name>/SKILL.md` |
 | Disabled skills | `~/.claude/skills-off/<name>/SKILL.md` |
+| Shared skills | `~/.agents/skills/<name>/SKILL.md`, parked in `~/.agents/skills-off/<name>/SKILL.md` |
 | Project skills | `<repo>/.claude/skills/<name>/SKILL.md` |
 | Plugin skills | `~/.claude/plugins/cache/<mkt>/<plugin>/<version>/skills/<name>/SKILL.md` |
 | Commands | `~/.claude/commands/*.md`, `<repo>/.claude/commands/*.md`, `<plugin>/commands/*.md` |
@@ -63,6 +64,7 @@ Every AC is verifiable. `[T]` means covered by an automated test; `[M]` means ve
 - **AC1.5** `[T]` Commands, agents and MCP servers are inventoried from all three origins (personal, project, plugin) where applicable.
 - **AC1.6** `[T]` The project list comes from `~/Projects/INDEX.md`; if the file does not exist, the app works with Global only.
 - **AC1.7** `[M]` The sidebar shows counts per source, and they add up with what the list shows.
+- **AC1.8** `[T]` Skills in `~/.agents/skills` are listed as shared, carrying only the assistants that really link to them, and none when none does. A link is matched to its folder by resolved path, so a private copy with the same name is a separate row. `[M]` The row carries a `shared` tag. Scanning creates no links.
 
 ### AC2 — View and navigation
 
@@ -85,7 +87,7 @@ Rewritten 2026-08-15 — see `spec/spec-flow-enable-disable-skills.md` for the f
 - **AC3.3** `[T]` Disabling records the owner and the assistants that were loading it, in `~/Library/Application Support/Loadout/skills-off.json`.
 - **AC3.4** `[T]` If the destination already exists, the operation fails with a clear error and destroys nothing.
 - **AC3.5** `[M]` Enabling asks where: a sheet of assistants, pre-ticked from that record, or from where the folder is parked when there is no record — and it says which of the two it is.
-- **AC3.6** `[T]` One assistant chosen means the real folder goes there, with no symlink left anywhere; several means the shared store holds it and each gets a link.
+- **AC3.6** `[T]` One assistant chosen means the real folder goes there, with no symlink left anywhere; several means the shared store holds it and each gets a link. A skill parked from the shared store always returns to the store, with a link per chosen assistant, and with no sheet and no link when none was recorded.
 - **AC3.7** `[T]` A round trip — disable, then enable confirming what the sheet proposes — leaves the disk exactly as it was, symlinks included.
 - **AC3.8** `[T]` Disabling a plugin writes `enabledPlugins["<plugin>@<mkt>"] = false` in `settings.local.json`, preserving the rest of the file exactly as it was.
 - **AC3.9** `[T]` A single plugin skill can be disabled on its own: it moves to `skills-off` inside the plugin's installed version, and the choice is recorded by name under `<plugin>@<marketplace>`.

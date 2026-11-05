@@ -166,9 +166,12 @@ an automated test; `[M]` means verified in the running app.
 - **AC3.4** `[T]` If the destination in `skills-off` already exists, nothing moves, nothing is deleted,
   and the error names the path.
 - **AC3.5** `[M]` Enabling opens a sheet listing every assistant with a skills root, pre-ticked from the
-  off-record, with the owner ticked and locked.
+  off-record, with the owner ticked and locked. A skill parked from `~/.agents/skills` with no assistant
+  recorded goes straight back, with no sheet.
 - **AC3.6** `[T]` Confirming with one assistant ticked moves the folder back to that assistant's skills
-  root and leaves no symlinks behind.
+  root and leaves no symlinks behind. A skill parked in `~/.agents/skills-off` instead returns to
+  `~/.agents/skills` with a symlink in each ticked assistant; with none recorded it returns without a
+  sheet and without a symlink.
 - **AC3.7** `[T]` Confirming with several ticked leaves the real folder in `~/.agents/skills` and a
   symlink in each ticked assistant — the same shape `share` produces.
 - **AC3.8** `[T]` A successful enable deletes the off-record; a failed one leaves it untouched.

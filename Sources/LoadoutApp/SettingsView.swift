@@ -806,6 +806,7 @@ struct HelpTab: View {
             VStack(alignment: .leading, spacing: 14) {
                 section("What switching something off does") {
                     line("A skill", "moves to a `skills-off` folder beside the assistant that owns it — never into another assistant's. Switching it on asks which assistants should load it again.")
+                    line("From ~/.agents/skills", "moves to `~/.agents/skills-off` and always comes back to `~/.agents/skills`, with the links you confirm. If no assistant linked it, switching it on asks nothing and creates no link.")
                     line("A command or subagent", "moves to `commands-off` or `agents-off` next to it.")
                     line("From a plugin", "Claude skills move aside inside the installed plugin. Codex skills use Codex's own enable setting. Loadout keeps individual off choices when the plugin updates.")
                     line("A whole plugin", "turns all its skills off in the list, without forgetting your individual choices. Turn the plugin back on to restore those choices. Workspace-managed Codex plugins must be changed in Codex.")

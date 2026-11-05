@@ -719,8 +719,11 @@ struct SidebarRow: View {
                     if case .plugin(let plugin) = item.origin {
                         PluginTag(name: plugin, muted: isSelected)
                     } else if let tag = originTag {
-                        PluginTag(name: tag, muted: isSelected, quiet: true)
-                            .help(originTagHint)
+                        PluginTag(
+                            name: tag, muted: isSelected, quiet: true,
+                            hint: item.inSharedStore ? "In ~/.agents/skills, the folder assistants can link to" : nil
+                        )
+                        .help(originTagHint)
                     }
                     if let key = model.visibleFrontmatterKey,
                        let value = item.frontmatter[key] {
@@ -818,6 +821,7 @@ struct SidebarRow: View {
     /// files under project directories. Two servers called `notion`, from two different
     /// repositories, were two rows with the same name and nothing to tell them apart.
     private var originTag: String? {
+        if item.inSharedStore { return "shared" }
         if model.showsEverything {
             return item.origin == .personal ? "global" : item.origin.label
         }
@@ -844,6 +848,7 @@ struct SidebarRow: View {
 
     private var originHint: String {
         if !isEnabled { return "Disabled — not loaded by anything right now" }
+        if item.inSharedStore { return "Shared, in ~/.agents/skills" }
         switch item.origin {
         case .personal: return "Your own, in ~/.claude"
         case .project(let name): return "Lives in the \(name) repository"
@@ -854,6 +859,7 @@ struct SidebarRow: View {
     /// The switch means the same thing everywhere — out of service — but where the skill lives
     /// changes what that costs, and the tooltip is where that gets said.
     private var switchHint: String {
+        if let hint = AppModel.sharedSwitchHint(for: item) { return hint }
         switch item.origin {
         case .personal:
             return item.enabled
@@ -899,6 +905,8 @@ struct PluginTag: View {
     /// same shape in the neutral grey, so it says its piece without competing with a plugin's tag,
     /// and without the `-plugin` suffix, which would be a lie about it.
     var quiet: Bool = false
+    /// What the tag says about itself, when its name alone doesn't settle it.
+    var hint: String? = nil
 
     var body: some View {
         // "vercel-plugin", not "vercel": the name alone reads like a namespace, and the row has
@@ -915,10 +923,10 @@ struct PluginTag: View {
                  : (quiet ? Color.white.opacity(0.07) : V2.accent.opacity(0.16))),
                 in: RoundedRectangle(cornerRadius: 4)
             )
-            .help(quiet
+            .help(hint ?? (quiet
                   ? (name == "global" ? "Yours, in ~/.claude — active in every project"
                      : "Lives in the \(name) repository, and only works there")
-                  : "Comes from the \(name) plugin")
+                  : "Comes from the \(name) plugin"))
     }
 }
 

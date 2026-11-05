@@ -106,6 +106,14 @@ to `~/.agents/skills/<name>` and each assistant gets a symlink to it — one cop
 sides always the same. Clicking a lit mark removes only that link, never the one real copy. The
 Loadout menu has **Sync all with …** to close the gaps at once.
 
+A skill can also sit in `~/.agents/skills` with no assistant linked to it, for tools that read that
+folder directly. It is listed and marked `shared`, with no assistant against it, and you read and
+edit it as usual. Loadout does not know what else reads that folder and doesn't claim to, and it
+creates a link only when you click an assistant — never by looking, and never through
+**Sync all with …**. Switching it off moves it to `~/.agents/skills-off`, where nothing reading
+`~/.agents/skills` sees it, and switching it on moves it back. A skill from there always returns to
+`~/.agents/skills`, with the links you confirm.
+
 If two assistants have their own, possibly different, copies of the same skill, the app refuses to
 merge them on its own and says why.
 
@@ -113,7 +121,7 @@ merge them on its own and says why.
 
 | Data | Location | Written by Loadout? |
 |---|---|:---:|
-| Your skills, commands, subagents and MCP servers | `~/.claude/`, `~/.codex/`, `~/.gemini/config/`, `~/.<assistant>/` | Only when you save, create, delete or share |
+| Your skills, commands, subagents and MCP servers | `~/.claude/`, `~/.codex/`, `~/.gemini/config/`, `~/.agents/`, `~/.<assistant>/` | Only when you save, create, delete or share |
 | Backups, taken before every write | `~/Library/Application Support/Loadout/backups/` | Yes |
 | Usage index, rebuildable | `~/Library/Application Support/Loadout/usage.sqlite` | Yes |
 | Working copies for the assistant conversation | `~/Library/Application Support/Loadout/ask-workspaces/` | Yes |
