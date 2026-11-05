@@ -4,6 +4,18 @@ Notable changes, newest first. Dates are the day the work landed on `main`.
 
 The versions are what a release is tagged as; between tags, `main` is what is being used daily.
 
+## 0.7.0 — 2026-11-05
+
+### Added
+- Skills stored directly in `~/.agents/skills` now appear as shared, even when no assistant links to them. You can read and edit them without creating links. Different copies with the same name remain separate; usage counts remain name-based. (#27)
+- Shared skills can be switched off into `~/.agents/skills-off` and restored to the shared folder. Skills with no assistant links are restored without creating any. (#27)
+
+### Changed
+- Updated Sparkle, the automatic update framework, to 2.10.1. (#26)
+
+### Fixed
+- Restoring a skill no longer silently creates links for assistants hidden in Settings. (#27)
+
 ## 0.6.4 — 2026-10-31
 
 ### Fixed
