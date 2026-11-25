@@ -48,7 +48,8 @@ public enum MarkdownBlocks {
     /// later `---` closes it.
     public static func parse(_ text: String) -> [MarkdownBlock] {
         var blocks: [MarkdownBlock] = []
-        var lines = text.components(separatedBy: "\n")
+        let normalized = text.replacingOccurrences(of: "\r\n", with: "\n")
+        var lines = normalized.components(separatedBy: "\n")
 
         if let first = lines.first, first.trimmingCharacters(in: .whitespaces) == "---",
            let closing = lines.dropFirst().firstIndex(where: {
@@ -56,7 +57,7 @@ public enum MarkdownBlocks {
            }) {
             // In the file's own order, not sorted: the author put `name` and `description` first
             // and grouped the rest for a reason, and a sorted rendering scatters that.
-            blocks.append(.frontmatter(Frontmatter.tree(text)))
+            blocks.append(.frontmatter(Frontmatter.tree(normalized)))
             lines = Array(lines[(closing + 1)...])
         }
 

@@ -33,16 +33,17 @@ public struct Frontmatter: Equatable, Sendable {
     }
 
     public static func parse(_ text: String) -> Frontmatter {
-        let lines = text.components(separatedBy: "\n")
+        let normalized = text.replacingOccurrences(of: "\r\n", with: "\n")
+        let lines = normalized.components(separatedBy: "\n")
         guard let first = lines.first, first.trimmingCharacters(in: .whitespaces) == "---" else {
             let missing = "Missing frontmatter: add a --- block at the start."
-            return Frontmatter(body: text, warning: missing, structuralWarning: missing)
+            return Frontmatter(body: normalized, warning: missing, structuralWarning: missing)
         }
         guard let closing = lines.dropFirst().firstIndex(where: {
             $0.trimmingCharacters(in: .whitespaces) == "---"
         }) else {
             let unclosed = "The frontmatter opens but never closes with ---."
-            return Frontmatter(body: text, warning: unclosed, structuralWarning: unclosed)
+            return Frontmatter(body: normalized, warning: unclosed, structuralWarning: unclosed)
         }
 
         var fields: [String: String] = [:]
@@ -120,7 +121,8 @@ public struct Frontmatter: Equatable, Sendable {
     /// Reads the block as a tree. Same tolerance as `parse`: what it cannot understand is left as
     /// text rather than dropped, because the file on disk is the truth.
     public static func tree(_ text: String) -> [(String, Value)] {
-        let lines = text.components(separatedBy: "\n")
+        let normalized = text.replacingOccurrences(of: "\r\n", with: "\n")
+        let lines = normalized.components(separatedBy: "\n")
         guard let first = lines.first, first.trimmingCharacters(in: .whitespaces) == "---",
               let closing = lines.dropFirst().firstIndex(where: {
                   $0.trimmingCharacters(in: .whitespaces) == "---"

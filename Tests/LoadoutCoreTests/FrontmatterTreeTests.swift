@@ -57,6 +57,14 @@ final class FrontmatterTreeTests: XCTestCase {
         return text
     }
 
+    private func containsCarriageReturn(_ value: Frontmatter.Value) -> Bool {
+        switch value {
+        case .scalar(let text): return text.contains("\r")
+        case .list(let values): return values.contains(where: containsCarriageReturn)
+        case .map(let pairs): return pairs.contains { containsCarriageReturn($0.1) }
+        }
+    }
+
     // MARK: - AC11.1 nesting is kept
 
     func testANestedMapStaysNested() {
@@ -162,6 +170,42 @@ final class FrontmatterTreeTests: XCTestCase {
 
         XCTAssertEqual(tree.map(\.0), ["name", "description"])
         XCTAssertEqual(scalar(value(tree, "description")), "One line.")
+    }
+
+    func testCRLFReadsExactlyLikeLF() {
+        let lf = """
+        ---
+        name: windows-skill
+        description: >
+          First description line
+          and its continuation.
+        metadata:
+          tags:
+            - windows
+            - yaml
+          owner:
+            team: Loadout
+        note: A folded value
+          continues here.
+        ---
+
+        First body line.
+        Second body line.
+        """
+        let crlf = lf.replacingOccurrences(of: "\n", with: "\r\n")
+
+        let lfFrontmatter = Frontmatter.parse(lf)
+        let crlfFrontmatter = Frontmatter.parse(crlf)
+        let lfTree = Frontmatter.tree(lf)
+        let crlfTree = Frontmatter.tree(crlf)
+
+        XCTAssertEqual(crlfFrontmatter, lfFrontmatter)
+        XCTAssertNil(crlfFrontmatter.warning)
+        XCTAssertFalse(crlfFrontmatter.fields.values.contains { $0.contains("\r") })
+        XCTAssertFalse(crlfFrontmatter.body.contains("\r"))
+        XCTAssertEqual(Frontmatter.Value.map(crlfTree), .map(lfTree))
+        XCTAssertEqual(crlfTree.map(\.0), ["name", "description", "metadata", "note"])
+        XCTAssertFalse(crlfTree.contains { containsCarriageReturn($0.1) })
     }
 }
 

@@ -78,6 +78,33 @@ final class InventoryTests: XCTestCase {
         )
     }
 
+    func testCRLFSkillKeepsItsFrontmatterWithoutAWarning() {
+        let lf = """
+        ---
+        name: windows-skill
+        description: >
+          First description line
+          and its continuation.
+        ---
+
+        First body line.
+        Second body line.
+        """
+        func scan(_ contents: String) -> Item? {
+            let fixture = Fixture()
+            fixture.rawSkill("windows-skill", contents: contents)
+            return InventoryScanner(paths: fixture.paths).scanAll().items.first { $0.kind == .skill }
+        }
+
+        let lfItem = scan(lf)
+        let crlfItem = scan(lf.replacingOccurrences(of: "\n", with: "\r\n"))
+
+        XCTAssertEqual(crlfItem?.name, lfItem?.name)
+        XCTAssertEqual(crlfItem?.description, lfItem?.description)
+        XCTAssertEqual(crlfItem?.warning, lfItem?.warning)
+        XCTAssertNil(crlfItem?.warning)
+    }
+
     func testPipeBlockScalarsFoldToo() {
         let fixture = Fixture()
         fixture.rawSkill("bloco", contents: "---\nname: bloco\ndescription: |-\n  Primeira linha.\n  Segunda.\n---\n\nX.")
