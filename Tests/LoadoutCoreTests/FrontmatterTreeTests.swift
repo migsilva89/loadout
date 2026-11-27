@@ -263,6 +263,90 @@ extension FrontmatterTreeTests {
         )
     }
 
+    func testParseKeepsAKeyLikeLineInsideAFoldedBlock() {
+        let text = """
+        ---
+        name: deploy
+        description: >
+          Ships the app to production.
+          Triggers: deploy, ship, release
+        ---
+
+        Body.
+        """
+        let front = Frontmatter.parse(text)
+        let tree = Frontmatter.tree(text)
+
+        XCTAssertEqual(front.fields, [
+            "name": "deploy",
+            "description": "Ships the app to production. Triggers: deploy, ship, release"
+        ])
+        XCTAssertEqual(front.description, scalar(value(tree, "description")))
+    }
+
+    func testParseKeepsAHashLineInsideALiteralBlock() {
+        let text = """
+        ---
+        name: deploy
+        description: |
+          Ships the app.
+          # not a comment, part of the text
+        ---
+
+        Body.
+        """
+        let front = Frontmatter.parse(text)
+        let tree = Frontmatter.tree(text)
+
+        XCTAssertEqual(front.fields, [
+            "name": "deploy",
+            "description": "Ships the app. # not a comment, part of the text"
+        ])
+        XCTAssertEqual(front.description, scalar(value(tree, "description")))
+    }
+
+    func testParseKeepsAKeyLikeFirstBlockLineAndReadsTheNextField() {
+        let text = """
+        ---
+        description: >
+          Example: deploy now
+        name: deploy
+        ---
+        """
+        let front = Frontmatter.parse(text)
+        let tree = Frontmatter.tree(text)
+
+        XCTAssertEqual(front.fields, [
+            "description": "Example: deploy now",
+            "name": "deploy"
+        ])
+        XCTAssertEqual(front.description, scalar(value(tree, "description")))
+    }
+
+    func testParseEndsANestedBlockAtTheParentIndentation() {
+        let text = """
+        ---
+        name: deploy
+        description: Deploys the app.
+        metadata:
+          notes: |
+            Example: deploy now
+          owner: release
+        ---
+        """
+        let front = Frontmatter.parse(text)
+        let tree = Frontmatter.tree(text)
+        let metadata = map(value(tree, "metadata"))
+
+        XCTAssertEqual(front.name, "deploy")
+        XCTAssertEqual(front.description, "Deploys the app.")
+        XCTAssertEqual(front.fields["notes"], "Example: deploy now")
+        XCTAssertEqual(front.fields["owner"], "release")
+        XCTAssertNil(front.fields["Example"])
+        XCTAssertEqual(front.description, scalar(value(tree, "description")))
+        XCTAssertEqual(front.fields["notes"], scalar(value(metadata, "notes")))
+    }
+
     func testACommentBetweenFieldsIsNotAField() {
         let text = """
         ---

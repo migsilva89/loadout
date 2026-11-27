@@ -48,11 +48,23 @@ public struct Frontmatter: Equatable, Sendable {
 
         var fields: [String: String] = [:]
         var lastKey: String?
+        var blockIndent: Int?
         var warning: String?
 
         for raw in lines[1..<closing] {
             let trimmed = raw.trimmingCharacters(in: .whitespaces)
-            if trimmed.isEmpty || trimmed.hasPrefix("#") { continue }
+            if trimmed.isEmpty { continue }
+
+            if let indent = blockIndent {
+                if indentation(of: raw) > indent, let key = lastKey {
+                    let existing = fields[key] ?? ""
+                    fields[key] = existing.isEmpty ? trimmed : existing + " " + trimmed
+                    continue
+                }
+                blockIndent = nil
+            }
+
+            if trimmed.hasPrefix("#") { continue }
 
             let isContinuation = raw.first == " " || raw.first == "\t"
             if isContinuation, let key = lastKey, !looksLikeKey(trimmed) {
@@ -76,6 +88,7 @@ public struct Frontmatter: Equatable, Sendable {
             // Left as-is, the marker itself would show up in the UI as the description.
             fields[key] = isBlockScalarMarker(value) ? "" : unquote(value)
             lastKey = key
+            blockIndent = isBlockScalarMarker(value) ? indentation(of: raw) : nil
         }
 
         let body = lines[(closing + 1)...].joined(separator: "\n")

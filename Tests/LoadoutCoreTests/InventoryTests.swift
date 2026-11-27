@@ -78,6 +78,22 @@ final class InventoryTests: XCTestCase {
         )
     }
 
+    func testKeyLikeFirstBlockLineIsScannedAsTheDescription() {
+        let fixture = Fixture()
+        fixture.rawSkill("deploy", contents: """
+        ---
+        description: >
+          Example: deploy now
+        name: deploy
+        ---
+        """)
+
+        let item = InventoryScanner(paths: fixture.paths).scanAll().items.first { $0.kind == .skill }
+
+        XCTAssertEqual(item?.description, "Example: deploy now")
+        XCTAssertNil(item?.warning)
+    }
+
     func testCRLFSkillKeepsItsFrontmatterWithoutAWarning() {
         let lf = """
         ---
