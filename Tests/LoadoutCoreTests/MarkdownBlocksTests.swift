@@ -20,6 +20,30 @@ final class MarkdownBlocksTests: XCTestCase {
         XCTAssertEqual(blocks[1], .paragraph("Body."))
     }
 
+    func testCRLFReadsExactlyLikeLF() {
+        let lf = """
+            ---
+            name: demo
+            description: >
+              First description line
+              and its continuation.
+            metadata:
+              tags:
+                - windows
+                - yaml
+            ---
+
+            First body line.
+            Second body line.
+            """
+        let crlf = lf.replacingOccurrences(of: "\n", with: "\r\n")
+
+        let blocks = MarkdownBlocks.parse(crlf)
+
+        XCTAssertEqual(blocks, MarkdownBlocks.parse(lf))
+        XCTAssertEqual(blocks.last, .paragraph("First body line. Second body line."))
+    }
+
     func testHeadingLevelsAreCountedFromTheHashes() {
         XCTAssertEqual(MarkdownBlocks.parse("# One\n## Two\n### Three"), [
             .heading(level: 1, text: "One"),
