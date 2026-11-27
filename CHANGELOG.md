@@ -4,6 +4,11 @@ Notable changes, newest first. Dates are the day the work landed on `main`.
 
 The versions are what a release is tagged as; between tags, `main` is what is being used daily.
 
+## 0.7.1 — 2026-11-27
+
+### Fixed
+- Skills, commands and subagents saved with Windows (CRLF) line endings no longer show "Missing frontmatter". They keep their name, description and fields, and read exactly like the same file with normal line endings. Nothing on disk is rewritten. Thanks to @leninworld, who reported it and wrote the fix. (#29, #30)
+
 ## 0.7.0 — 2026-11-05
 
 ### Added
